@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createSign } from "crypto"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { SUPABASE_URL } from "@/lib/supabase/config"
 
@@ -76,9 +75,27 @@ async function getServiceAccountToken(): Promise<string> {
     throw new Error("GOOGLE_SERVICE_ACCOUNT_EMAIL 또는 GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY가 .env에 없습니다.")
   }
 
-  const privateKey = rawKey.replace(/\\n/g, "\n")
-  const now = Math.floor(Date.now() / 1000)
+  // PEM 정규화: 따옴표 제거 + \n → 실제 줄바꿈
+  const pem = rawKey
+    .replace(/^["']|["']$/g, "")
+    .replace(/\\n/g, "\n")
 
+  // PEM 헤더/푸터 제거 후 base64 → ArrayBuffer
+  const pemBody = pem
+    .replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----/g, "")
+    .replace(/\s+/g, "")
+  const keyBuffer = Buffer.from(pemBody, "base64")
+
+  // Web Crypto API로 키 임포트 (OpenSSL 버전 무관)
+  const cryptoKey = await crypto.subtle.importKey(
+    "pkcs8",
+    keyBuffer,
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    false,
+    ["sign"],
+  )
+
+  const now = Math.floor(Date.now() / 1000)
   const header = b64url(JSON.stringify({ alg: "RS256", typ: "JWT" }))
   const payload = b64url(
     JSON.stringify({
@@ -90,10 +107,14 @@ async function getServiceAccountToken(): Promise<string> {
     }),
   )
 
-  const sign = createSign("RSA-SHA256")
-  sign.update(`${header}.${payload}`)
-  const signature = sign
-    .sign(privateKey, "base64")
+  const sigBuffer = await crypto.subtle.sign(
+    "RSASSA-PKCS1-v1_5",
+    cryptoKey,
+    new TextEncoder().encode(`${header}.${payload}`),
+  )
+
+  const signature = Buffer.from(sigBuffer)
+    .toString("base64")
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
     .replace(/=/g, "")
