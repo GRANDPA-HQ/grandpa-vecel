@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { getTables, getTableRows, getCategoryIdMap } from "@/lib/supabase/db"
+import { getTables, getTableRows, getCategoryIdMap, getSkuOptions, getProdOptions } from "@/lib/supabase/db"
 import { DataTable } from "@/components/data-table"
 import { AddRowDialog, type ColumnDef } from "@/components/add-row-dialog"
 import { Button } from "@/components/ui/button"
@@ -8,12 +8,18 @@ type SelectOption = { value: string; label: string }
 
 const PAGE_SIZE = 50
 const HIDDEN_COLS = new Set(["id", "created_at", "updated_at"])
-const INSERTABLE_TABLES = new Set(["tb_prod_mst", "tb_raw_mst", "tb_sku_mst"])
+const INSERTABLE_TABLES = new Set(["tb_prod_mst", "tb_raw_mst", "tb_sku_mst", "tb_sku_recipe"])
 
 // 테이블별 추가 숨김 컬럼
 const TABLE_HIDDEN_COLS: Record<string, Set<string>> = {
-  tb_prod_mst: new Set(["active", "owner", "owner_part", "part", "yield_rate"]),
-  tb_sku_mst:  new Set(["is_active"]),
+  tb_prod_mst:   new Set(["active", "owner", "owner_part", "part", "yield_rate"]),
+  tb_sku_mst:    new Set(["is_active"]),
+  tb_sku_recipe: new Set(["input_id"]),
+}
+
+// 테이블별 PK 컬럼 (기본 "id" 외 추가)
+const TABLE_PK: Record<string, string> = {
+  tb_sku_recipe: "input_id",
 }
 
 // 카테고리 드롭박스를 사용할 테이블
@@ -54,7 +60,7 @@ export default async function TablePage({
     const tables = await getTables()
     const match = tables.find((t) => t.name === tableName)
     const allColumns = match?.columns.map((c) => c.name) ?? []
-    if (allColumns.includes("id")) pkColumn = "id"
+    pkColumn = TABLE_PK[tableName] ?? (allColumns.includes("id") ? "id" : null)
     columns = allColumns.filter((c) => !isHidden(c))
     insertColumns = (match?.columns ?? []).filter((c) => !isHidden(c.name))
   } catch {
@@ -90,9 +96,28 @@ export default async function TablePage({
     columnOptions["storage"] = STORAGE_OPTIONS
   }
 
-  // FK 컬럼 → 사람이 읽을 수 있는 값으로 변환 (catgegory_id → category_code)
   const columnResolvers: Record<string, Record<string, string>> = {}
-  if (CATEGORY_TABLES.has(tableName)) {
+
+  // tb_sku_recipe: sku_id / prod_id / unit 드롭박스 + UUID → 이름 resolver
+  if (tableName === "tb_sku_recipe") {
+    const [skuOpts, prodOpts] = await Promise.all([
+      getSkuOptions().catch(() => [] as SelectOption[]),
+      getProdOptions().catch(() => [] as SelectOption[]),
+    ])
+    columnOptions["sku_id"]  = skuOpts
+    columnOptions["prod_id"] = prodOpts
+    columnOptions["unit"]    = [
+      { value: "g",  label: "g"  },
+      { value: "ml", label: "ml" },
+      { value: "ea", label: "ea" },
+    ]
+    columnResolvers["sku_id"]  = Object.fromEntries(skuOpts.map((o) => [o.value, o.label]))
+    columnResolvers["prod_id"] = Object.fromEntries(prodOpts.map((o) => [o.value, o.label]))
+  }
+
+  // FK 컬럼 → 사람이 읽을 수 있는 값으로 변환 (catgegory_id → category_code)
+  // tb_sku_mst는 category_code 직접 컬럼으로 변경되어 resolver 불필요
+  if (CATEGORY_TABLES.has(tableName) && tableName !== "tb_sku_mst") {
     try {
       columnResolvers["catgegory_id"] = await getCategoryIdMap()
     } catch {}

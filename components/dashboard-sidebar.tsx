@@ -21,7 +21,7 @@ export function DashboardSidebar({
     { label: "직원 관리", href: "/dashboard/employees", icon: Users, visible: isManager },
     { label: "데이터 테이블", href: "/dashboard/data-table", icon: Database, visible: true },
     { label: "생산 공정", href: "/dashboard/production", icon: Cog, visible: true, exact: true },
-    { label: "생산 공정 작성", href: "/dashboard/production-write", icon: ClipboardList, visible: true, exact: true },
+    { label: "판매품 레시피 작성", href: "/dashboard/production-write", icon: ClipboardList, visible: true, exact: true },
     { label: "생산일지", href: "/dashboard/production-log", icon: FileText, visible: true },
     { label: "버그 리포트", href: "/dashboard/bug-report", icon: Bug, visible: true },
     { label: "레시피 가이드", href: "/dashboard/recipe-guide", icon: BookText, visible: true },

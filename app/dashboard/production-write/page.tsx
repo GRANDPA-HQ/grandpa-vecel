@@ -1,70 +1,41 @@
-import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { ProductionProcessForm } from "@/components/production-process-form"
-
-export type ProcessFromDb = {
-  id: string
-  product_name: string
-  status: "pending" | "approved" | "rejected"
-  reject_reason: string | null
-  author: { name: string } | null
-  approver: { name: string } | null
-  steps: {
-    id: string
-    step_order: number
-    item: string
-    amount_g: number | null
-    note: string
-  }[]
-}
+import { SkuRecipeForm, type InitialRecipe } from "@/components/sku-recipe-form"
 
 export default async function ProductionWritePage() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
   const admin = createAdminClient()
 
-  const { data: userData } = await admin
-    .from("users")
-    .select("positions(name_ko)")
-    .eq("id", user?.id ?? "")
-    .maybeSingle()
+  const [skuRes, prodRes, recipeRes] = await Promise.all([
+    admin.from("tb_sku_mst").select("id,sku_code,sku_name").order("sku_code"),
+    admin.from("tb_prod_mst").select("id,prod_code,prod_name").order("prod_code"),
+    admin.from("tb_sku_recipe").select("sku_id,prod_id,amount,unit,memo"),
+  ])
 
-  const positionName = (userData?.positions as { name_ko: string } | null)?.name_ko ?? ""
-  const isManager = positionName === "점장"
+  const skuOptions = (skuRes.data ?? []).map((r) => ({
+    value: r.id as string,
+    label: [r.sku_code, r.sku_name].filter(Boolean).join(" · "),
+  }))
 
-  let processes: ProcessFromDb[] = []
-  try {
-    const { data } = await admin
-      .from("tb_production_process")
-      .select(`
-        id, product_name, status, reject_reason,
-        author:users!author_id(name),
-        approver:users!approved_by(name),
-        steps:tb_production_process_step(id, step_order, item, amount_g, note)
-      `)
-      .order("created_at", { ascending: false })
+  const prodOptions = (prodRes.data ?? []).map((r) => ({
+    value: r.id as string,
+    label: [r.prod_code, r.prod_name].filter(Boolean).join(" · "),
+  }))
 
-    processes = ((data ?? []) as unknown as ProcessFromDb[]).map((p) => ({
-      ...p,
-      steps: [...p.steps].sort((a, b) => a.step_order - b.step_order),
-    }))
-  } catch {
-    // 테이블이 아직 생성되지 않은 경우 빈 상태로 진행
-  }
+  const initialRecipes = (recipeRes.data ?? []) as InitialRecipe[]
 
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">생산 공정 작성</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">판매품 레시피 작성</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          제품별 생산 공정 단계를 등록하고 편집합니다.
+          SKU별 생산품 구성을 등록하고 편집합니다.
         </p>
       </div>
 
-      <ProductionProcessForm initialProcesses={processes} isManager={isManager} />
+      <SkuRecipeForm
+        skuOptions={skuOptions}
+        prodOptions={prodOptions}
+        initialRecipes={initialRecipes}
+      />
     </div>
   )
 }

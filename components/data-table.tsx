@@ -34,6 +34,11 @@ const ENUM_COLUMNS: Record<string, { value: string; label: string; className: st
     { value: "냉동", label: "냉동", className: "bg-sky-100 text-sky-700 border-sky-200" },
     { value: "상온", label: "상온", className: "bg-amber-100 text-amber-700 border-amber-200" },
   ],
+  "tb_sku_recipe.unit": [
+    { value: "g",  label: "g",  className: "bg-green-100 text-green-700 border-green-200" },
+    { value: "ml", label: "ml", className: "bg-blue-100 text-blue-700 border-blue-200" },
+    { value: "ea", label: "ea", className: "bg-gray-100 text-gray-700 border-gray-200" },
+  ],
   "tb_prod_mst.storage": [
     { value: "냉장", label: "냉장", className: "bg-blue-100 text-blue-700 border-blue-200" },
     { value: "냉동", label: "냉동", className: "bg-sky-100 text-sky-700 border-sky-200" },
