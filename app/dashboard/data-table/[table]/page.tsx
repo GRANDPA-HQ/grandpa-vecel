@@ -1,9 +1,36 @@
 import Link from "next/link"
-import { getTables, getTableRows } from "@/lib/supabase/db"
+import { getTables, getTableRows, getCategoryIdMap } from "@/lib/supabase/db"
 import { DataTable } from "@/components/data-table"
+import { AddRowDialog, type ColumnDef } from "@/components/add-row-dialog"
 import { Button } from "@/components/ui/button"
 
+type SelectOption = { value: string; label: string }
+
 const PAGE_SIZE = 50
+const HIDDEN_COLS = new Set(["id", "created_at", "updated_at"])
+const INSERTABLE_TABLES = new Set(["tb_prod_mst", "tb_raw_mst", "tb_sku_mst"])
+
+// 테이블별 추가 숨김 컬럼
+const TABLE_HIDDEN_COLS: Record<string, Set<string>> = {
+  tb_prod_mst: new Set(["active", "owner", "owner_part", "part", "yield_rate"]),
+  tb_sku_mst:  new Set(["is_active"]),
+}
+
+// 카테고리 드롭박스를 사용할 테이블
+const CATEGORY_TABLES = new Set(["tb_prod_mst", "tb_raw_mst", "tb_sku_mst"])
+
+const CATEGORY_OPTIONS: SelectOption[] = [
+  "VFR","COND","BWL","BEV","MTS","HRS","FLR","SWD","ETC","SDS","NUT","DAI","YGF","SUP",
+].map((c) => ({ value: c, label: c }))
+
+const STORAGE_OPTIONS: SelectOption[] = ["냉장", "냉동", "상온"].map((v) => ({ value: v, label: v }))
+const STORAGE_TABLES = new Set(["tb_prod_mst", "tb_raw_mst"])
+
+const SKU_MULTI_OPTIONS: Record<string, string[]> = {
+  concept_tags:   ["Daily Balance", "Light & Clean", "Protein Care", "Digestive Comfort", "Recovery Food"],
+  meal_time_tags: ["Breakfast", "Lunch", "Dinner"],
+  diet_tags:      ["Vegan", "Vegetarian", "Lacto-Ovo"],
+}
 
 export default async function TablePage({
   params,
@@ -20,12 +47,16 @@ export default async function TablePage({
 
   let columns: string[] = []
   let pkColumn: string | null = null
+  let insertColumns: ColumnDef[] = []
+  const tableHidden = TABLE_HIDDEN_COLS[tableName] ?? new Set<string>()
+  const isHidden = (c: string) => HIDDEN_COLS.has(c) || tableHidden.has(c)
   try {
     const tables = await getTables()
     const match = tables.find((t) => t.name === tableName)
     const allColumns = match?.columns.map((c) => c.name) ?? []
     if (allColumns.includes("id")) pkColumn = "id"
-    columns = allColumns.filter((c) => c !== "id")
+    columns = allColumns.filter((c) => !isHidden(c))
+    insertColumns = (match?.columns ?? []).filter((c) => !isHidden(c.name))
   } catch {
     // fall back to columns derived from rows below
   }
@@ -44,10 +75,28 @@ export default async function TablePage({
   if (columns.length === 0 && rows.length > 0) {
     const allColumns = Object.keys(rows[0])
     if (!pkColumn && allColumns.includes("id")) pkColumn = "id"
-    columns = allColumns.filter((c) => c !== "id")
+    columns = allColumns.filter((c) => !isHidden(c))
   }
 
   const totalPages = total !== null ? Math.max(1, Math.ceil(total / PAGE_SIZE)) : null
+  const canInsert = INSERTABLE_TABLES.has(tableName)
+
+  // 드롭박스 옵션 (category_code, status, storage 등)
+  const columnOptions: Record<string, SelectOption[]> = {}
+  if (CATEGORY_TABLES.has(tableName)) {
+    columnOptions["category_code"] = CATEGORY_OPTIONS
+  }
+  if (STORAGE_TABLES.has(tableName)) {
+    columnOptions["storage"] = STORAGE_OPTIONS
+  }
+
+  // FK 컬럼 → 사람이 읽을 수 있는 값으로 변환 (catgegory_id → category_code)
+  const columnResolvers: Record<string, Record<string, string>> = {}
+  if (CATEGORY_TABLES.has(tableName)) {
+    try {
+      columnResolvers["catgegory_id"] = await getCategoryIdMap()
+    } catch {}
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -60,6 +109,14 @@ export default async function TablePage({
             {columns.length} columns
           </p>
         </div>
+        {canInsert && (
+          <AddRowDialog
+            tableName={tableName}
+            columns={insertColumns}
+            columnOptions={columnOptions}
+            columnMultiOptions={tableName === "tb_sku_mst" ? SKU_MULTI_OPTIONS : undefined}
+          />
+        )}
       </div>
 
       {error ? (
@@ -68,7 +125,15 @@ export default async function TablePage({
         </div>
       ) : (
         <>
-          <DataTable columns={columns} rows={rows} tableName={tableName} pkColumn={pkColumn} />
+          <DataTable
+            columns={columns}
+            rows={rows}
+            tableName={tableName}
+            pkColumn={pkColumn}
+            columnOptions={columnOptions}
+            columnResolvers={columnResolvers}
+            columnMultiOptions={tableName === "tb_sku_mst" ? SKU_MULTI_OPTIONS : undefined}
+          />
 
           {totalPages !== null && totalPages > 1 && (
             <div className="flex items-center justify-between">

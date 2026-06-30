@@ -7,6 +7,7 @@ type ColumnInfo = {
   name: string
   type: string
   format: string
+  required: boolean
 }
 
 export type TableInfo = {
@@ -18,6 +19,7 @@ type OpenApiSpec = {
   definitions?: Record<
     string,
     {
+      required?: string[]
       properties?: Record<string, { type?: string; format?: string; description?: string }>
     }
   >
@@ -58,6 +60,7 @@ export async function getTables(): Promise<TableInfo[]> {
         name: colName,
         type: col.type ?? "unknown",
         format: col.format ?? "",
+        required: (def.required ?? []).includes(colName),
       })),
     }))
     .sort((a, b) => a.name.localeCompare(b.name))
@@ -119,6 +122,46 @@ export async function updateTableRow(
       Prefer: "return=minimal",
     },
     body: JSON.stringify(updates),
+  })
+
+  if (!res.ok) {
+    let body = ""
+    try {
+      body = await res.text()
+    } catch {}
+    throw new Error(`HTTP ${res.status}: ${body}`)
+  }
+}
+
+/**
+ * Fetch id → category_code mapping from tb_category_mst.
+ * Used to resolve FK columns (e.g. catgegory_id) to human-readable codes.
+ */
+export async function getCategoryIdMap(): Promise<Record<string, string>> {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/tb_category_mst?select=id,category_code`,
+    { headers: authHeaders(), next: { revalidate: 60 } },
+  )
+  if (!res.ok) return {}
+  const rows = (await res.json()) as { id: string; category_code: string }[]
+  return Object.fromEntries(rows.map((r) => [String(r.id), r.category_code]))
+}
+
+/**
+ * Insert a single row into a table.
+ */
+export async function insertTableRow(
+  table: string,
+  data: Record<string, unknown>,
+): Promise<void> {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${encodeURIComponent(table)}`, {
+    method: "POST",
+    headers: {
+      ...authHeaders(),
+      "Content-Type": "application/json",
+      Prefer: "return=minimal",
+    },
+    body: JSON.stringify(data),
   })
 
   if (!res.ok) {
