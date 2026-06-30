@@ -42,8 +42,8 @@ const MENU_CARDS = [
   {
     href: "/dashboard/production-write",
     icon: ClipboardList,
-    label: "생산 공정 작성",
-    description: "생산 공정 문서 등록 및 편집",
+    label: "판매품 레시피 작성",
+    description: "SKU별 생산품 구성 레시피 등록 및 편집",
     color: "bg-teal-50 border-teal-100",
     iconColor: "bg-teal-100 text-teal-600",
     managerOnly: false,

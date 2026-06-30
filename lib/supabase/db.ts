@@ -148,6 +148,38 @@ export async function getCategoryIdMap(): Promise<Record<string, string>> {
 }
 
 /**
+ * Fetch id → display label mapping for tb_sku_mst (used in tb_sku_recipe dropdown).
+ */
+export async function getSkuOptions(): Promise<{ value: string; label: string }[]> {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/tb_sku_mst?select=id,sku_code,sku_name&order=sku_code`,
+    { headers: authHeaders(), cache: "no-store" },
+  )
+  if (!res.ok) return []
+  const rows = (await res.json()) as { id: string; sku_code?: string; sku_name?: string }[]
+  return rows.map((r) => ({
+    value: r.id,
+    label: [r.sku_code, r.sku_name].filter(Boolean).join(" · ") || r.id,
+  }))
+}
+
+/**
+ * Fetch id → display label mapping for tb_prod_mst (used in tb_sku_recipe dropdown).
+ */
+export async function getProdOptions(): Promise<{ value: string; label: string }[]> {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/tb_prod_mst?select=id,prod_code,prod_name&order=prod_code`,
+    { headers: authHeaders(), cache: "no-store" },
+  )
+  if (!res.ok) return []
+  const rows = (await res.json()) as { id: string; prod_code?: string; prod_name?: string }[]
+  return rows.map((r) => ({
+    value: r.id,
+    label: [r.prod_code, r.prod_name].filter(Boolean).join(" · ") || r.id,
+  }))
+}
+
+/**
  * Insert a single row into a table.
  */
 export async function insertTableRow(
