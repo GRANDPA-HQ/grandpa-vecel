@@ -71,20 +71,40 @@ export type TableRows = {
   total: number | null
 }
 
+export type TableRowsOptions = {
+  orderBy?: string
+  orderDir?: "asc" | "desc"
+  search?: { columns: string[]; query: string }
+}
+
 /**
  * Fetch a page of rows from a table along with the exact total count.
  */
-export async function getTableRows(table: string, limit = 50, offset = 0): Promise<TableRows> {
-  const res = await fetch(
-    `${SUPABASE_URL}/rest/v1/${encodeURIComponent(table)}?select=*&limit=${limit}&offset=${offset}`,
-    {
-      headers: {
-        ...authHeaders(),
-        Prefer: "count=exact",
-      },
-      cache: "no-store",
+export async function getTableRows(
+  table: string,
+  limit = 50,
+  offset = 0,
+  options?: TableRowsOptions,
+): Promise<TableRows> {
+  let url = `${SUPABASE_URL}/rest/v1/${encodeURIComponent(table)}?select=*&limit=${limit}&offset=${offset}`
+
+  if (options?.orderBy) {
+    url += `&order=${encodeURIComponent(options.orderBy)}.${options.orderDir === "desc" ? "desc" : "asc"}`
+  }
+
+  if (options?.search?.query.trim() && options.search.columns.length > 0) {
+    const escaped = options.search.query.trim().replace(/"/g, '\\"')
+    const or = options.search.columns.map((c) => `${c}.ilike."*${escaped}*"`).join(",")
+    url += `&or=${encodeURIComponent(`(${or})`)}`
+  }
+
+  const res = await fetch(url, {
+    headers: {
+      ...authHeaders(),
+      Prefer: "count=exact",
     },
-  )
+    cache: "no-store",
+  })
 
   if (!res.ok) {
     throw new Error(`Failed to read "${table}" (${res.status})`)
