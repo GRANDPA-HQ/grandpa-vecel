@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { saveSkuRecipe } from "@/app/actions/sku-recipe"
+import { SearchableSelect } from "@/components/searchable-select"
 
 type SelectOption = { value: string; label: string }
 
@@ -203,23 +204,19 @@ export function SkuRecipeForm({
           {/* SKU 선택 */}
           <div className="flex items-center gap-3">
             <span className="whitespace-nowrap text-sm font-medium text-muted-foreground">SKU 선택</span>
-            <select
+            <SearchableSelect
+              className="w-72"
               value={active.skuId}
-              onChange={(e) => handleSkuChange(e.target.value)}
-              className="rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-            >
-              <option value="">— SKU를 선택하세요 —</option>
-              {skuOptions.map((opt) => (
-                <option
-                  key={opt.value}
-                  value={opt.value}
-                  disabled={usedSkuIds.has(opt.value) && opt.value !== active.skuId}
-                >
-                  {opt.label}
-                  {usedSkuIds.has(opt.value) && opt.value !== active.skuId ? " (이미 추가됨)" : ""}
-                </option>
-              ))}
-            </select>
+              onChange={handleSkuChange}
+              placeholder="— SKU를 선택하세요 —"
+              searchPlaceholder="SKU 검색..."
+              options={skuOptions.map((opt) => ({
+                value: opt.value,
+                label:
+                  opt.label + (usedSkuIds.has(opt.value) && opt.value !== active.skuId ? " (이미 추가됨)" : ""),
+                disabled: usedSkuIds.has(opt.value) && opt.value !== active.skuId,
+              }))}
+            />
             {active.skuId && (
               <span className="text-xs text-muted-foreground">
                 {initialRecipes.some((r) => r.sku_id === active.skuId)
@@ -252,18 +249,13 @@ export function SkuRecipeForm({
                     </td>
 
                     <td className="px-4 py-2">
-                      <select
+                      <SearchableSelect
                         value={row.prodId}
-                        onChange={(e) => updateRow(row.localId, "prodId", e.target.value)}
-                        className="w-full rounded-md border border-input bg-transparent px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                      >
-                        <option value="">— 선택 —</option>
-                        {prodOptions.map((opt) => (
-                          <option key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </option>
-                        ))}
-                      </select>
+                        onChange={(v) => updateRow(row.localId, "prodId", v)}
+                        placeholder="— 선택 —"
+                        searchPlaceholder="생산품 검색..."
+                        options={prodOptions.map((opt) => ({ value: opt.value, label: opt.label }))}
+                      />
                     </td>
 
                     <td className="px-4 py-2">
