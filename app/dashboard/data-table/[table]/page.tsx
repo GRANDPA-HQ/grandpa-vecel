@@ -25,8 +25,25 @@ const TABLE_PK: Record<string, string> = {
 // 카테고리 드롭박스를 사용할 테이블
 const CATEGORY_TABLES = new Set(["tb_prod_mst", "tb_raw_mst", "tb_sku_mst"])
 
+// 테이블별 기본 정렬 컬럼
+const TABLE_DEFAULT_SORT: Record<string, { column: string; dir: "asc" | "desc" }> = {
+  tb_sku_mst:      { column: "sku_code", dir: "asc" },
+  tb_raw_mst:      { column: "raw_code", dir: "asc" },
+  tb_prod_mst:     { column: "prod_code", dir: "asc" },
+  tb_category_mst: { column: "category_code", dir: "asc" },
+}
+
+// 테이블별 검색 대상 컬럼 (코드/이름 등)
+const TABLE_SEARCH_COLUMNS: Record<string, string[]> = {
+  tb_sku_mst:      ["sku_code", "sku_name"],
+  tb_raw_mst:      ["raw_code", "raw_name"],
+  tb_prod_mst:     ["prod_code", "prod_name"],
+  tb_category_mst: ["category_code", "category_name"],
+  users:           ["email"],
+}
+
 const CATEGORY_OPTIONS: SelectOption[] = [
-  "VFR","COND","BWL","BEV","MTS","HRS","FLR","SWD","ETC","SDS","NUT","DAI","YGF","SUP",
+  "VFR","COND","BWL","BEV","MTS","HRS","FLR","SWD","ETC","SDS","NUT","DAI","YGF","SUP","GC",
 ].map((c) => ({ value: c, label: c }))
 
 const STORAGE_OPTIONS: SelectOption[] = ["냉장", "냉동", "상온"].map((v) => ({ value: v, label: v }))
@@ -36,6 +53,7 @@ const SKU_MULTI_OPTIONS: Record<string, string[]> = {
   concept_tags:   ["Daily Balance", "Light & Clean", "Protein Care", "Digestive Comfort", "Recovery Food"],
   meal_time_tags: ["Breakfast", "Lunch", "Dinner"],
   diet_tags:      ["Vegan", "Vegetarian", "Lacto-Ovo"],
+  nutrition_tags: ["Gluten-Free", "Low-Carb", "No Sugar", "Low-Sodium", "High-Protein", "Dairy-Free"],
 }
 
 export default async function TablePage({
@@ -43,13 +61,20 @@ export default async function TablePage({
   searchParams,
 }: {
   params: Promise<{ table: string }>
-  searchParams: Promise<{ page?: string }>
+  searchParams: Promise<{ page?: string; sort?: string; dir?: string; q?: string }>
 }) {
   const { table } = await params
   const tableName = decodeURIComponent(table)
-  const { page } = await searchParams
+  const { page, sort, dir, q } = await searchParams
   const currentPage = Math.max(1, Number.parseInt(page ?? "1", 10) || 1)
   const offset = (currentPage - 1) * PAGE_SIZE
+
+  const defaultSort = TABLE_DEFAULT_SORT[tableName]
+  const sortColumn = sort || defaultSort?.column
+  const sortDir: "asc" | "desc" = dir === "desc" ? "desc" : dir === "asc" ? "asc" : defaultSort?.dir ?? "asc"
+  const searchColumns = TABLE_SEARCH_COLUMNS[tableName] ?? []
+  const searchQuery = q?.trim() ?? ""
+  const searchEnabled = searchColumns.length > 0
 
   let columns: string[] = []
   let pkColumn: string | null = null
@@ -71,7 +96,11 @@ export default async function TablePage({
   let total: number | null = null
   let error: string | null = null
   try {
-    const result = await getTableRows(tableName, PAGE_SIZE, offset)
+    const result = await getTableRows(tableName, PAGE_SIZE, offset, {
+      orderBy: sortColumn,
+      orderDir: sortDir,
+      search: searchEnabled && searchQuery ? { columns: searchColumns, query: searchQuery } : undefined,
+    })
     rows = result.rows
     total = result.total
   } catch (e) {
@@ -123,6 +152,15 @@ export default async function TablePage({
     } catch {}
   }
 
+  const buildPageHref = (pageNum: number) => {
+    const params = new URLSearchParams()
+    params.set("page", String(pageNum))
+    if (sort) params.set("sort", sort)
+    if (dir) params.set("dir", dir)
+    if (searchQuery) params.set("q", searchQuery)
+    return `/dashboard/data-table/${encodeURIComponent(tableName)}?${params.toString()}`
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-end justify-between gap-2">
@@ -151,6 +189,7 @@ export default async function TablePage({
       ) : (
         <>
           <DataTable
+            key={`${currentPage}-${sortColumn ?? ""}-${sortDir}-${searchQuery}`}
             columns={columns}
             rows={rows}
             tableName={tableName}
@@ -158,6 +197,11 @@ export default async function TablePage({
             columnOptions={columnOptions}
             columnResolvers={columnResolvers}
             columnMultiOptions={tableName === "tb_sku_mst" ? SKU_MULTI_OPTIONS : undefined}
+            sortColumn={sortColumn}
+            sortDir={sortDir}
+            searchQuery={searchQuery}
+            searchEnabled={searchEnabled}
+            searchPlaceholder={searchEnabled ? `${searchColumns.join(", ")} 검색` : undefined}
           />
 
           {totalPages !== null && totalPages > 1 && (
@@ -168,7 +212,7 @@ export default async function TablePage({
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" disabled={currentPage <= 1} asChild={currentPage > 1}>
                   {currentPage > 1 ? (
-                    <Link href={`/dashboard/data-table/${encodeURIComponent(tableName)}?page=${currentPage - 1}`}>
+                    <Link href={buildPageHref(currentPage - 1)}>
                       Previous
                     </Link>
                   ) : (
@@ -182,7 +226,7 @@ export default async function TablePage({
                   asChild={currentPage < totalPages}
                 >
                   {currentPage < totalPages ? (
-                    <Link href={`/dashboard/data-table/${encodeURIComponent(tableName)}?page=${currentPage + 1}`}>
+                    <Link href={buildPageHref(currentPage + 1)}>
                       Next
                     </Link>
                   ) : (

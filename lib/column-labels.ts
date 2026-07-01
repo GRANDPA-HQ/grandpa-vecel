@@ -8,6 +8,8 @@ export const COLUMN_LABELS: Record<string, string> = {
   // SKU (tb_sku_mst)
   sku_code: "SKU 코드",
   sku_name: "SKU명",
+  sku_name_en: "SKU명 (영문)",
+  description_en: "설명 (영문)",
   // 공통
   category_code: "카테고리 코드",
   category_name: "카테고리명",
@@ -36,7 +38,7 @@ export const COLUMN_LABELS: Record<string, string> = {
   concept_tags: "식사 컨셉 태그",
   meal_time_tags: "식사 타이밍 태그",
   diet_tags: "식이 유형 태그",
-  nutrition_tags: "영양·성분 태그",
+  nutrition_tags: "영양 태그",
   // 생산 공정 (tb_production_process)
   product_name: "제품명",
   reject_reason: "반려 사유",

@@ -2,6 +2,8 @@
 
 import Image from "next/image"
 import { useState, useRef, useCallback } from "react"
+import { useRouter, usePathname, useSearchParams } from "next/navigation"
+import { ArrowUp, ArrowDown, ArrowUpDown, Search } from "lucide-react"
 import {
   Table,
   TableBody,
@@ -10,6 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { Input } from "@/components/ui/input"
 import { updateRow } from "@/app/actions/table-edit"
 import { COLUMN_LABELS } from "@/lib/column-labels"
 
@@ -421,6 +424,11 @@ export function DataTable({
   columnOptions,
   columnResolvers,
   columnMultiOptions,
+  sortColumn,
+  sortDir,
+  searchQuery,
+  searchEnabled,
+  searchPlaceholder,
 }: {
   columns: string[]
   rows: Record<string, unknown>[]
@@ -429,10 +437,46 @@ export function DataTable({
   columnOptions?: Record<string, SelectOption[]>
   columnResolvers?: Record<string, Record<string, string>>
   columnMultiOptions?: Record<string, string[]>
+  sortColumn?: string
+  sortDir?: "asc" | "desc"
+  searchQuery?: string
+  searchEnabled?: boolean
+  searchPlaceholder?: string
 }) {
   const [rows, setRows] = useState(initialRows)
   const [errors, setErrors] = useState<ErrorEntry[]>([])
   const errorCounter = useRef(0)
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const [searchInput, setSearchInput] = useState(searchQuery ?? "")
+
+  const handleSort = useCallback(
+    (col: string) => {
+      const isActive = col === (searchParams.get("sort") || sortColumn)
+      const currentDir = searchParams.get("dir") === "desc" ? "desc" : sortDir ?? "asc"
+      const nextDir = isActive && currentDir === "asc" ? "desc" : "asc"
+
+      const params = new URLSearchParams(searchParams.toString())
+      params.set("sort", col)
+      params.set("dir", nextDir)
+      params.delete("page")
+      router.push(`${pathname}?${params.toString()}`)
+    },
+    [pathname, router, searchParams, sortColumn, sortDir],
+  )
+
+  const handleSearchSubmit = useCallback(
+    (e: React.FormEvent) => {
+      e.preventDefault()
+      const params = new URLSearchParams(searchParams.toString())
+      if (searchInput.trim()) params.set("q", searchInput.trim())
+      else params.delete("q")
+      params.delete("page")
+      router.push(`${pathname}?${params.toString()}`)
+    },
+    [pathname, router, searchParams, searchInput],
+  )
 
   const handleRowUpdate = useCallback(
     (pkValue: string, col: string, newValue: unknown) => {
@@ -451,9 +495,31 @@ export function DataTable({
   }, [])
 
   const editable = !!tableName && !!pkColumn
+  const activeSort = searchParams.get("sort") || sortColumn
+  const activeDir = activeSort ? (searchParams.get("dir") === "desc" ? "desc" : sortDir ?? "asc") : undefined
 
   return (
     <div className="flex flex-col gap-3">
+      {searchEnabled && (
+        <form onSubmit={handleSearchSubmit} className="flex max-w-sm items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder={searchPlaceholder ?? "검색"}
+              className="h-8 pl-8 text-sm"
+            />
+          </div>
+          <button
+            type="submit"
+            className="rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium hover:bg-accent"
+          >
+            검색
+          </button>
+        </form>
+      )}
+
       {editable && (
         <p className="text-xs text-muted-foreground">
           셀을 클릭하면 편집할 수 있습니다. Enter로 저장, Esc로 취소.
@@ -464,14 +530,32 @@ export function DataTable({
         <Table>
           <TableHeader>
             <TableRow>
-              {columns.map((col) => (
-                <TableHead key={col} className="whitespace-nowrap text-xs">
-                  {COLUMN_LABELS[col] ?? col}
-                  {editable && col === pkColumn && (
-                    <span className="ml-1 text-[10px] text-muted-foreground">(PK)</span>
-                  )}
-                </TableHead>
-              ))}
+              {columns.map((col) => {
+                const isSorted = activeSort === col
+                return (
+                  <TableHead
+                    key={col}
+                    onClick={() => handleSort(col)}
+                    className="cursor-pointer select-none whitespace-nowrap text-xs hover:bg-accent/60"
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      {COLUMN_LABELS[col] ?? col}
+                      {isSorted ? (
+                        activeDir === "desc" ? (
+                          <ArrowDown className="h-3 w-3" />
+                        ) : (
+                          <ArrowUp className="h-3 w-3" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="h-3 w-3 text-muted-foreground/40" />
+                      )}
+                    </span>
+                    {editable && col === pkColumn && (
+                      <span className="ml-1 text-[10px] text-muted-foreground">(PK)</span>
+                    )}
+                  </TableHead>
+                )
+              })}
             </TableRow>
           </TableHeader>
           <TableBody>
