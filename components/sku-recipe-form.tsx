@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useTransition } from "react"
-import { Plus, Trash2, Save, X } from "lucide-react"
+import { Plus, Trash2, Save, X, Search, GripVertical } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
@@ -63,6 +63,8 @@ export function SkuRecipeForm({
   const [tabs, setTabs] = useState<SkuTab[]>([createTab()])
   const [activeId, setActiveId] = useState<string>(() => tabs[0].localId)
   const [msg, setMsg] = useState<{ type: "success" | "error"; text: string } | null>(null)
+  const [tabQuery, setTabQuery] = useState("")
+  const [dragId, setDragId] = useState<string | null>(null)
 
   function flash(type: "success" | "error", text: string) {
     setMsg({ type, text })
@@ -84,6 +86,24 @@ export function SkuRecipeForm({
     const remaining = tabs.filter((t) => t.localId !== localId)
     setTabs(remaining)
     if (activeId === localId) setActiveId(remaining[0].localId)
+  }
+
+  function tabLabel(t: SkuTab) {
+    const sku = skuOptions.find((o) => o.value === t.skuId)
+    return sku ? sku.label : "SKU 미선택"
+  }
+
+  function moveTab(fromId: string, toId: string) {
+    if (fromId === toId) return
+    setTabs((prev) => {
+      const fromIdx = prev.findIndex((t) => t.localId === fromId)
+      const toIdx = prev.findIndex((t) => t.localId === toId)
+      if (fromIdx === -1 || toIdx === -1) return prev
+      const next = [...prev]
+      const [moved] = next.splice(fromIdx, 1)
+      next.splice(toIdx, 0, moved)
+      return next
+    })
   }
 
   function handleSkuChange(skuId: string) {
@@ -155,25 +175,67 @@ export function SkuRecipeForm({
     })
   }
 
+  const dragEnabled = !tabQuery.trim()
+  const visibleTabs = tabQuery.trim()
+    ? tabs.filter(
+        (t) => t.localId === activeId || tabLabel(t).toLowerCase().includes(tabQuery.trim().toLowerCase()),
+      )
+    : tabs
+
   return (
     <div className="flex flex-col gap-5">
       {/* ── 탭 바 ── */}
-      <div className="flex items-center gap-1 border-b border-border">
-        {tabs.map((t) => {
-          const sku = skuOptions.find((o) => o.value === t.skuId)
-          return (
-            <div key={t.localId} className="group relative flex items-center">
+      <div className="flex flex-col gap-2">
+        {tabs.length > 3 && (
+          <div className="relative w-56">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <input
+              value={tabQuery}
+              onChange={(e) => setTabQuery(e.target.value)}
+              placeholder="탭 검색 (SKU 코드/이름)"
+              className="w-full rounded-md border border-input bg-background py-1.5 pl-8 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+          </div>
+        )}
+
+        <div className="flex items-center gap-1 overflow-x-auto border-b border-border">
+          {visibleTabs.map((t) => (
+            <div
+              key={t.localId}
+              draggable={dragEnabled}
+              onDragStart={(e) => {
+                setDragId(t.localId)
+                e.dataTransfer.effectAllowed = "move"
+              }}
+              onDragOver={(e) => {
+                if (dragEnabled) e.preventDefault()
+              }}
+              onDrop={(e) => {
+                e.preventDefault()
+                if (dragId) moveTab(dragId, t.localId)
+                setDragId(null)
+              }}
+              onDragEnd={() => setDragId(null)}
+              className={cn(
+                "group relative flex items-center",
+                dragEnabled && "cursor-grab active:cursor-grabbing",
+                dragId === t.localId && "opacity-40",
+              )}
+            >
               <button
                 type="button"
                 onClick={() => setActiveId(t.localId)}
                 className={cn(
-                  "flex items-center gap-2 rounded-t-lg border-b-2 px-4 py-2.5 text-sm font-medium transition-colors",
+                  "flex items-center gap-1.5 rounded-t-lg border-b-2 px-4 py-2.5 text-sm font-medium transition-colors",
                   t.localId === activeId
                     ? "border-indigo-500 text-foreground"
                     : "border-transparent text-muted-foreground hover:border-border hover:text-foreground",
                 )}
               >
-                {sku ? sku.label : "SKU 미선택"}
+                {dragEnabled && (
+                  <GripVertical className="h-3 w-3 shrink-0 text-muted-foreground/50" />
+                )}
+                {tabLabel(t)}
               </button>
               {tabs.length > 1 && (
                 <button
@@ -185,17 +247,17 @@ export function SkuRecipeForm({
                 </button>
               )}
             </div>
-          )
-        })}
+          ))}
 
-        <button
-          type="button"
-          onClick={addTab}
-          className="ml-1 flex items-center gap-1 rounded-lg px-2.5 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          SKU 추가
-        </button>
+          <button
+            type="button"
+            onClick={addTab}
+            className="ml-1 flex items-center gap-1 rounded-lg px-2.5 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            SKU 추가
+          </button>
+        </div>
       </div>
 
       {/* ── 활성 탭 콘텐츠 ── */}
