@@ -1,12 +1,12 @@
 "use client"
 
-import { useState, useTransition, useEffect } from "react"
+import { useState, useTransition, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { insertRow } from "@/app/actions/table-edit"
+import { insertRow, fetchNextSkuCode } from "@/app/actions/table-edit"
 import { COLUMN_LABELS } from "@/lib/column-labels"
 
 export type ColumnDef = {
@@ -39,17 +39,47 @@ export function AddRowDialog({
   columns,
   columnOptions,
   columnMultiOptions,
+  fieldOrder,
 }: {
   tableName: string
   columns: ColumnDef[]
   columnOptions?: Record<string, SelectOption[]>
   columnMultiOptions?: Record<string, string[]>
+  fieldOrder?: string[]
 }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [values, setValues] = useState<Record<string, string>>({})
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
+  const lastAutoSkuCode = useRef<string | null>(null)
+
+  const orderedColumns = fieldOrder
+    ? [
+        ...fieldOrder
+          .map((name) => columns.find((c) => c.name === name))
+          .filter((c): c is ColumnDef => !!c),
+        ...columns.filter((c) => !fieldOrder.includes(c.name)),
+      ]
+    : columns
+
+  // tb_sku_mst: 카테고리 선택 시 해당 카테고리의 다음 SKU 코드를 자동 채움
+  const categoryValue = values["category_code"]
+  useEffect(() => {
+    if (tableName !== "tb_sku_mst" || !categoryValue) return
+    const currentSkuCode = values["sku_code"] ?? ""
+    if (currentSkuCode !== "" && currentSkuCode !== lastAutoSkuCode.current) return
+    let cancelled = false
+    fetchNextSkuCode(categoryValue).then((code) => {
+      if (cancelled) return
+      lastAutoSkuCode.current = code
+      setValues((v) => ({ ...v, sku_code: code }))
+    })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tableName, categoryValue])
 
   useEffect(() => {
     if (!open) return
@@ -68,6 +98,7 @@ export function AddRowDialog({
   function handleOpen() {
     setValues({})
     setError(null)
+    lastAutoSkuCode.current = null
     setOpen(true)
   }
 
@@ -116,10 +147,11 @@ export function AddRowDialog({
                 {columns.length === 0 ? (
                   <p className="text-sm text-muted-foreground">컬럼 정보를 불러올 수 없습니다.</p>
                 ) : (
-                  columns.map((col) => {
+                  orderedColumns.map((col) => {
                     const multiOpts = columnMultiOptions?.[col.name]
                     const singleOpts = columnOptions?.[col.name]
                     const selected = parseMultiValue(values[col.name])
+                    const isAutoSkuCode = tableName === "tb_sku_mst" && col.name === "sku_code"
 
                     return (
                       <div key={col.name} className="flex flex-col gap-1.5">
@@ -131,6 +163,11 @@ export function AddRowDialog({
                           <span className="ml-1.5 font-normal text-muted-foreground font-mono">
                             ({col.name})
                           </span>
+                          {isAutoSkuCode && (
+                            <span className="ml-1.5 font-normal text-muted-foreground">
+                              — 카테고리 선택 시 자동 채워짐
+                            </span>
+                          )}
                         </Label>
 
                         {multiOpts ? (

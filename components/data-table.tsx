@@ -172,11 +172,11 @@ function CellContent({
   }
   const resolved = columnResolvers?.[col]?.[text]
   if (resolved !== undefined)
-    return <span title={text}>{resolved}</span>
+    return <span title={text} className="block truncate">{resolved}</span>
   if (!NO_IMAGE_COLS.has(col) && CODE_RE.test(text)) return <CodeImageCell code={text.toUpperCase()} />
   if (text.length > 20)
     return <span title={text} className="whitespace-pre-wrap break-all">{text}</span>
-  return <span title={text}>{text}</span>
+  return <span title={text} className="block truncate">{text}</span>
 }
 
 type ErrorEntry = {
@@ -569,7 +569,7 @@ export function DataTable({
             {rows.map((row, i) => (
               <TableRow key={i}>
                 {columns.map((col) => (
-                  <TableCell key={col} className="max-w-[20ch] font-mono text-xs align-top">
+                  <TableCell key={col} className="max-w-[20ch] overflow-hidden font-mono text-xs align-top">
                     {editable ? (
                       <EditableCell
                         col={col}

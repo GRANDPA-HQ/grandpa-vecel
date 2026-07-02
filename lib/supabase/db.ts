@@ -168,6 +168,30 @@ export async function getCategoryIdMap(): Promise<Record<string, string>> {
 }
 
 /**
+ * Compute the next sku_code for a given category, based on the highest existing
+ * sequence number for that category prefix (e.g. SWD_016 → SWD_017).
+ */
+export async function getNextSkuCode(categoryCode: string): Promise<string> {
+  const prefix = categoryCode.trim().toUpperCase()
+  const fallback = `${prefix}_001`
+  if (!prefix) return fallback
+
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/tb_sku_mst?select=sku_code&sku_code=ilike.${encodeURIComponent(prefix)}_*&order=sku_code.desc&limit=1`,
+    { headers: authHeaders(), cache: "no-store" },
+  )
+  if (!res.ok) return fallback
+
+  const rows = (await res.json()) as { sku_code: string }[]
+  const match = rows[0]?.sku_code.match(/^(.*?)_(\d+)$/)
+  if (!match) return fallback
+
+  const [, matchedPrefix, seq] = match
+  const next = (Number.parseInt(seq, 10) + 1).toString().padStart(seq.length, "0")
+  return `${matchedPrefix}_${next}`
+}
+
+/**
  * Fetch id → display label mapping for tb_sku_mst (used in tb_sku_recipe dropdown).
  */
 export async function getSkuOptions(): Promise<{ value: string; label: string }[]> {
