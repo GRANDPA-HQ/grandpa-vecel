@@ -25,6 +25,11 @@ const TABLE_PK: Record<string, string> = {
 // 카테고리 드롭박스를 사용할 테이블
 const CATEGORY_TABLES = new Set(["tb_prod_mst", "tb_raw_mst", "tb_sku_mst"])
 
+// 테이블별 등록 폼 입력 순서 (지정 안 한 나머지 컬럼은 기존 순서 그대로 뒤에 붙음)
+const TABLE_FIELD_ORDER: Record<string, string[]> = {
+  tb_sku_mst: ["category_code", "sku_code"],
+}
+
 // 테이블별 기본 정렬 컬럼
 const TABLE_DEFAULT_SORT: Record<string, { column: string; dir: "asc" | "desc" }> = {
   tb_sku_mst:      { column: "sku_code", dir: "asc" },
@@ -178,6 +183,7 @@ export default async function TablePage({
             columns={insertColumns}
             columnOptions={columnOptions}
             columnMultiOptions={tableName === "tb_sku_mst" ? SKU_MULTI_OPTIONS : undefined}
+            fieldOrder={TABLE_FIELD_ORDER[tableName]}
           />
         )}
       </div>

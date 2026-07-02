@@ -1,6 +1,14 @@
 "use server"
 
-import { updateTableRow, insertTableRow } from "@/lib/supabase/db"
+import { updateTableRow, insertTableRow, getNextSkuCode } from "@/lib/supabase/db"
+
+export async function fetchNextSkuCode(categoryCode: string): Promise<string> {
+  try {
+    return await getNextSkuCode(categoryCode)
+  } catch {
+    return `${categoryCode.trim().toUpperCase()}_001`
+  }
+}
 
 export async function updateRow(
   table: string,
