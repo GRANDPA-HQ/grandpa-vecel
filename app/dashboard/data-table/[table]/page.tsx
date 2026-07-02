@@ -30,6 +30,11 @@ const TABLE_FIELD_ORDER: Record<string, string[]> = {
   tb_sku_mst: ["category_code", "sku_code"],
 }
 
+// 테이블별 데이터 테이블 컬럼 표시 순서 (지정 안 한 나머지 컬럼은 기존 순서 그대로 뒤에 붙음)
+const TABLE_COLUMN_ORDER: Record<string, string[]> = {
+  tb_sku_mst: ["category_code", "sku_code", "sku_name", "sku_name_en"],
+}
+
 // 테이블별 기본 정렬 컬럼
 const TABLE_DEFAULT_SORT: Record<string, { column: string; dir: "asc" | "desc" }> = {
   tb_sku_mst:      { column: "sku_code", dir: "asc" },
@@ -116,6 +121,14 @@ export default async function TablePage({
     const allColumns = Object.keys(rows[0])
     if (!pkColumn && allColumns.includes("id")) pkColumn = "id"
     columns = allColumns.filter((c) => !isHidden(c))
+  }
+
+  const columnOrder = TABLE_COLUMN_ORDER[tableName]
+  if (columnOrder) {
+    columns = [
+      ...columnOrder.filter((c) => columns.includes(c)),
+      ...columns.filter((c) => !columnOrder.includes(c)),
+    ]
   }
 
   const totalPages = total !== null ? Math.max(1, Math.ceil(total / PAGE_SIZE)) : null
