@@ -1,10 +1,26 @@
 "use server"
 
-import { updateTableRow, insertTableRow, getNextSkuCode } from "@/lib/supabase/db"
+import { updateTableRow, insertTableRow, deleteTableRow, getNextSkuCode, getNextRawCode, getNextProdCode } from "@/lib/supabase/db"
 
 export async function fetchNextSkuCode(categoryCode: string): Promise<string> {
   try {
     return await getNextSkuCode(categoryCode)
+  } catch {
+    return `${categoryCode.trim().toUpperCase()}_001`
+  }
+}
+
+export async function fetchNextRawCode(categoryCode: string): Promise<string> {
+  try {
+    return await getNextRawCode(categoryCode)
+  } catch {
+    return `${categoryCode.trim().toUpperCase()}_001`
+  }
+}
+
+export async function fetchNextProdCode(categoryCode: string): Promise<string> {
+  try {
+    return await getNextProdCode(categoryCode)
   } catch {
     return `${categoryCode.trim().toUpperCase()}_001`
   }
@@ -36,6 +52,19 @@ export async function updateRow(
     }
 
     await updateTableRow(table, pkColumn, pkValue, { [column]: parsed })
+    return { error: null }
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) }
+  }
+}
+
+export async function deleteRow(
+  table: string,
+  pkColumn: string,
+  pkValue: string,
+): Promise<{ error: string | null }> {
+  try {
+    await deleteTableRow(table, pkColumn, pkValue)
     return { error: null }
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e) }

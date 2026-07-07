@@ -6,8 +6,15 @@ import { Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { insertRow, fetchNextSkuCode } from "@/app/actions/table-edit"
+import { insertRow, fetchNextSkuCode, fetchNextRawCode, fetchNextProdCode } from "@/app/actions/table-edit"
 import { COLUMN_LABELS } from "@/lib/column-labels"
+
+// 테이블별 카테고리 선택 시 코드를 자동 채워주는 설정
+const AUTO_CODE_CONFIG: Record<string, { column: string; fetchCode: (categoryCode: string) => Promise<string> }> = {
+  tb_sku_mst:  { column: "sku_code",  fetchCode: fetchNextSkuCode },
+  tb_raw_mst:  { column: "raw_code",  fetchCode: fetchNextRawCode },
+  tb_prod_mst: { column: "prod_code", fetchCode: fetchNextProdCode },
+}
 
 export type ColumnDef = {
   name: string
@@ -17,6 +24,11 @@ export type ColumnDef = {
 }
 
 type SelectOption = { value: string; label: string }
+type MultiOption = string | SelectOption
+
+function toSelectOption(opt: MultiOption): SelectOption {
+  return typeof opt === "string" ? { value: opt, label: opt } : opt
+}
 
 function parseMultiValue(val: string | undefined): string[] {
   if (!val) return []
@@ -44,7 +56,7 @@ export function AddRowDialog({
   tableName: string
   columns: ColumnDef[]
   columnOptions?: Record<string, SelectOption[]>
-  columnMultiOptions?: Record<string, string[]>
+  columnMultiOptions?: Record<string, MultiOption[]>
   fieldOrder?: string[]
 }) {
   const router = useRouter()
@@ -52,7 +64,7 @@ export function AddRowDialog({
   const [values, setValues] = useState<Record<string, string>>({})
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
-  const lastAutoSkuCode = useRef<string | null>(null)
+  const lastAutoCode = useRef<string | null>(null)
 
   const orderedColumns = fieldOrder
     ? [
@@ -63,17 +75,19 @@ export function AddRowDialog({
       ]
     : columns
 
-  // tb_sku_mst: 카테고리 선택 시 해당 카테고리의 다음 SKU 코드를 자동 채움
+  // 카테고리 선택 시 해당 카테고리의 다음 코드(sku_code / raw_code / prod_code)를 자동 채움
+  const autoCodeConfig = AUTO_CODE_CONFIG[tableName]
   const categoryValue = values["category_code"]
   useEffect(() => {
-    if (tableName !== "tb_sku_mst" || !categoryValue) return
-    const currentSkuCode = values["sku_code"] ?? ""
-    if (currentSkuCode !== "" && currentSkuCode !== lastAutoSkuCode.current) return
+    if (!autoCodeConfig || !categoryValue) return
+    const codeColumn = autoCodeConfig.column
+    const currentCode = values[codeColumn] ?? ""
+    if (currentCode !== "" && currentCode !== lastAutoCode.current) return
     let cancelled = false
-    fetchNextSkuCode(categoryValue).then((code) => {
+    autoCodeConfig.fetchCode(categoryValue).then((code) => {
       if (cancelled) return
-      lastAutoSkuCode.current = code
-      setValues((v) => ({ ...v, sku_code: code }))
+      lastAutoCode.current = code
+      setValues((v) => ({ ...v, [codeColumn]: code }))
     })
     return () => {
       cancelled = true
@@ -98,7 +112,7 @@ export function AddRowDialog({
   function handleOpen() {
     setValues({})
     setError(null)
-    lastAutoSkuCode.current = null
+    lastAutoCode.current = null
     setOpen(true)
   }
 
@@ -151,7 +165,7 @@ export function AddRowDialog({
                     const multiOpts = columnMultiOptions?.[col.name]
                     const singleOpts = columnOptions?.[col.name]
                     const selected = parseMultiValue(values[col.name])
-                    const isAutoSkuCode = tableName === "tb_sku_mst" && col.name === "sku_code"
+                    const isAutoCode = autoCodeConfig?.column === col.name
 
                     return (
                       <div key={col.name} className="flex flex-col gap-1.5">
@@ -163,7 +177,7 @@ export function AddRowDialog({
                           <span className="ml-1.5 font-normal text-muted-foreground font-mono">
                             ({col.name})
                           </span>
-                          {isAutoSkuCode && (
+                          {isAutoCode && (
                             <span className="ml-1.5 font-normal text-muted-foreground">
                               — 카테고리 선택 시 자동 채워짐
                             </span>
@@ -173,31 +187,36 @@ export function AddRowDialog({
                         {multiOpts ? (
                           // ── 다중 선택 체크박스 ──
                           <div className="flex flex-col gap-1 rounded-md border border-input bg-background px-3 py-2">
-                            {multiOpts.map((opt) => (
-                              <label
-                                key={opt}
-                                className="flex cursor-pointer select-none items-center gap-2 text-sm"
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={selected.includes(opt)}
-                                  onChange={(e) => {
-                                    const next = e.target.checked
-                                      ? [...selected, opt]
-                                      : selected.filter((v) => v !== opt)
-                                    setValues((v) => ({
-                                      ...v,
-                                      [col.name]: JSON.stringify(next),
-                                    }))
-                                  }}
-                                  className="h-4 w-4 rounded border-gray-300 accent-primary"
-                                />
-                                {opt}
-                              </label>
-                            ))}
+                            {multiOpts.map((rawOpt) => {
+                              const opt = toSelectOption(rawOpt)
+                              return (
+                                <label
+                                  key={opt.value}
+                                  className="flex cursor-pointer select-none items-center gap-2 text-sm"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={selected.includes(opt.value)}
+                                    onChange={(e) => {
+                                      const next = e.target.checked
+                                        ? [...selected, opt.value]
+                                        : selected.filter((v) => v !== opt.value)
+                                      setValues((v) => ({
+                                        ...v,
+                                        [col.name]: JSON.stringify(next),
+                                      }))
+                                    }}
+                                    className="h-4 w-4 rounded border-gray-300 accent-primary"
+                                  />
+                                  {opt.label}
+                                </label>
+                              )
+                            })}
                             {selected.length > 0 && (
                               <p className="mt-1 text-[11px] text-muted-foreground">
-                                선택됨: {selected.join(", ")}
+                                선택됨: {selected
+                                  .map((v) => toSelectOption(multiOpts.find((o) => toSelectOption(o).value === v) ?? v).label)
+                                  .join(", ")}
                               </p>
                             )}
                           </div>

@@ -18,7 +18,7 @@ export const COLUMN_LABELS: Record<string, string> = {
   purchase_unit: "구매 단위",
   purchase_price: "구매 단가",
   supplier: "거래처",
-  shelf_life_days: "보관 기한",
+  shelf_life_days: "보관 기한 (일)",
   price: "가격",
   cost: "원가",
   stock: "재고",
@@ -39,6 +39,7 @@ export const COLUMN_LABELS: Record<string, string> = {
   meal_time_tags: "식사 타이밍 태그",
   diet_tags: "식이 유형 태그",
   nutrition_tags: "영양 태그",
+  allergen_tags: "알러지 유발 성분",
   // 생산 공정 (tb_production_process)
   product_name: "제품명",
   reject_reason: "반려 사유",
