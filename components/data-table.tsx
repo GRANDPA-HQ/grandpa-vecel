@@ -1,9 +1,9 @@
 "use client"
 
 import Image from "next/image"
-import { useState, useRef, useCallback } from "react"
+import { useState, useRef, useCallback, useEffect } from "react"
 import { useRouter, usePathname, useSearchParams } from "next/navigation"
-import { ArrowUp, ArrowDown, ArrowUpDown, Search } from "lucide-react"
+import { ArrowUp, ArrowDown, ArrowUpDown, Search, Trash2 } from "lucide-react"
 import {
   Table,
   TableBody,
@@ -13,12 +13,17 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
-import { updateRow } from "@/app/actions/table-edit"
+import { updateRow, deleteRow } from "@/app/actions/table-edit"
 import { COLUMN_LABELS } from "@/lib/column-labels"
 
 const IMAGE_EXTS = ["jpg", "jpeg", "png", "gif", "webp"]
 
 type SelectOption = { value: string; label: string }
+type MultiOption = string | SelectOption
+
+function toSelectOption(opt: MultiOption): SelectOption {
+  return typeof opt === "string" ? { value: opt, label: opt } : opt
+}
 
 // 테이블.컬럼 → 선택지 목록 (이 컬럼은 select 드롭다운으로 편집)
 const ENUM_COLUMNS: Record<string, { value: string; label: string; className: string }[]> = {
@@ -31,6 +36,7 @@ const ENUM_COLUMNS: Record<string, { value: string; label: string; className: st
     { value: "SEMI", label: "SEMI", className: "bg-blue-100 text-blue-700 border-blue-200" },
     { value: "PREP", label: "PREP", className: "bg-yellow-100 text-yellow-700 border-yellow-200" },
     { value: "COOK", label: "COOK", className: "bg-orange-100 text-orange-700 border-orange-200" },
+    { value: "UNPROC", label: "UNPROC", className: "bg-gray-100 text-gray-700 border-gray-200" },
   ],
   "tb_raw_mst.storage": [
     { value: "냉장", label: "냉장", className: "bg-blue-100 text-blue-700 border-blue-200" },
@@ -49,7 +55,7 @@ const ENUM_COLUMNS: Record<string, { value: string; label: string; className: st
   ],
 }
 
-const CODE_RE = /^(?:RAW|PROD)-([A-Z][A-Z0-9_]*)-(\d+)$/i
+const CODE_RE = /^(?:(?:RAW|PROD)-)?([A-Z][A-Z0-9_]*)[-_](\d+)$/i
 
 function parseMultiValue(val: string): string[] {
   if (!val) return []
@@ -131,7 +137,10 @@ function CodeImageCell({ code }: { code: string }) {
 }
 
 // 이미지를 표시하지 않을 컬럼 목록
-const NO_IMAGE_COLS = new Set(["raw_code", "prod_code"])
+const NO_IMAGE_COLS = new Set(["raw_code", "prod_code", "sku_code"])
+
+// 길어져도 잘라내지 않고 행이 커지면서 전체 내용을 보여줄 컬럼 (설명/메모류)
+const LONG_TEXT_COLS = new Set(["description", "description_en", "memo", "note"])
 
 function CellContent({
   col,
@@ -151,7 +160,9 @@ function CellContent({
     return (
       <div className="flex flex-wrap gap-1">
         {value.map((v, i) => (
-          <span key={i} className="rounded-full bg-muted px-2 py-0.5 text-xs">{String(v)}</span>
+          <span key={i} className="rounded-full bg-muted px-2 py-0.5 text-xs">
+            {columnResolvers?.[col]?.[String(v)] ?? String(v)}
+          </span>
         ))}
       </div>
     )
@@ -165,7 +176,9 @@ function CellContent({
       return (
         <div className="flex flex-wrap gap-1">
           {arr.map((v, i) => (
-            <span key={i} className="rounded-full bg-muted px-2 py-0.5 text-xs">{v}</span>
+            <span key={i} className="rounded-full bg-muted px-2 py-0.5 text-xs">
+              {columnResolvers?.[col]?.[v] ?? v}
+            </span>
           ))}
         </div>
       )
@@ -174,8 +187,8 @@ function CellContent({
   if (resolved !== undefined)
     return <span title={text} className="block truncate">{resolved}</span>
   if (!NO_IMAGE_COLS.has(col) && CODE_RE.test(text)) return <CodeImageCell code={text.toUpperCase()} />
-  if (text.length > 20)
-    return <span title={text} className="whitespace-pre-wrap break-all">{text}</span>
+  if (LONG_TEXT_COLS.has(col))
+    return <span className="block whitespace-pre-wrap break-words">{text}</span>
   return <span title={text} className="block truncate">{text}</span>
 }
 
@@ -207,7 +220,7 @@ function EditableCell({
   pkColumn: string
   columnOptions?: Record<string, SelectOption[]>
   columnResolvers?: Record<string, Record<string, string>>
-  columnMultiOptions?: Record<string, string[]>
+  columnMultiOptions?: Record<string, MultiOption[]>
   onRowUpdate: (pkValue: string, col: string, newValue: unknown) => void
   onError: (e: Omit<ErrorEntry, "id">) => void
 }) {
@@ -215,6 +228,13 @@ function EditableCell({
   const [editStr, setEditStr] = useState("")
   const [saving, setSaving] = useState(false)
   const escapeRef = useRef(false)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  useEffect(() => {
+    if (!editing || !textareaRef.current) return
+    textareaRef.current.style.height = "auto"
+    textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`
+  }, [editing, editStr])
 
   const pkValue = String(row[pkColumn] ?? "")
   const canEdit = col !== pkColumn && col !== "photo"
@@ -276,22 +296,25 @@ function EditableCell({
     const selected = parseMultiValue(editStr)
     return (
       <div className="flex flex-col gap-1 rounded border border-ring bg-background p-2 shadow-md">
-        {multiOpts.map((opt) => (
-          <label key={opt} className="flex cursor-pointer select-none items-center gap-1.5 text-xs">
-            <input
-              type="checkbox"
-              checked={selected.includes(opt)}
-              onChange={(e) => {
-                const next = e.target.checked
-                  ? [...selected, opt]
-                  : selected.filter((v) => v !== opt)
-                setEditStr(JSON.stringify(next))
-              }}
-              className="h-3.5 w-3.5 accent-primary"
-            />
-            {opt}
-          </label>
-        ))}
+        {multiOpts.map((rawOpt) => {
+          const opt = toSelectOption(rawOpt)
+          return (
+            <label key={opt.value} className="flex cursor-pointer select-none items-center gap-1.5 text-xs">
+              <input
+                type="checkbox"
+                checked={selected.includes(opt.value)}
+                onChange={(e) => {
+                  const next = e.target.checked
+                    ? [...selected, opt.value]
+                    : selected.filter((v) => v !== opt.value)
+                  setEditStr(JSON.stringify(next))
+                }}
+                className="h-3.5 w-3.5 accent-primary"
+              />
+              {opt.label}
+            </label>
+          )
+        })}
         <button
           onMouseDown={(e) => {
             e.preventDefault()
@@ -362,15 +385,16 @@ function EditableCell({
     )
   }
 
-  // ── 일반 텍스트 편집 모드 ──
+  // ── 일반 텍스트 편집 모드 (텍스트 전문이 보이도록 줄바꿈 + 자동 높이 조절) ──
   if (editing) {
     return (
-      <input
+      <textarea
+        ref={textareaRef}
         value={editStr}
         onChange={(e) => setEditStr(e.target.value)}
         onBlur={handleSave}
         onKeyDown={(e) => {
-          if (e.key === "Enter") {
+          if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault()
             handleSave()
           }
@@ -380,7 +404,8 @@ function EditableCell({
             setEditing(false)
           }
         }}
-        className="w-full min-w-[80px] rounded border border-ring bg-background px-1 py-0.5 font-mono text-xs outline-none ring-1 ring-ring"
+        rows={1}
+        className="w-full min-w-[80px] resize-none whitespace-pre-wrap break-words rounded border border-ring bg-background px-1 py-0.5 font-mono text-xs outline-none ring-1 ring-ring"
         autoFocus
       />
     )
@@ -436,7 +461,7 @@ export function DataTable({
   pkColumn?: string | null
   columnOptions?: Record<string, SelectOption[]>
   columnResolvers?: Record<string, Record<string, string>>
-  columnMultiOptions?: Record<string, string[]>
+  columnMultiOptions?: Record<string, MultiOption[]>
   sortColumn?: string
   sortDir?: "asc" | "desc"
   searchQuery?: string
@@ -446,6 +471,11 @@ export function DataTable({
   const [rows, setRows] = useState(initialRows)
   const [errors, setErrors] = useState<ErrorEntry[]>([])
   const errorCounter = useRef(0)
+  const [viewCell, setViewCell] = useState<{ label: string; text: string } | null>(null)
+
+  const openFullView = useCallback((col: string, value: unknown) => {
+    setViewCell({ label: COLUMN_LABELS[col] ?? col, text: formatCell(value) })
+  }, [])
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -494,6 +524,30 @@ export function DataTable({
     setErrors((prev) => [{ ...e, id: ++errorCounter.current }, ...prev])
   }, [])
 
+  const [deletingPk, setDeletingPk] = useState<string | null>(null)
+
+  const handleDelete = useCallback(
+    async (pkValue: string) => {
+      if (!tableName || !pkColumn) return
+      if (!window.confirm("이 행을 삭제하시겠습니까? 되돌릴 수 없습니다.")) return
+      setDeletingPk(pkValue)
+      const result = await deleteRow(tableName, pkColumn, pkValue)
+      setDeletingPk(null)
+      if (result.error) {
+        handleError({
+          timestamp: new Date().toLocaleString("ko-KR"),
+          column: "(삭제)",
+          pkValue,
+          attempted: "",
+          message: result.error,
+        })
+      } else {
+        setRows((prev) => prev.filter((row) => String(row[pkColumn] ?? "") !== pkValue))
+      }
+    },
+    [tableName, pkColumn, handleError],
+  )
+
   const editable = !!tableName && !!pkColumn
   const activeSort = searchParams.get("sort") || sortColumn
   const activeDir = activeSort ? (searchParams.get("dir") === "desc" ? "desc" : sortDir ?? "asc") : undefined
@@ -526,8 +580,8 @@ export function DataTable({
         </p>
       )}
 
-      <div className="overflow-x-auto rounded-lg border border-border bg-card">
-        <Table>
+      <div className="overflow-hidden rounded-lg border border-border bg-card">
+        <Table containerClassName="max-h-[65vh] overflow-y-auto">
           <TableHeader>
             <TableRow>
               {columns.map((col) => {
@@ -536,7 +590,7 @@ export function DataTable({
                   <TableHead
                     key={col}
                     onClick={() => handleSort(col)}
-                    className="cursor-pointer select-none whitespace-nowrap text-xs hover:bg-accent/60"
+                    className="sticky top-0 z-10 cursor-pointer select-none whitespace-nowrap bg-card text-xs hover:bg-accent/60"
                   >
                     <span className="inline-flex items-center gap-1">
                       {COLUMN_LABELS[col] ?? col}
@@ -556,12 +610,15 @@ export function DataTable({
                   </TableHead>
                 )
               })}
+              {editable && (
+                <TableHead className="sticky top-0 z-10 w-10 bg-card text-xs" />
+              )}
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={columns.length} className="py-12 text-center text-sm text-muted-foreground">
+                <TableCell colSpan={columns.length + (editable ? 1 : 0)} className="py-12 text-center text-sm text-muted-foreground">
                   데이터가 없습니다.
                 </TableCell>
               </TableRow>
@@ -569,7 +626,12 @@ export function DataTable({
             {rows.map((row, i) => (
               <TableRow key={i}>
                 {columns.map((col) => (
-                  <TableCell key={col} className="max-w-[20ch] overflow-hidden font-mono text-xs align-top">
+                  <TableCell
+                    key={col}
+                    className="max-w-[20ch] overflow-hidden font-mono text-xs align-top"
+                    onDoubleClick={() => openFullView(col, row[col])}
+                  >
+
                     {editable ? (
                       <EditableCell
                         col={col}
@@ -588,6 +650,24 @@ export function DataTable({
                     )}
                   </TableCell>
                 ))}
+                {editable && (
+                  <TableCell className="align-top">
+                    {(() => {
+                      const pkValue = String(row[pkColumn] ?? "")
+                      const isDeleting = deletingPk === pkValue
+                      return (
+                        <button
+                          onClick={() => handleDelete(pkValue)}
+                          disabled={isDeleting}
+                          title="삭제"
+                          className="rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )
+                    })()}
+                  </TableCell>
+                )}
               </TableRow>
             ))}
           </TableBody>
@@ -623,6 +703,28 @@ export function DataTable({
                 <p className="mt-1 text-destructive">{err.message}</p>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {viewCell && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setViewCell(null)} />
+          <div className="relative z-10 flex max-h-[80vh] w-full max-w-lg flex-col rounded-xl border border-border bg-background shadow-xl">
+            <div className="flex items-center justify-between border-b border-border px-6 py-4">
+              <h2 className="font-mono text-sm font-semibold">{viewCell.label}</h2>
+              <button
+                onClick={() => setViewCell(null)}
+                className="text-xs text-muted-foreground underline hover:text-foreground"
+              >
+                닫기
+              </button>
+            </div>
+            <div className="overflow-y-auto px-6 py-4">
+              <p className="whitespace-pre-wrap break-words font-mono text-sm">
+                {viewCell.text || <span className="text-muted-foreground">null</span>}
+              </p>
+            </div>
           </div>
         </div>
       )}

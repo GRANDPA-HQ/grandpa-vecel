@@ -74,7 +74,12 @@ export type TableRows = {
 export type TableRowsOptions = {
   orderBy?: string
   orderDir?: "asc" | "desc"
-  search?: { columns: string[]; query: string }
+  search?: {
+    columns: string[]
+    query: string
+    // FK 컬럼을 사람이 읽을 수 있는 값(예: sku_code)으로 검색할 때, 미리 매칭해 둔 id 목록으로 필터링
+    idInColumns?: { column: string; ids: string[] }[]
+  }
 }
 
 /**
@@ -92,10 +97,15 @@ export async function getTableRows(
     url += `&order=${encodeURIComponent(options.orderBy)}.${options.orderDir === "desc" ? "desc" : "asc"}`
   }
 
-  if (options?.search?.query.trim() && options.search.columns.length > 0) {
+  if (options?.search?.query.trim()) {
     const escaped = options.search.query.trim().replace(/"/g, '\\"')
-    const or = options.search.columns.map((c) => `${c}.ilike."*${escaped}*"`).join(",")
-    url += `&or=${encodeURIComponent(`(${or})`)}`
+    const clauses = options.search.columns.map((c) => `${c}.ilike."*${escaped}*"`)
+    for (const idCol of options.search.idInColumns ?? []) {
+      if (idCol.ids.length > 0) clauses.push(`${idCol.column}.in.(${idCol.ids.join(",")})`)
+    }
+    if (clauses.length > 0) {
+      url += `&or=${encodeURIComponent(`(${clauses.join(",")})`)}`
+    }
   }
 
   const res = await fetch(url, {
@@ -154,6 +164,32 @@ export async function updateTableRow(
 }
 
 /**
+ * Delete a single row from a table, identified by the given primary key column/value.
+ */
+export async function deleteTableRow(
+  table: string,
+  pkColumn: string,
+  pkValue: string,
+): Promise<void> {
+  const filter = `${encodeURIComponent(pkColumn)}=eq.${encodeURIComponent(pkValue)}`
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${encodeURIComponent(table)}?${filter}`, {
+    method: "DELETE",
+    headers: {
+      ...authHeaders(),
+      Prefer: "return=minimal",
+    },
+  })
+
+  if (!res.ok) {
+    let body = ""
+    try {
+      body = await res.text()
+    } catch {}
+    throw new Error(`HTTP ${res.status}: ${body}`)
+  }
+}
+
+/**
  * Fetch id → category_code mapping from tb_category_mst.
  * Used to resolve FK columns (e.g. catgegory_id) to human-readable codes.
  */
@@ -168,27 +204,45 @@ export async function getCategoryIdMap(): Promise<Record<string, string>> {
 }
 
 /**
- * Compute the next sku_code for a given category, based on the highest existing
- * sequence number for that category prefix (e.g. SWD_016 → SWD_017).
+ * Compute the next code for a given category in `table.column`, based on the highest
+ * existing sequence number sharing that category prefix (e.g. VFR-029 → VFR-030).
  */
-export async function getNextSkuCode(categoryCode: string): Promise<string> {
+async function getNextSequentialCode(
+  table: string,
+  column: string,
+  categoryCode: string,
+  separator: "-" | "_",
+): Promise<string> {
   const prefix = categoryCode.trim().toUpperCase()
-  const fallback = `${prefix}_001`
+  const fallback = `${prefix}${separator}001`
   if (!prefix) return fallback
 
   const res = await fetch(
-    `${SUPABASE_URL}/rest/v1/tb_sku_mst?select=sku_code&sku_code=ilike.${encodeURIComponent(prefix)}_*&order=sku_code.desc&limit=1`,
+    `${SUPABASE_URL}/rest/v1/${table}?select=${column}&${column}=ilike.${encodeURIComponent(prefix)}${separator}*&order=${column}.desc&limit=1`,
     { headers: authHeaders(), cache: "no-store" },
   )
   if (!res.ok) return fallback
 
-  const rows = (await res.json()) as { sku_code: string }[]
-  const match = rows[0]?.sku_code.match(/^(.*?)_(\d+)$/)
+  const rows = (await res.json()) as Record<string, string>[]
+  const value = rows[0]?.[column]
+  const match = value?.match(new RegExp(`^(.*?)${separator}(\\d+)$`))
   if (!match) return fallback
 
   const [, matchedPrefix, seq] = match
   const next = (Number.parseInt(seq, 10) + 1).toString().padStart(seq.length, "0")
-  return `${matchedPrefix}_${next}`
+  return `${matchedPrefix}${separator}${next}`
+}
+
+export async function getNextSkuCode(categoryCode: string): Promise<string> {
+  return getNextSequentialCode("tb_sku_mst", "sku_code", categoryCode, "_")
+}
+
+export async function getNextRawCode(categoryCode: string): Promise<string> {
+  return getNextSequentialCode("tb_raw_mst", "raw_code", categoryCode, "_")
+}
+
+export async function getNextProdCode(categoryCode: string): Promise<string> {
+  return getNextSequentialCode("tb_prod_mst", "prod_code", categoryCode, "_")
 }
 
 /**
