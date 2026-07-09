@@ -2,7 +2,7 @@
 
 import { useState, useActionState } from "react"
 import { Button } from "@/components/ui/button"
-import { RecipeGuideComposer } from "@/components/recipe-guide-composer"
+import { RecipeGuideComposer, type SkuRecipeSummary } from "@/components/recipe-guide-composer"
 import { RecipeGuideEditModal } from "@/components/recipe-guide-edit-modal"
 import { deleteRecipeGuide } from "@/app/actions/recipe-guides"
 import { PenLine, ChevronDown, ChevronUp, Pencil, Trash2 } from "lucide-react"
@@ -16,7 +16,10 @@ type RecipeGuide = {
   author: { name: string } | null
 }
 
-function RecipeGuideCard({ item }: { item: RecipeGuide }) {
+// 분류 드롭다운 기본 옵션 (기존 가이드에서 사용 중인 분류가 여기에 합쳐짐)
+const DEFAULT_CATEGORIES = ["전처리", "조리", "위생"]
+
+function RecipeGuideCard({ item, categories }: { item: RecipeGuide; categories: string[] }) {
   const [expanded, setExpanded] = useState(false)
   const [editing, setEditing] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -132,7 +135,7 @@ function RecipeGuideCard({ item }: { item: RecipeGuide }) {
       </div>
 
       {editing && (
-        <RecipeGuideEditModal guide={item} onClose={() => setEditing(false)} />
+        <RecipeGuideEditModal guide={item} onClose={() => setEditing(false)} categories={categories} />
       )}
     </>
   )
@@ -141,11 +144,20 @@ function RecipeGuideCard({ item }: { item: RecipeGuide }) {
 export function RecipeGuideList({
   guides,
   authorName,
+  skuRecipes,
 }: {
   guides: RecipeGuide[]
   authorName: string
+  skuRecipes?: SkuRecipeSummary[]
 }) {
   const [open, setOpen] = useState(false)
+
+  const categories = Array.from(
+    new Set([
+      ...DEFAULT_CATEGORIES,
+      ...guides.map((g) => g.category).filter((c): c is string => !!c),
+    ]),
+  )
 
   return (
     <>
@@ -166,12 +178,19 @@ export function RecipeGuideList({
       ) : (
         <div className="flex flex-col gap-3">
           {guides.map((item) => (
-            <RecipeGuideCard key={item.id} item={item} />
+            <RecipeGuideCard key={item.id} item={item} categories={categories} />
           ))}
         </div>
       )}
 
-      {open && <RecipeGuideComposer authorName={authorName} onClose={() => setOpen(false)} />}
+      {open && (
+        <RecipeGuideComposer
+          authorName={authorName}
+          onClose={() => setOpen(false)}
+          skuRecipes={skuRecipes}
+          categories={categories}
+        />
+      )}
     </>
   )
 }

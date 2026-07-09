@@ -98,8 +98,19 @@ export async function getTableRows(
   }
 
   if (options?.search?.query.trim()) {
-    const escaped = options.search.query.trim().replace(/"/g, '\\"')
-    const clauses = options.search.columns.map((c) => `${c}.ilike."*${escaped}*"`)
+    const clauses: string[] = []
+    // 띄어쓰기 무시 검색: 질의에서 공백을 제거하고, 글자 사이에 \s* 를 끼워
+    // 저장값 쪽의 공백도 무시하고 매칭한다 (예: "요거트랜치" ↔ "요거트 랜치")
+    const compact = options.search.query.replace(/\s+/g, "")
+    if (compact) {
+      const pattern = compact
+        .split("")
+        .map((ch) => ch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+        .join("\\s*")
+      // PostgREST 따옴표 값 내부의 백슬래시/따옴표 이스케이프
+      const quoted = pattern.replace(/\\/g, "\\\\").replace(/"/g, '\\"')
+      clauses.push(...options.search.columns.map((c) => `${c}.imatch."${quoted}"`))
+    }
     for (const idCol of options.search.idInColumns ?? []) {
       if (idCol.ids.length > 0) clauses.push(`${idCol.column}.in.(${idCol.ids.join(",")})`)
     }
@@ -190,6 +201,34 @@ export async function deleteTableRow(
 }
 
 /**
+ * Delete multiple rows from a table in one request, identified by primary key values.
+ */
+export async function deleteTableRows(
+  table: string,
+  pkColumn: string,
+  pkValues: string[],
+): Promise<void> {
+  if (pkValues.length === 0) return
+  const quoted = pkValues.map((v) => `"${v.replace(/"/g, '\\"')}"`).join(",")
+  const filter = `${encodeURIComponent(pkColumn)}=in.${encodeURIComponent(`(${quoted})`)}`
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${encodeURIComponent(table)}?${filter}`, {
+    method: "DELETE",
+    headers: {
+      ...authHeaders(),
+      Prefer: "return=minimal",
+    },
+  })
+
+  if (!res.ok) {
+    let body = ""
+    try {
+      body = await res.text()
+    } catch {}
+    throw new Error(`HTTP ${res.status}: ${body}`)
+  }
+}
+
+/**
  * Fetch id → category_code mapping from tb_category_mst.
  * Used to resolve FK columns (e.g. catgegory_id) to human-readable codes.
  */
@@ -212,10 +251,12 @@ async function getNextSequentialCode(
   column: string,
   categoryCode: string,
   separator: "-" | "_",
+  codePrefix = "",
 ): Promise<string> {
-  const prefix = categoryCode.trim().toUpperCase()
+  const category = categoryCode.trim().toUpperCase()
+  const prefix = `${codePrefix}${category}`
   const fallback = `${prefix}${separator}001`
-  if (!prefix) return fallback
+  if (!category) return fallback
 
   const res = await fetch(
     `${SUPABASE_URL}/rest/v1/${table}?select=${column}&${column}=ilike.${encodeURIComponent(prefix)}${separator}*&order=${column}.desc&limit=1`,
@@ -237,12 +278,13 @@ export async function getNextSkuCode(categoryCode: string): Promise<string> {
   return getNextSequentialCode("tb_sku_mst", "sku_code", categoryCode, "_")
 }
 
+// 원자재/생산품 코드는 RAW-/PROD- 접두사 + 하이픈 구분 형식 (예: RAW-SDS-001, PROD-VFR-002)
 export async function getNextRawCode(categoryCode: string): Promise<string> {
-  return getNextSequentialCode("tb_raw_mst", "raw_code", categoryCode, "_")
+  return getNextSequentialCode("tb_raw_mst", "raw_code", categoryCode, "-", "RAW-")
 }
 
 export async function getNextProdCode(categoryCode: string): Promise<string> {
-  return getNextSequentialCode("tb_prod_mst", "prod_code", categoryCode, "_")
+  return getNextSequentialCode("tb_prod_mst", "prod_code", categoryCode, "-", "PROD-")
 }
 
 /**

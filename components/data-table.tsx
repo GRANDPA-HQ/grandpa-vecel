@@ -3,7 +3,7 @@
 import Image from "next/image"
 import { useState, useRef, useCallback, useEffect } from "react"
 import { useRouter, usePathname, useSearchParams } from "next/navigation"
-import { ArrowUp, ArrowDown, ArrowUpDown, Search, Trash2 } from "lucide-react"
+import { ArrowUp, ArrowDown, ArrowUpDown, ExternalLink, Search, Trash2 } from "lucide-react"
 import {
   Table,
   TableBody,
@@ -13,7 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
-import { updateRow, deleteRow } from "@/app/actions/table-edit"
+import { updateRow, deleteRow, deleteRows } from "@/app/actions/table-edit"
 import { COLUMN_LABELS } from "@/lib/column-labels"
 
 const IMAGE_EXTS = ["jpg", "jpeg", "png", "gif", "webp"]
@@ -142,6 +142,27 @@ const NO_IMAGE_COLS = new Set(["raw_code", "prod_code", "sku_code"])
 // 길어져도 잘라내지 않고 행이 커지면서 전체 내용을 보여줄 컬럼 (설명/메모류)
 const LONG_TEXT_COLS = new Set(["description", "description_en", "memo", "note"])
 
+// URL 값을 긴 원문 대신 도메인명 칩으로 간소화해 표시 (클릭 시 새 탭으로 열림)
+function UrlChip({ url }: { url: string }) {
+  let domain = "링크"
+  try {
+    domain = new URL(url).hostname.replace(/^www\./, "")
+  } catch {}
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={url}
+      onClick={(e) => e.stopPropagation()}
+      className="inline-flex max-w-full items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary hover:bg-primary/20"
+    >
+      <ExternalLink className="h-3 w-3 shrink-0" />
+      <span className="truncate">{domain}</span>
+    </a>
+  )
+}
+
 function CellContent({
   col,
   value,
@@ -186,6 +207,7 @@ function CellContent({
   const resolved = columnResolvers?.[col]?.[text]
   if (resolved !== undefined)
     return <span title={text} className="block truncate">{resolved}</span>
+  if (/^https?:\/\//i.test(text)) return <UrlChip url={text} />
   if (!NO_IMAGE_COLS.has(col) && CODE_RE.test(text)) return <CodeImageCell code={text.toUpperCase()} />
   if (LONG_TEXT_COLS.has(col))
     return <span className="block whitespace-pre-wrap break-words">{text}</span>
@@ -454,6 +476,7 @@ export function DataTable({
   searchQuery,
   searchEnabled,
   searchPlaceholder,
+  bulkDeleteEnabled,
 }: {
   columns: string[]
   rows: Record<string, unknown>[]
@@ -467,6 +490,7 @@ export function DataTable({
   searchQuery?: string
   searchEnabled?: boolean
   searchPlaceholder?: string
+  bulkDeleteEnabled?: boolean
 }) {
   const [rows, setRows] = useState(initialRows)
   const [errors, setErrors] = useState<ErrorEntry[]>([])
@@ -549,6 +573,51 @@ export function DataTable({
   )
 
   const editable = !!tableName && !!pkColumn
+  const bulkSelectable = editable && !!bulkDeleteEnabled
+
+  const [selectedPks, setSelectedPks] = useState<Set<string>>(new Set())
+  const [bulkDeleting, setBulkDeleting] = useState(false)
+
+  const toggleSelect = useCallback((pkValue: string) => {
+    setSelectedPks((prev) => {
+      const next = new Set(prev)
+      if (next.has(pkValue)) next.delete(pkValue)
+      else next.add(pkValue)
+      return next
+    })
+  }, [])
+
+  const allSelected = bulkSelectable && rows.length > 0 && rows.every((row) => selectedPks.has(String(row[pkColumn!] ?? "")))
+
+  const toggleSelectAll = useCallback(() => {
+    if (!pkColumn) return
+    setSelectedPks((prev) => {
+      if (rows.length > 0 && rows.every((row) => prev.has(String(row[pkColumn] ?? "")))) return new Set()
+      return new Set(rows.map((row) => String(row[pkColumn] ?? "")))
+    })
+  }, [rows, pkColumn])
+
+  const handleBulkDelete = useCallback(async () => {
+    if (!tableName || !pkColumn || selectedPks.size === 0) return
+    if (!window.confirm(`선택한 ${selectedPks.size}개 행을 삭제하시겠습니까? 되돌릴 수 없습니다.`)) return
+    setBulkDeleting(true)
+    const pkValues = Array.from(selectedPks)
+    const result = await deleteRows(tableName, pkColumn, pkValues)
+    setBulkDeleting(false)
+    if (result.error) {
+      handleError({
+        timestamp: new Date().toLocaleString("ko-KR"),
+        column: "(일괄 삭제)",
+        pkValue: pkValues.join(", "),
+        attempted: "",
+        message: result.error,
+      })
+    } else {
+      setRows((prev) => prev.filter((row) => !selectedPks.has(String(row[pkColumn] ?? ""))))
+      setSelectedPks(new Set())
+    }
+  }, [tableName, pkColumn, selectedPks, handleError])
+
   const activeSort = searchParams.get("sort") || sortColumn
   const activeDir = activeSort ? (searchParams.get("dir") === "desc" ? "desc" : sortDir ?? "asc") : undefined
 
@@ -575,15 +644,38 @@ export function DataTable({
       )}
 
       {editable && (
-        <p className="text-xs text-muted-foreground">
-          셀을 클릭하면 편집할 수 있습니다. Enter로 저장, Esc로 취소.
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-muted-foreground">
+            셀을 클릭하면 편집할 수 있습니다. Enter로 저장, Esc로 취소.
+          </p>
+          {bulkSelectable && selectedPks.size > 0 && (
+            <button
+              onClick={handleBulkDelete}
+              disabled={bulkDeleting}
+              className="inline-flex items-center gap-1.5 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-1.5 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              {bulkDeleting ? "삭제 중..." : `선택 삭제 (${selectedPks.size})`}
+            </button>
+          )}
+        </div>
       )}
 
       <div className="overflow-hidden rounded-lg border border-border bg-card">
         <Table containerClassName="max-h-[65vh] overflow-y-auto">
           <TableHeader>
             <TableRow>
+              {bulkSelectable && (
+                <TableHead className="sticky top-0 z-10 w-8 bg-card">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    onChange={toggleSelectAll}
+                    title="전체 선택"
+                    className="h-3.5 w-3.5 cursor-pointer accent-primary"
+                  />
+                </TableHead>
+              )}
               {columns.map((col) => {
                 const isSorted = activeSort === col
                 return (
@@ -618,13 +710,23 @@ export function DataTable({
           <TableBody>
             {rows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={columns.length + (editable ? 1 : 0)} className="py-12 text-center text-sm text-muted-foreground">
+                <TableCell colSpan={columns.length + (editable ? 1 : 0) + (bulkSelectable ? 1 : 0)} className="py-12 text-center text-sm text-muted-foreground">
                   데이터가 없습니다.
                 </TableCell>
               </TableRow>
             )}
             {rows.map((row, i) => (
               <TableRow key={i}>
+                {bulkSelectable && (
+                  <TableCell className="align-top">
+                    <input
+                      type="checkbox"
+                      checked={selectedPks.has(String(row[pkColumn!] ?? ""))}
+                      onChange={() => toggleSelect(String(row[pkColumn!] ?? ""))}
+                      className="h-3.5 w-3.5 cursor-pointer accent-primary"
+                    />
+                  </TableCell>
+                )}
                 {columns.map((col) => (
                   <TableCell
                     key={col}

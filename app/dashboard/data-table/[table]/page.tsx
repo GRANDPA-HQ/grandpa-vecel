@@ -10,6 +10,9 @@ const PAGE_SIZE = 50
 const HIDDEN_COLS = new Set(["id", "created_at", "updated_at"])
 const INSERTABLE_TABLES = new Set(["tb_prod_mst", "tb_raw_mst", "tb_sku_mst", "tb_sku_recipe"])
 
+// 체크박스 선택 일괄 삭제를 지원하는 테이블
+const BULK_DELETE_TABLES = new Set(["tb_raw_mst", "tb_prod_mst", "tb_sku_mst"])
+
 // 테이블별 추가 숨김 컬럼
 const TABLE_HIDDEN_COLS: Record<string, Set<string>> = {
   tb_prod_mst:   new Set(["active", "owner", "owner_part", "part", "yield_rate"]),
@@ -65,7 +68,7 @@ const TABLE_SEARCH_PLACEHOLDER: Record<string, string> = {
 }
 
 const CATEGORY_OPTIONS: SelectOption[] = [
-  "VFR","COND","BWL","BEV","MTS","HRS","FLR","SWD","ETC","SDS","NUT","DAI","YGF","SUP","GC",
+  "VFR","COND","BWL","BEV","MTS","HRS","FLR","SDW","ETC","SDS","NUT","DAI","YGF","SOUP","GC",
 ].map((c) => ({ value: c, label: c }))
 
 const STORAGE_OPTIONS: SelectOption[] = ["냉장", "냉동", "상온"].map((v) => ({ value: v, label: v }))
@@ -171,10 +174,12 @@ export default async function TablePage({
     columnResolvers["prod_id"] = Object.fromEntries(prodOpts.map((o) => [o.value, o.label]))
 
     if (searchQuery) {
-      const q = searchQuery.toLowerCase()
+      // 띄어쓰기 무시 비교 (예: "요거트랜치" ↔ "요거트 랜치")
+      const norm = (s: string) => s.replace(/\s+/g, "").toLowerCase()
+      const q = norm(searchQuery)
       recipeIdFilter = [
-        { column: "sku_id",  ids: skuOpts.filter((o) => o.label.toLowerCase().includes(q)).map((o) => o.value) },
-        { column: "prod_id", ids: prodOpts.filter((o) => o.label.toLowerCase().includes(q)).map((o) => o.value) },
+        { column: "sku_id",  ids: skuOpts.filter((o) => norm(o.label).includes(q)).map((o) => o.value) },
+        { column: "prod_id", ids: prodOpts.filter((o) => norm(o.label).includes(q)).map((o) => o.value) },
       ]
     }
   }
@@ -290,6 +295,7 @@ export default async function TablePage({
             searchQuery={searchQuery}
             searchEnabled={searchEnabled}
             searchPlaceholder={searchEnabled ? TABLE_SEARCH_PLACEHOLDER[tableName] ?? `${searchColumns.join(", ")} 검색` : undefined}
+            bulkDeleteEnabled={BULK_DELETE_TABLES.has(tableName)}
           />
 
           {totalPages !== null && totalPages > 1 && (

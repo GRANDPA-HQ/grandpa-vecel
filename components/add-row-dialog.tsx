@@ -41,7 +41,11 @@ function parseMultiValue(val: string | undefined): string[] {
   return []
 }
 
+// 가격 컬럼은 휠·방향키로 값이 바뀌지 않도록 number 대신 일반 텍스트 입력 사용
+const PRICE_COLS = new Set(["sell_price", "purchase_price", "price"])
+
 function getInputType(col: ColumnDef): "number" | "text" {
+  if (PRICE_COLS.has(col.name)) return "text"
   if (col.type === "integer" || col.type === "number") return "number"
   return "text"
 }
@@ -254,6 +258,7 @@ export function AddRowDialog({
                           <Input
                             id={`field-${col.name}`}
                             type={getInputType(col)}
+                            inputMode={PRICE_COLS.has(col.name) ? "decimal" : undefined}
                             value={values[col.name] ?? ""}
                             onChange={(e) =>
                               setValues((v) => ({ ...v, [col.name]: e.target.value }))
