@@ -6,7 +6,7 @@ export default async function ProductionWritePage() {
 
   const [skuRes, prodRes, recipeRes] = await Promise.all([
     admin.from("tb_sku_mst").select("id,sku_code,sku_name").order("sku_code"),
-    admin.from("tb_prod_mst").select("id,prod_code,prod_name").order("prod_code"),
+    admin.from("tb_prod_mst").select("id,prod_code,prod_name,status").order("prod_code"),
     admin.from("tb_sku_recipe").select("sku_id,prod_id,amount,unit,memo"),
   ])
 
@@ -15,10 +15,23 @@ export default async function ProductionWritePage() {
     label: [r.sku_code, r.sku_name].filter(Boolean).join(" · "),
   }))
 
-  const prodOptions = (prodRes.data ?? []).map((r) => ({
-    value: r.id as string,
-    label: [r.prod_code, r.prod_name].filter(Boolean).join(" · "),
-  }))
+  const allProds = prodRes.data ?? []
+
+  // SKU 레시피에는 PREP / COOK 상태의 생산품만 사용 가능
+  const prodOptions = allProds
+    .filter((r) => r.status === "PREP" || r.status === "COOK")
+    .map((r) => ({
+      value: r.id as string,
+      label: [r.prod_code, r.prod_name].filter(Boolean).join(" · "),
+    }))
+
+  // 기존 레시피가 참조 중인 필터 밖 생산품(SEMI 등)의 라벨 표시용 전체 맵
+  const prodLabelById = Object.fromEntries(
+    allProds.map((r) => [
+      r.id as string,
+      [r.prod_code, r.prod_name].filter(Boolean).join(" · ") + (r.status ? ` [${r.status}]` : ""),
+    ]),
+  ) as Record<string, string>
 
   const initialRecipes = (recipeRes.data ?? []) as InitialRecipe[]
 
@@ -34,6 +47,7 @@ export default async function ProductionWritePage() {
       <SkuRecipeForm
         skuOptions={skuOptions}
         prodOptions={prodOptions}
+        prodLabelById={prodLabelById}
         initialRecipes={initialRecipes}
       />
     </div>

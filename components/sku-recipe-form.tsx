@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useState, useTransition, useEffect } from "react"
 import { Plus, Trash2, Save, X, Search, GripVertical } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -32,6 +32,35 @@ type SkuTab = {
   rows: RecipeRow[]
 }
 
+// 작성 중인 내용을 브라우저(localStorage)에 자동 임시저장하는 키
+const DRAFT_KEY = "sku-recipe-draft-v1"
+
+type Draft = { tabs: SkuTab[]; activeId: string }
+
+function hasDraftContent(tabs: SkuTab[]): boolean {
+  return tabs.some(
+    (t) => t.skuId || t.rows.some((r) => r.prodId || r.amount !== "" || r.memo !== ""),
+  )
+}
+
+function loadDraft(): Draft | null {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY)
+    if (!raw) return null
+    const draft = JSON.parse(raw) as Draft
+    if (
+      !Array.isArray(draft.tabs) ||
+      draft.tabs.length === 0 ||
+      !draft.tabs.every((t) => typeof t.localId === "string" && Array.isArray(t.rows))
+    )
+      return null
+    if (!hasDraftContent(draft.tabs)) return null
+    return draft
+  } catch {
+    return null
+  }
+}
+
 function createRow(): RecipeRow {
   return { localId: crypto.randomUUID(), prodId: "", amount: "", unit: "g", memo: "" }
 }
@@ -53,10 +82,13 @@ function toRows(recipes: InitialRecipe[]): RecipeRow[] {
 export function SkuRecipeForm({
   skuOptions,
   prodOptions,
+  prodLabelById,
   initialRecipes,
 }: {
   skuOptions: SelectOption[]
   prodOptions: SelectOption[]
+  // 드롭다운 필터(PREP/COOK) 밖의 생산품을 기존 레시피가 참조할 때 라벨 표시용
+  prodLabelById?: Record<string, string>
   initialRecipes: InitialRecipe[]
 }) {
   const [isPending, startTransition] = useTransition()
@@ -65,11 +97,34 @@ export function SkuRecipeForm({
   const [msg, setMsg] = useState<{ type: "success" | "error"; text: string } | null>(null)
   const [tabQuery, setTabQuery] = useState("")
   const [dragId, setDragId] = useState<string | null>(null)
+  const [draftReady, setDraftReady] = useState(false)
 
   function flash(type: "success" | "error", text: string) {
     setMsg({ type, text })
     setTimeout(() => setMsg(null), 3500)
   }
+
+  // 마운트 시 임시저장된 초안이 있으면 복원 (SSR 하이드레이션 이후에 실행)
+  useEffect(() => {
+    const draft = loadDraft()
+    if (draft) {
+      setTabs(draft.tabs)
+      setActiveId(
+        draft.tabs.some((t) => t.localId === draft.activeId) ? draft.activeId : draft.tabs[0].localId,
+      )
+      flash("success", "임시저장된 작성 내용을 불러왔습니다.")
+    }
+    setDraftReady(true)
+  }, [])
+
+  // 작성 내용이 바뀔 때마다 자동 임시저장 (내용이 비면 초안 삭제)
+  useEffect(() => {
+    if (!draftReady) return
+    try {
+      if (hasDraftContent(tabs)) localStorage.setItem(DRAFT_KEY, JSON.stringify({ tabs, activeId }))
+      else localStorage.removeItem(DRAFT_KEY)
+    } catch {}
+  }, [tabs, activeId, draftReady])
 
   const active = tabs.find((t) => t.localId === activeId)
   const usedSkuIds = new Set(tabs.map((t) => t.skuId).filter(Boolean))
@@ -171,14 +226,23 @@ export function SkuRecipeForm({
       )
       const firstError = results.find((r) => r.error)?.error
       if (firstError) flash("error", firstError)
-      else flash("success", `${toSave.length}개 SKU 레시피가 저장됐습니다.`)
+      else {
+        // 정식 저장이 완료됐으므로 임시저장 초안은 삭제
+        try {
+          localStorage.removeItem(DRAFT_KEY)
+        } catch {}
+        flash("success", `${toSave.length}개 SKU 레시피가 저장됐습니다.`)
+      }
     })
   }
 
   const dragEnabled = !tabQuery.trim()
-  const visibleTabs = tabQuery.trim()
+  // 띄어쓰기 무시 검색 (예: "요거트랜치"로 "요거트 랜치" 탭 검색 가능)
+  const normalizeQuery = (s: string) => s.replace(/\s+/g, "").toLowerCase()
+  const normalizedTabQuery = normalizeQuery(tabQuery)
+  const visibleTabs = normalizedTabQuery
     ? tabs.filter(
-        (t) => t.localId === activeId || tabLabel(t).toLowerCase().includes(tabQuery.trim().toLowerCase()),
+        (t) => t.localId === activeId || normalizeQuery(tabLabel(t)).includes(normalizedTabQuery),
       )
     : tabs
 
@@ -316,7 +380,20 @@ export function SkuRecipeForm({
                         onChange={(v) => updateRow(row.localId, "prodId", v)}
                         placeholder="— 선택 —"
                         searchPlaceholder="생산품 검색..."
-                        options={prodOptions.map((opt) => ({ value: opt.value, label: opt.label }))}
+                        options={
+                          // 기존 레시피가 PREP/COOK 외 생산품을 참조하면 해당 행에서만
+                          // 라벨을 보여주되 새로 선택할 수는 없게 비활성 옵션으로 포함
+                          row.prodId && !prodOptions.some((o) => o.value === row.prodId)
+                            ? [
+                                {
+                                  value: row.prodId,
+                                  label: prodLabelById?.[row.prodId] ?? row.prodId,
+                                  disabled: true,
+                                },
+                                ...prodOptions,
+                              ]
+                            : prodOptions.map((opt) => ({ value: opt.value, label: opt.label }))
+                        }
                       />
                     </td>
 
@@ -389,7 +466,7 @@ export function SkuRecipeForm({
             <span className="font-semibold text-foreground">{tabs.filter((t) => t.skuId).length}</span>
             개 SKU 편집 중 ·{" "}
             <span className="font-semibold text-foreground">{active?.rows.length ?? 0}</span>
-            개 생산품
+            개 생산품 · 작성 내용은 이 기기에 자동 임시저장됩니다
           </p>
           {msg && (
             <span

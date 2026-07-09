@@ -17,10 +17,17 @@ type RecipeGuide = {
 export function RecipeGuideEditModal({
   guide,
   onClose,
+  categories = [],
 }: {
   guide: RecipeGuide
   onClose: () => void
+  categories?: string[]
 }) {
+  // 기존 분류가 옵션 목록에 없어도 선택 상태가 유지되도록 포함
+  const categoryOptions =
+    guide.category && !categories.includes(guide.category)
+      ? [guide.category, ...categories]
+      : categories
   const [state, formAction, pending] = useActionState(updateRecipeGuide, undefined)
 
   useEffect(() => {
@@ -50,18 +57,24 @@ export function RecipeGuideEditModal({
 
           {/* 메타 필드 */}
           <div className="shrink-0 border-b border-border">
-            {/* 분류 */}
+            {/* 분류 (자유 입력이 아닌 선택) */}
             <div className="flex items-center gap-3 border-b border-border/50 px-5 py-2.5">
               <label htmlFor="edit-category" className="w-16 shrink-0 text-xs text-muted-foreground">
                 분류
               </label>
-              <Input
+              <select
                 id="edit-category"
                 name="category"
                 defaultValue={guide.category ?? ""}
-                placeholder="예) 전처리, 조리, 위생 (선택)"
-                className="h-auto border-none bg-transparent p-0 text-sm shadow-none focus-visible:ring-0"
-              />
+                className="cursor-pointer bg-transparent text-sm focus:outline-none"
+              >
+                <option value="">— 분류 선택 (선택사항) —</option>
+                {categoryOptions.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
             </div>
 
             {/* 제목 */}

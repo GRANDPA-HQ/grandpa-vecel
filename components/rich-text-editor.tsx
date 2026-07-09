@@ -8,7 +8,7 @@ import TextAlignExtension from "@tiptap/extension-text-align"
 import { TextStyle, FontFamily, FontSize, Color } from "@tiptap/extension-text-style"
 import { Highlight as HighlightExtension } from "@tiptap/extension-highlight"
 import { Placeholder as PlaceholderExtension } from "@tiptap/extension-placeholder"
-import { useRef, useCallback } from "react"
+import { useRef, useCallback, useEffect } from "react"
 import {
   Bold,
   Italic,
@@ -75,14 +75,21 @@ function Sep() {
   return <div className="mx-0.5 h-5 w-px shrink-0 bg-border" />
 }
 
+// 외부(부모 컴포넌트)에서 에디터 본문에 콘텐츠를 삽입할 수 있게 노출하는 API
+export type RichTextEditorApi = {
+  insertHtml: (html: string) => void
+}
+
 export function RichTextEditor({
   name,
   placeholder = "내용을 입력하세요...",
   defaultContent = "",
+  apiRef,
 }: {
   name: string
   placeholder?: string
   defaultContent?: string
+  apiRef?: React.MutableRefObject<RichTextEditorApi | null>
 }) {
   const imageInputRef = useRef<HTMLInputElement>(null)
   const hiddenRef = useRef<HTMLInputElement>(null)
@@ -108,6 +115,20 @@ export function RichTextEditor({
       attributes: { class: "outline-none" },
     },
   })
+
+  useEffect(() => {
+    if (!apiRef) return
+    apiRef.current = {
+      insertHtml: (html: string) => {
+        if (!editor) return
+        editor.chain().focus("end").insertContent(html).run()
+        if (hiddenRef.current) hiddenRef.current.value = editor.getHTML()
+      },
+    }
+    return () => {
+      apiRef.current = null
+    }
+  }, [editor, apiRef])
 
   const onImageChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {

@@ -31,8 +31,11 @@ export function SearchableSelect({
   const inputRef = useRef<HTMLInputElement>(null)
 
   const selected = options.find((o) => o.value === value)
-  const filtered = query.trim()
-    ? options.filter((o) => o.label.toLowerCase().includes(query.trim().toLowerCase()))
+  // 띄어쓰기 무시 검색 (예: "요거트랜치"로 "요거트 랜치" 검색 가능)
+  const normalize = (s: string) => s.replace(/\s+/g, "").toLowerCase()
+  const normalizedQuery = normalize(query)
+  const filtered = normalizedQuery
+    ? options.filter((o) => normalize(o.label).includes(normalizedQuery))
     : options
 
   useEffect(() => {

@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { RecipeGuideList } from "@/components/recipe-guide-list"
+import type { SkuRecipeSummary } from "@/components/recipe-guide-composer"
 
 type RecipeGuide = {
   id: string
@@ -42,6 +43,45 @@ export default async function RecipeGuidePage() {
     error = e instanceof Error ? e.message : "레시피 가이드 목록을 불러오지 못했습니다."
   }
 
+  // 판매 레시피(SKU별 생산품 구성) — 작성 모달 드롭다운에서 본문 삽입용
+  let skuRecipes: SkuRecipeSummary[] = []
+  try {
+    const [skuRes, prodRes, recipeRes] = await Promise.all([
+      admin.from("tb_sku_mst").select("id,sku_code,sku_name").order("sku_code"),
+      admin.from("tb_prod_mst").select("id,prod_code,prod_name"),
+      admin.from("tb_sku_recipe").select("sku_id,prod_id,amount,unit,memo"),
+    ])
+
+    const prodLabels = new Map(
+      (prodRes.data ?? []).map((p) => [
+        p.id as string,
+        [p.prod_code, p.prod_name].filter(Boolean).join(" · "),
+      ]),
+    )
+
+    const rowsBySku = new Map<string, SkuRecipeSummary["rows"]>()
+    for (const r of recipeRes.data ?? []) {
+      const rows = rowsBySku.get(r.sku_id as string) ?? []
+      rows.push({
+        prodLabel: prodLabels.get(r.prod_id as string) ?? "(알 수 없는 생산품)",
+        amount: Number(r.amount),
+        unit: String(r.unit ?? ""),
+        memo: (r.memo as string | null) ?? null,
+      })
+      rowsBySku.set(r.sku_id as string, rows)
+    }
+
+    skuRecipes = (skuRes.data ?? [])
+      .filter((s) => rowsBySku.has(s.id as string))
+      .map((s) => ({
+        skuId: s.id as string,
+        label: [s.sku_code, s.sku_name].filter(Boolean).join(" · "),
+        rows: rowsBySku.get(s.id as string)!,
+      }))
+  } catch {
+    // 판매 레시피 조회 실패 시 드롭다운만 숨김 (가이드 목록은 정상 표시)
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -54,7 +94,7 @@ export default async function RecipeGuidePage() {
           {error}
         </div>
       ) : (
-        <RecipeGuideList guides={guides} authorName={authorName} />
+        <RecipeGuideList guides={guides} authorName={authorName} skuRecipes={skuRecipes} />
       )}
     </div>
   )
