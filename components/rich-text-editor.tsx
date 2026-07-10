@@ -3,6 +3,7 @@
 import { useEditor, EditorContent } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
 import ImageExtension from "@tiptap/extension-image"
+import YoutubeExtension from "@tiptap/extension-youtube"
 import UnderlineExtension from "@tiptap/extension-underline"
 import TextAlignExtension from "@tiptap/extension-text-align"
 import { TextStyle, FontFamily, FontSize, Color } from "@tiptap/extension-text-style"
@@ -22,6 +23,7 @@ import {
   Undo2,
   Redo2,
   ImageIcon,
+  MonitorPlay,
   Highlighter,
   Type,
 } from "lucide-react"
@@ -106,6 +108,7 @@ export function RichTextEditor({
       FontSize,
       HighlightExtension.configure({ multicolor: true }),
       ImageExtension.configure({ inline: false, allowBase64: true }),
+      YoutubeExtension.configure({ nocookie: true, width: 480, height: 270 }),
       PlaceholderExtension.configure({ placeholder }),
     ],
     onUpdate({ editor }) {
@@ -129,6 +132,14 @@ export function RichTextEditor({
       apiRef.current = null
     }
   }, [editor, apiRef])
+
+  const onYoutubeClick = useCallback(() => {
+    if (!editor) return
+    const url = window.prompt("유튜브 동영상 URL을 입력하세요\n(예: https://www.youtube.com/watch?v=... 또는 https://youtu.be/...)")
+    if (!url?.trim()) return
+    const ok = editor.chain().focus().setYoutubeVideo({ src: url.trim() }).run()
+    if (!ok) window.alert("올바른 유튜브 URL이 아닙니다.")
+  }, [editor])
 
   const onImageChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -364,6 +375,11 @@ export function RichTextEditor({
         {/* 이미지 삽입 */}
         <ToolbarButton onClick={() => imageInputRef.current?.click()} title="이미지 삽입">
           <ImageIcon className="h-3.5 w-3.5" />
+        </ToolbarButton>
+
+        {/* 유튜브 동영상 임베드 */}
+        <ToolbarButton onClick={onYoutubeClick} title="유튜브 동영상 삽입">
+          <MonitorPlay className="h-3.5 w-3.5" />
         </ToolbarButton>
       </div>
 
