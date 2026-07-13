@@ -3,7 +3,7 @@
 import Image from "next/image"
 import { useState, useRef, useCallback, useEffect } from "react"
 import { useRouter, usePathname, useSearchParams } from "next/navigation"
-import { ArrowUp, ArrowDown, ArrowUpDown, ExternalLink, Search, Trash2 } from "lucide-react"
+import { ArrowUp, ArrowDown, ArrowUpDown, ExternalLink, FileSpreadsheet, Search, Trash2 } from "lucide-react"
 import {
   Table,
   TableBody,
@@ -14,7 +14,9 @@ import {
 } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { updateRow, deleteRow, deleteRows } from "@/app/actions/table-edit"
+import { loadMoreRows } from "@/app/actions/table-rows"
 import { COLUMN_LABELS } from "@/lib/column-labels"
+import { isPriceColumn, type RowCursor } from "@/lib/table-config"
 
 const IMAGE_EXTS = ["jpg", "jpeg", "png", "gif", "webp"]
 
@@ -175,6 +177,22 @@ function CellContent({
   columnResolvers?: Record<string, Record<string, string>>
 }) {
   if (col === "photo") return <PhotoCell row={row} />
+  // 가격 컬럼: 천 단위 쉼표 표시 (예: 10,000)
+  if (isPriceColumn(col)) {
+    const n =
+      typeof value === "number"
+        ? value
+        : typeof value === "string" && value.trim() !== "" && !Number.isNaN(Number(value))
+          ? Number(value)
+          : null
+    if (n !== null) {
+      return (
+        <span title={String(value)} className="block truncate tabular-nums">
+          {n.toLocaleString("ko-KR")}
+        </span>
+      )
+    }
+  }
   // 배열 값 처리 (Postgres array / JSONB array)
   if (Array.isArray(value)) {
     if (value.length === 0) return <span className="text-muted-foreground">-</span>
@@ -466,6 +484,8 @@ function EditableCell({
 export function DataTable({
   columns,
   rows: initialRows,
+  total,
+  nextCursor: initialNextCursor,
   tableName,
   pkColumn,
   columnOptions,
@@ -480,6 +500,8 @@ export function DataTable({
 }: {
   columns: string[]
   rows: Record<string, unknown>[]
+  total?: number | null
+  nextCursor?: RowCursor | null
   tableName?: string
   pkColumn?: string | null
   columnOptions?: Record<string, SelectOption[]>
@@ -514,7 +536,6 @@ export function DataTable({
       const params = new URLSearchParams(searchParams.toString())
       params.set("sort", col)
       params.set("dir", nextDir)
-      params.delete("page")
       router.push(`${pathname}?${params.toString()}`)
     },
     [pathname, router, searchParams, sortColumn, sortDir],
@@ -526,7 +547,6 @@ export function DataTable({
       const params = new URLSearchParams(searchParams.toString())
       if (searchInput.trim()) params.set("q", searchInput.trim())
       else params.delete("q")
-      params.delete("page")
       router.push(`${pathname}?${params.toString()}`)
     },
     [pathname, router, searchParams, searchInput],
@@ -547,6 +567,55 @@ export function DataTable({
   const handleError = useCallback((e: Omit<ErrorEntry, "id">) => {
     setErrors((prev) => [{ ...e, id: ++errorCounter.current }, ...prev])
   }, [])
+
+  // ── 커서 페이지네이션: 스크롤 하단 도달 시(또는 버튼 클릭 시) 다음 페이지를 이어붙인다 ──
+  const [cursor, setCursor] = useState<RowCursor | null>(initialNextCursor ?? null)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const loadingRef = useRef(false)
+  const sentinelRef = useRef<HTMLDivElement>(null)
+
+  const activeSort = searchParams.get("sort") || sortColumn
+  const activeDir: "asc" | "desc" | undefined = activeSort
+    ? searchParams.get("dir") === "desc"
+      ? "desc"
+      : sortDir ?? "asc"
+    : undefined
+
+  const handleLoadMore = useCallback(async () => {
+    if (!tableName || !pkColumn || !cursor || loadingRef.current) return
+    loadingRef.current = true
+    setLoadingMore(true)
+    const result = await loadMoreRows(tableName, pkColumn, cursor, activeSort, activeDir, searchQuery)
+    setLoadingMore(false)
+    loadingRef.current = false
+    if (result.error) {
+      // 에러 시 커서를 비워 관찰자가 무한 재시도하지 않도록 한다
+      setCursor(null)
+      handleError({
+        timestamp: new Date().toLocaleString("ko-KR"),
+        column: "(더 불러오기)",
+        pkValue: cursor.pkValue,
+        attempted: "",
+        message: result.error,
+      })
+    } else {
+      setRows((prev) => [...prev, ...result.rows])
+      setCursor(result.nextCursor)
+    }
+  }, [tableName, pkColumn, cursor, activeSort, activeDir, searchQuery, handleError])
+
+  useEffect(() => {
+    const el = sentinelRef.current
+    if (!el || !cursor) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) handleLoadMore()
+      },
+      { rootMargin: "120px" },
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [cursor, handleLoadMore])
 
   const [deletingPk, setDeletingPk] = useState<string | null>(null)
 
@@ -618,29 +687,53 @@ export function DataTable({
     }
   }, [tableName, pkColumn, selectedPks, handleError])
 
-  const activeSort = searchParams.get("sort") || sortColumn
-  const activeDir = activeSort ? (searchParams.get("dir") === "desc" ? "desc" : sortDir ?? "asc") : undefined
+  // 엑셀 추출: 현재 검색어/정렬 조건 그대로 전체 매칭 행을 다운로드
+  const exportHref = (() => {
+    if (!tableName) return null
+    const params = new URLSearchParams()
+    if (activeSort) params.set("sort", activeSort)
+    if (activeDir) params.set("dir", activeDir)
+    if (searchQuery) params.set("q", searchQuery)
+    const qs = params.toString()
+    return `/api/export/${encodeURIComponent(tableName)}${qs ? `?${qs}` : ""}`
+  })()
 
   return (
     <div className="flex flex-col gap-3">
-      {searchEnabled && (
-        <form onSubmit={handleSearchSubmit} className="flex max-w-sm items-center gap-2">
-          <div className="relative flex-1">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              placeholder={searchPlaceholder ?? "검색"}
-              className="h-8 pl-8 text-sm"
-            />
-          </div>
-          <button
-            type="submit"
-            className="rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium hover:bg-accent"
-          >
-            검색
-          </button>
-        </form>
+      {(searchEnabled || exportHref) && (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          {searchEnabled ? (
+            <form onSubmit={handleSearchSubmit} className="flex max-w-sm flex-1 items-center gap-2">
+              <div className="relative flex-1">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  placeholder={searchPlaceholder ?? "검색"}
+                  className="h-8 pl-8 text-sm"
+                />
+              </div>
+              <button
+                type="submit"
+                className="rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium hover:bg-accent"
+              >
+                검색
+              </button>
+            </form>
+          ) : (
+            <span />
+          )}
+          {exportHref && (
+            <a
+              href={exportHref}
+              title={searchQuery ? "현재 검색 결과 전체를 엑셀로 저장" : "전체 데이터를 엑셀로 저장"}
+              className="inline-flex items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-100"
+            >
+              <FileSpreadsheet className="h-3.5 w-3.5" />
+              엑셀 다운로드{searchQuery ? " (검색 결과)" : ""}
+            </a>
+          )}
+        </div>
       )}
 
       {editable && (
@@ -772,9 +865,42 @@ export function DataTable({
                 )}
               </TableRow>
             ))}
+            {/* 커서 페이지네이션 센티널: 스크롤이 하단에 닿으면 다음 페이지 자동 로드 */}
+            {cursor && (
+              <tr>
+                <td
+                  colSpan={columns.length + (editable ? 1 : 0) + (bulkSelectable ? 1 : 0)}
+                  className="p-0"
+                >
+                  <div ref={sentinelRef} className="flex h-10 items-center justify-center text-xs text-muted-foreground">
+                    {loadingMore ? "불러오는 중..." : ""}
+                  </div>
+                </td>
+              </tr>
+            )}
           </TableBody>
         </Table>
       </div>
+
+      {(cursor !== null || total !== undefined) && rows.length > 0 && (
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <span>
+            {rows.length.toLocaleString()}개 표시
+            {total !== undefined && total !== null ? ` / 전체 ${total.toLocaleString()}개` : ""}
+          </span>
+          {cursor ? (
+            <button
+              onClick={handleLoadMore}
+              disabled={loadingMore}
+              className="rounded-md border border-input bg-background px-3 py-1.5 font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {loadingMore ? "불러오는 중..." : "더 불러오기"}
+            </button>
+          ) : (
+            total !== undefined && total !== null && rows.length >= total && <span>모두 불러왔습니다</span>
+          )}
+        </div>
+      )}
 
       {errors.length > 0 && (
         <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4">

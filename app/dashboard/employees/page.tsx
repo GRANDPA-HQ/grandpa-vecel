@@ -55,7 +55,7 @@ export default async function EmployeesPage() {
           {error}
         </div>
       ) : (
-        <EmployeeTable users={users} positions={positions} />
+        <EmployeeTable users={users} positions={positions} currentUserId={user.id} />
       )}
     </div>
   )

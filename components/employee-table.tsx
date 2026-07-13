@@ -1,7 +1,9 @@
 "use client"
 
 import { useState, useTransition } from "react"
+import { Trash2 } from "lucide-react"
 import { updateUserStatus, updateUserPosition, updateUserField } from "@/app/actions/users"
+import { deleteEmployee } from "@/app/actions/invitations"
 import { cn } from "@/lib/utils"
 
 const STATUS_OPTIONS = ["재직", "휴직", "퇴사"] as const
@@ -20,9 +22,11 @@ function toPositions(rows: Record<string, unknown>[]): Position[] {
 export function EmployeeTable({
   users,
   positions: positionRows,
+  currentUserId,
 }: {
   users: Record<string, unknown>[]
   positions: Record<string, unknown>[]
+  currentUserId?: string
 }) {
   const positions = toPositions(positionRows)
 
@@ -45,6 +49,7 @@ export function EmployeeTable({
                 {col}
               </th>
             ))}
+            <th className="w-10 px-4 py-3" />
           </tr>
         </thead>
         <tbody>
@@ -54,6 +59,7 @@ export function EmployeeTable({
               user={user}
               columns={columns}
               positions={positions}
+              isSelf={currentUserId !== undefined && String(user.id ?? "") === currentUserId}
             />
           ))}
         </tbody>
@@ -66,10 +72,12 @@ function UserRow({
   user,
   columns,
   positions,
+  isSelf,
 }: {
   user: Record<string, unknown>
   columns: string[]
   positions: Position[]
+  isSelf: boolean
 }) {
   const [status, setStatus] = useState(String(user.status ?? "재직"))
   const [positionId, setPositionId] = useState(String(user.position_id ?? ""))
@@ -110,6 +118,17 @@ function UserRow({
         setPositionId(prev)
         setError(e instanceof Error ? e.message : "변경 실패")
       }
+    })
+  }
+
+  function handleDelete() {
+    const label = String(user.name ?? user.email ?? "이 직원")
+    if (!window.confirm(`${label} 직원을 삭제하시겠습니까?\n로그인 계정도 함께 삭제되며 되돌릴 수 없습니다.`)) return
+    setError(null)
+    startTransition(async () => {
+      const result = await deleteEmployee(String(user.id ?? ""))
+      if (result.error) setError(result.error)
+      // 성공 시 revalidatePath로 목록이 자동 갱신된다
     })
   }
 
@@ -179,10 +198,22 @@ function UserRow({
             )}
           </td>
         ))}
+        <td className="px-4 py-3">
+          {!isSelf && (
+            <button
+              onClick={handleDelete}
+              disabled={isPending}
+              title="직원 삭제"
+              className="rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          )}
+        </td>
       </tr>
       {error && (
         <tr className="border-b border-border last:border-0">
-          <td colSpan={columns.length} className="px-4 py-2 text-xs text-destructive">
+          <td colSpan={columns.length + 1} className="px-4 py-2 text-xs text-destructive">
             {error}
           </td>
         </tr>

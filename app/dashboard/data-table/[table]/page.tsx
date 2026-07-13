@@ -1,29 +1,23 @@
-import Link from "next/link"
 import { getTables, getTableRows, getCategoryIdMap, getSkuOptions, getProdOptions } from "@/lib/supabase/db"
 import { DataTable } from "@/components/data-table"
 import { AddRowDialog, type ColumnDef } from "@/components/add-row-dialog"
-import { Button } from "@/components/ui/button"
+import {
+  PAGE_SIZE,
+  TABLE_PK,
+  TABLE_DEFAULT_SORT,
+  TABLE_SEARCH_COLUMNS,
+  HIDDEN_COLS,
+  TABLE_HIDDEN_COLS,
+  TABLE_COLUMN_ORDER,
+  ALLERGEN_OPTIONS,
+} from "@/lib/table-config"
 
 type SelectOption = { value: string; label: string }
 
-const PAGE_SIZE = 50
-const HIDDEN_COLS = new Set(["id", "created_at", "updated_at"])
 const INSERTABLE_TABLES = new Set(["tb_prod_mst", "tb_raw_mst", "tb_sku_mst", "tb_sku_recipe"])
 
 // 체크박스 선택 일괄 삭제를 지원하는 테이블
 const BULK_DELETE_TABLES = new Set(["tb_raw_mst", "tb_prod_mst", "tb_sku_mst"])
-
-// 테이블별 추가 숨김 컬럼
-const TABLE_HIDDEN_COLS: Record<string, Set<string>> = {
-  tb_prod_mst:   new Set(["active", "owner", "owner_part", "part", "yield_rate"]),
-  tb_sku_mst:    new Set(["is_active"]),
-  tb_sku_recipe: new Set(["input_id"]),
-}
-
-// 테이블별 PK 컬럼 (기본 "id" 외 추가)
-const TABLE_PK: Record<string, string> = {
-  tb_sku_recipe: "input_id",
-}
 
 // 카테고리 드롭박스를 사용할 테이블
 const CATEGORY_TABLES = new Set(["tb_prod_mst", "tb_raw_mst", "tb_sku_mst"])
@@ -33,33 +27,6 @@ const TABLE_FIELD_ORDER: Record<string, string[]> = {
   tb_sku_mst:  ["category_code", "sku_code"],
   tb_raw_mst:  ["category_code", "raw_code"],
   tb_prod_mst: ["category_code", "prod_code"],
-}
-
-// 테이블별 데이터 테이블 컬럼 표시 순서 (지정 안 한 나머지 컬럼은 기존 순서 그대로 뒤에 붙음)
-const TABLE_COLUMN_ORDER: Record<string, string[]> = {
-  tb_sku_mst: ["category_code", "sku_code", "sku_name", "sku_name_en"],
-}
-
-// 테이블별 기본 정렬 컬럼
-const TABLE_DEFAULT_SORT: Record<string, { column: string; dir: "asc" | "desc" }> = {
-  tb_sku_mst:      { column: "sku_code", dir: "asc" },
-  tb_raw_mst:      { column: "raw_code", dir: "asc" },
-  tb_prod_mst:     { column: "prod_code", dir: "asc" },
-  tb_category_mst: { column: "category_code", dir: "asc" },
-  // 같은 SKU에 속한 재료끼리 뒤섞이지 않고 모여서 보이도록 SKU 기준 정렬
-  tb_sku_recipe:   { column: "sku_id", dir: "asc" },
-}
-
-// 테이블별 검색 대상 컬럼 (코드/이름 등)
-const TABLE_SEARCH_COLUMNS: Record<string, string[]> = {
-  tb_sku_mst:      ["sku_code", "sku_name"],
-  tb_raw_mst:      ["raw_code", "raw_name"],
-  tb_prod_mst:     ["prod_code", "prod_name"],
-  tb_category_mst: ["category_code", "category_name"],
-  users:           ["email"],
-  // sku_id/prod_id는 UUID라 직접 검색이 안 되므로, SKU/생산품 코드·이름은 아래에서
-  // id 목록으로 변환해 별도로 검색한다 (memo만 텍스트로 직접 검색)
-  tb_sku_recipe:   ["memo"],
 }
 
 // 테이블별 검색창 placeholder (지정 없으면 검색 대상 컬럼명을 그대로 사용)
@@ -82,33 +49,6 @@ const UNIT_TABLES = new Set(["tb_prod_mst"])
 
 type MultiOption = string | SelectOption
 
-// L5 — allergen_tags: 식약처 표시 의무 알러지 유발 성분 (필터가 아닌 의무 고지 항목)
-const ALLERGEN_OPTIONS: SelectOption[] = [
-  { value: "NONE",       label: "해당없음(확인됨)" },
-  { value: "MILK",       label: "우유" },
-  { value: "EGG",        label: "알류(가금류만 해당)" },
-  { value: "WHEAT",      label: "밀" },
-  { value: "TOMATO",     label: "토마토" },
-  { value: "CASHEW",     label: "캐슈넛" },
-  { value: "ALMOND",     label: "아몬드" },
-  { value: "WALNUT",     label: "호두" },
-  { value: "PORK",       label: "돼지고기" },
-  { value: "CHICKEN",    label: "닭고기" },
-  { value: "BEEF",       label: "쇠고기" },
-  { value: "SHRIMP",     label: "새우" },
-  { value: "BUCKWHEAT",  label: "메밀" },
-  { value: "SOY",        label: "대두" },
-  { value: "PEANUT",     label: "땅콩" },
-  { value: "SESAME",     label: "참깨" },
-  { value: "PINE_NUT",   label: "잣" },
-  { value: "PEACH",      label: "복숭아" },
-  { value: "SHELLFISH",  label: "조개류(굴·전복·홍합 포함)" },
-  { value: "SQUID",      label: "오징어" },
-  { value: "CRAB",       label: "게" },
-  { value: "MACKEREL",   label: "고등어" },
-  { value: "SULFITE",    label: "아황산류" },
-]
-
 const SKU_MULTI_OPTIONS: Record<string, MultiOption[]> = {
   concept_tags:   ["Daily Balance", "Light & Clean", "Protein Care", "Digestive Comfort", "Recovery Food"],
   meal_time_tags: ["Breakfast", "Lunch", "Dinner"],
@@ -122,13 +62,11 @@ export default async function TablePage({
   searchParams,
 }: {
   params: Promise<{ table: string }>
-  searchParams: Promise<{ page?: string; sort?: string; dir?: string; q?: string }>
+  searchParams: Promise<{ sort?: string; dir?: string; q?: string }>
 }) {
   const { table } = await params
   const tableName = decodeURIComponent(table)
-  const { page, sort, dir, q } = await searchParams
-  const currentPage = Math.max(1, Number.parseInt(page ?? "1", 10) || 1)
-  const offset = (currentPage - 1) * PAGE_SIZE
+  const { sort, dir, q } = await searchParams
 
   const defaultSort = TABLE_DEFAULT_SORT[tableName]
   const sortColumn = sort || defaultSort?.column
@@ -186,17 +124,20 @@ export default async function TablePage({
 
   let rows: Record<string, unknown>[] = []
   let total: number | null = null
+  let nextCursor = null as Awaited<ReturnType<typeof getTableRows>>["nextCursor"]
   let error: string | null = null
   try {
-    const result = await getTableRows(tableName, PAGE_SIZE, offset, {
+    const result = await getTableRows(tableName, PAGE_SIZE, 0, {
       orderBy: sortColumn,
       orderDir: sortDir,
+      pkColumn: pkColumn ?? undefined,
       search: searchEnabled && searchQuery
         ? { columns: searchColumns, query: searchQuery, idInColumns: recipeIdFilter }
         : undefined,
     })
     rows = result.rows
     total = result.total
+    nextCursor = result.nextCursor
   } catch (e) {
     error = e instanceof Error ? e.message : "Could not load rows"
   }
@@ -215,7 +156,6 @@ export default async function TablePage({
     ]
   }
 
-  const totalPages = total !== null ? Math.max(1, Math.ceil(total / PAGE_SIZE)) : null
   const canInsert = INSERTABLE_TABLES.has(tableName)
 
   // 드롭박스 옵션 (category_code, status, storage 등)
@@ -242,15 +182,6 @@ export default async function TablePage({
     try {
       columnResolvers["catgegory_id"] = await getCategoryIdMap()
     } catch {}
-  }
-
-  const buildPageHref = (pageNum: number) => {
-    const params = new URLSearchParams()
-    params.set("page", String(pageNum))
-    if (sort) params.set("sort", sort)
-    if (dir) params.set("dir", dir)
-    if (searchQuery) params.set("q", searchQuery)
-    return `/dashboard/data-table/${encodeURIComponent(tableName)}?${params.toString()}`
   }
 
   return (
@@ -280,57 +211,24 @@ export default async function TablePage({
           {error}
         </div>
       ) : (
-        <>
-          <DataTable
-            key={`${currentPage}-${sortColumn ?? ""}-${sortDir}-${searchQuery}`}
-            columns={columns}
-            rows={rows}
-            tableName={tableName}
-            pkColumn={pkColumn}
-            columnOptions={columnOptions}
-            columnResolvers={columnResolvers}
-            columnMultiOptions={tableName === "tb_sku_mst" ? SKU_MULTI_OPTIONS : undefined}
-            sortColumn={sortColumn}
-            sortDir={sortDir}
-            searchQuery={searchQuery}
-            searchEnabled={searchEnabled}
-            searchPlaceholder={searchEnabled ? TABLE_SEARCH_PLACEHOLDER[tableName] ?? `${searchColumns.join(", ")} 검색` : undefined}
-            bulkDeleteEnabled={BULK_DELETE_TABLES.has(tableName)}
-          />
-
-          {totalPages !== null && totalPages > 1 && (
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-muted-foreground">
-                Page {currentPage} of {totalPages}
-              </p>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" disabled={currentPage <= 1} asChild={currentPage > 1}>
-                  {currentPage > 1 ? (
-                    <Link href={buildPageHref(currentPage - 1)}>
-                      Previous
-                    </Link>
-                  ) : (
-                    <span>Previous</span>
-                  )}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={currentPage >= totalPages}
-                  asChild={currentPage < totalPages}
-                >
-                  {currentPage < totalPages ? (
-                    <Link href={buildPageHref(currentPage + 1)}>
-                      Next
-                    </Link>
-                  ) : (
-                    <span>Next</span>
-                  )}
-                </Button>
-              </div>
-            </div>
-          )}
-        </>
+        <DataTable
+          key={`${sortColumn ?? ""}-${sortDir}-${searchQuery}`}
+          columns={columns}
+          rows={rows}
+          total={total}
+          nextCursor={nextCursor}
+          tableName={tableName}
+          pkColumn={pkColumn}
+          columnOptions={columnOptions}
+          columnResolvers={columnResolvers}
+          columnMultiOptions={tableName === "tb_sku_mst" ? SKU_MULTI_OPTIONS : undefined}
+          sortColumn={sortColumn}
+          sortDir={sortDir}
+          searchQuery={searchQuery}
+          searchEnabled={searchEnabled}
+          searchPlaceholder={searchEnabled ? TABLE_SEARCH_PLACEHOLDER[tableName] ?? `${searchColumns.join(", ")} 검색` : undefined}
+          bulkDeleteEnabled={BULK_DELETE_TABLES.has(tableName)}
+        />
       )}
     </div>
   )
