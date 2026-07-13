@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { insertRow, fetchNextSkuCode, fetchNextRawCode, fetchNextProdCode } from "@/app/actions/table-edit"
 import { COLUMN_LABELS } from "@/lib/column-labels"
+import { isPriceColumn } from "@/lib/table-config"
 
 // 테이블별 카테고리 선택 시 코드를 자동 채워주는 설정
 const AUTO_CODE_CONFIG: Record<string, { column: string; fetchCode: (categoryCode: string) => Promise<string> }> = {
@@ -42,10 +43,8 @@ function parseMultiValue(val: string | undefined): string[] {
 }
 
 // 가격 컬럼은 휠·방향키로 값이 바뀌지 않도록 number 대신 일반 텍스트 입력 사용
-const PRICE_COLS = new Set(["sell_price", "purchase_price", "price"])
-
 function getInputType(col: ColumnDef): "number" | "text" {
-  if (PRICE_COLS.has(col.name)) return "text"
+  if (isPriceColumn(col.name)) return "text"
   if (col.type === "integer" || col.type === "number") return "number"
   return "text"
 }
@@ -258,7 +257,7 @@ export function AddRowDialog({
                           <Input
                             id={`field-${col.name}`}
                             type={getInputType(col)}
-                            inputMode={PRICE_COLS.has(col.name) ? "decimal" : undefined}
+                            inputMode={isPriceColumn(col.name) ? "decimal" : undefined}
                             value={values[col.name] ?? ""}
                             onChange={(e) =>
                               setValues((v) => ({ ...v, [col.name]: e.target.value }))

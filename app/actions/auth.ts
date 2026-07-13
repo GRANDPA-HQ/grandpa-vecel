@@ -92,3 +92,42 @@ export async function signOut() {
   await supabase.auth.signOut()
   redirect("/login")
 }
+
+/**
+ * 본인 비밀번호 변경: 현재 비밀번호 확인 후 새 비밀번호로 교체한다.
+ */
+export async function changePassword(
+  _prevState: { error?: string; success?: boolean } | undefined,
+  formData: FormData,
+): Promise<{ error?: string; success?: boolean }> {
+  const current = String(formData.get("current") ?? "")
+  const next = String(formData.get("next") ?? "")
+  const confirm = String(formData.get("confirm") ?? "")
+
+  if (!current || !next) return { error: "현재 비밀번호와 새 비밀번호를 입력해주세요." }
+  if (next.length < 6) return { error: "새 비밀번호는 6자 이상이어야 합니다." }
+  if (next !== confirm) return { error: "새 비밀번호가 서로 일치하지 않습니다." }
+  if (next === current) return { error: "새 비밀번호가 현재 비밀번호와 같습니다." }
+
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user?.email) return { error: "로그인이 필요합니다." }
+
+  // 현재 비밀번호가 맞는지 확인
+  const { error: verifyError } = await supabase.auth.signInWithPassword({
+    email: user.email,
+    password: current,
+  })
+  if (verifyError) return { error: "현재 비밀번호가 올바르지 않습니다." }
+
+  const { error } = await supabase.auth.updateUser({ password: next })
+  if (error) {
+    if (/should be different/i.test(error.message))
+      return { error: "새 비밀번호가 현재 비밀번호와 같습니다." }
+    if (/at least 6|weak/i.test(error.message))
+      return { error: "새 비밀번호는 6자 이상이어야 합니다." }
+    return { error: `비밀번호 변경에 실패했습니다. ${error.message}` }
+  }
+
+  return { success: true }
+}

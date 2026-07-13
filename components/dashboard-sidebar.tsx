@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation"
 import { Users, Database, Cog, Bug, BookText, ClipboardList, LayoutDashboard, FileText } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { SignOutButton } from "@/components/sign-out-button"
+import { ChangePasswordButton } from "@/components/change-password-button"
 
 export function DashboardSidebar({
   isManager,
@@ -106,7 +107,8 @@ export function DashboardSidebar({
           <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gray-700 text-xs font-bold text-gray-300">
             {userName.charAt(0).toUpperCase()}
           </div>
-          <span className="truncate text-sm text-gray-300">{userName}</span>
+          <span className="min-w-0 flex-1 truncate text-sm text-gray-300">{userName}</span>
+          <ChangePasswordButton />
         </div>
         <SignOutButton />
       </div>

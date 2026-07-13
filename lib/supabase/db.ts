@@ -1,5 +1,6 @@
 import "server-only"
 import { SUPABASE_URL } from "./config"
+import type { RowCursor } from "@/lib/table-config"
 
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
@@ -69,11 +70,17 @@ export async function getTables(): Promise<TableInfo[]> {
 export type TableRows = {
   rows: Record<string, unknown>[]
   total: number | null
+  // 커서 페이지네이션: 다음 페이지 조회에 사용할 커서 (더 없으면 null)
+  nextCursor: RowCursor | null
 }
 
 export type TableRowsOptions = {
   orderBy?: string
   orderDir?: "asc" | "desc"
+  // 커서 페이지네이션용 PK 컬럼 (정렬 tiebreaker 및 커서 기준)
+  pkColumn?: string
+  // 이 커서 이후의 행만 조회 (keyset pagination)
+  cursor?: RowCursor
   search?: {
     columns: string[]
     query: string
@@ -82,8 +89,14 @@ export type TableRowsOptions = {
   }
 }
 
+// PostgREST 필터 값 인용: 백슬래시/따옴표 이스케이프 후 큰따옴표로 감싼다
+function quoteFilterValue(v: string): string {
+  return `"${v.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`
+}
+
 /**
  * Fetch a page of rows from a table along with the exact total count.
+ * `pkColumn`과 `cursor`를 주면 offset 대신 keyset(커서) 방식으로 다음 페이지를 조회한다.
  */
 export async function getTableRows(
   table: string,
@@ -91,10 +104,47 @@ export async function getTableRows(
   offset = 0,
   options?: TableRowsOptions,
 ): Promise<TableRows> {
-  let url = `${SUPABASE_URL}/rest/v1/${encodeURIComponent(table)}?select=*&limit=${limit}&offset=${offset}`
+  let url = `${SUPABASE_URL}/rest/v1/${encodeURIComponent(table)}?select=*&limit=${limit}`
+  if (offset > 0) url += `&offset=${offset}`
 
-  if (options?.orderBy) {
-    url += `&order=${encodeURIComponent(options.orderBy)}.${options.orderDir === "desc" ? "desc" : "asc"}`
+  const orderDir: "asc" | "desc" = options?.orderDir === "desc" ? "desc" : "asc"
+  const pkColumn = options?.pkColumn
+  const sortCol = options?.orderBy
+
+  // 정렬: 커서가 행마다 유일하도록 PK를 tiebreaker로 항상 추가한다.
+  // null 정렬 위치를 Postgres 기본값(asc=NULLS LAST, desc=NULLS FIRST)으로 고정해 커서 필터와 일치시킨다.
+  const orderParts: string[] = []
+  if (sortCol) orderParts.push(`${sortCol}.${orderDir}.${orderDir === "asc" ? "nullslast" : "nullsfirst"}`)
+  if (pkColumn && pkColumn !== sortCol) orderParts.push(`${pkColumn}.asc`)
+  if (orderParts.length > 0) {
+    url += `&order=${encodeURIComponent(orderParts.join(","))}`
+  }
+
+  // 커서 이후 행만 조회하는 keyset 필터
+  if (options?.cursor && pkColumn) {
+    const pkAfter = `${pkColumn}.gt.${quoteFilterValue(options.cursor.pkValue)}`
+    let clause: string
+    if (sortCol && sortCol !== pkColumn) {
+      const v = options.cursor.sortValue
+      if (v === null) {
+        clause =
+          orderDir === "asc"
+            ? // asc에서 null은 맨 뒤 → 남은 행은 같은 null 그룹에서 PK가 더 큰 행뿐
+              `and(${sortCol}.is.null,${pkAfter})`
+            : // desc에서 null은 맨 앞 → null 그룹의 나머지 + null이 아닌 모든 행
+              `or(and(${sortCol}.is.null,${pkAfter}),${sortCol}.not.is.null)`
+      } else {
+        const qv = quoteFilterValue(v)
+        clause =
+          orderDir === "asc"
+            ? `or(${sortCol}.gt.${qv},and(${sortCol}.eq.${qv},${pkAfter}),${sortCol}.is.null)`
+            : `or(${sortCol}.lt.${qv},and(${sortCol}.eq.${qv},${pkAfter}))`
+      }
+    } else {
+      clause = pkAfter
+    }
+    // 검색의 or= 파라미터와 AND로 결합되도록 별도 and= 파라미터로 전달
+    url += `&and=${encodeURIComponent(`(${clause})`)}`
   }
 
   if (options?.search?.query.trim()) {
@@ -142,7 +192,37 @@ export async function getTableRows(
     total = Number.isNaN(parsed) ? null : parsed
   }
 
-  return { rows, total }
+  // 다음 페이지 커서: 마지막 행의 (정렬 컬럼 값, PK 값). 가득 차지 않았으면 더 없음.
+  let nextCursor: RowCursor | null = null
+  if (pkColumn && rows.length === limit) {
+    const last = rows[rows.length - 1]
+    const sv = sortCol && sortCol !== pkColumn ? last[sortCol] : null
+    nextCursor = {
+      sortValue: sv === null || sv === undefined ? null : String(sv),
+      pkValue: String(last[pkColumn] ?? ""),
+    }
+  }
+
+  return { rows, total, nextCursor }
+}
+
+/**
+ * 검색/정렬 조건에 매칭되는 모든 행을 조회한다 (엑셀 추출용).
+ * Supabase의 요청당 최대 행 수 제한을 피해 1000행씩 나눠 받는다.
+ */
+export async function getAllTableRows(
+  table: string,
+  options?: Omit<TableRowsOptions, "cursor" | "pkColumn">,
+): Promise<Record<string, unknown>[]> {
+  const BATCH = 1000
+  const MAX_ROWS = 100_000 // 안전 상한
+  const all: Record<string, unknown>[] = []
+  for (let offset = 0; offset < MAX_ROWS; offset += BATCH) {
+    const { rows } = await getTableRows(table, BATCH, offset, options)
+    all.push(...rows)
+    if (rows.length < BATCH) break
+  }
+  return all
 }
 
 /**
