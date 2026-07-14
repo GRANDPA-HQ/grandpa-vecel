@@ -7,6 +7,7 @@ import {
   getSkuOptions,
   getProdOptions,
   getCategoryIdMap,
+  getIdLabelOptions,
 } from "@/lib/supabase/db"
 import { COLUMN_LABELS } from "@/lib/column-labels"
 import {
@@ -17,6 +18,7 @@ import {
   TABLE_HIDDEN_COLS,
   TABLE_COLUMN_ORDER,
   ALLERGEN_OPTIONS,
+  EMPLOYEE_FK_LOOKUPS,
   isPriceColumn,
 } from "@/lib/table-config"
 
@@ -75,6 +77,14 @@ export async function GET(
     }
     if (tableName === "tb_prod_mst" || tableName === "tb_raw_mst") {
       columnResolvers["catgegory_id"] = await getCategoryIdMap().catch(() => ({}))
+    }
+    if (tableName === "employees") {
+      const lookups = await Promise.all(
+        EMPLOYEE_FK_LOOKUPS.map((l) => getIdLabelOptions(l.table, l.labelColumn).catch(() => [])),
+      )
+      EMPLOYEE_FK_LOOKUPS.forEach((l, i) => {
+        columnResolvers[l.column] = Object.fromEntries(lookups[i].map((o) => [o.value, o.label]))
+      })
     }
 
     const rows = await getAllTableRows(tableName, {

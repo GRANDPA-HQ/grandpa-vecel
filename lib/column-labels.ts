@@ -59,6 +59,15 @@ export const COLUMN_LABELS: Record<string, string> = {
   password: "비밀번호",
   role: "역할",
   position: "직책",
-  position_id: "직책 ID",
+  position_id: "직책",
   department: "부서",
+  // 직원 (employees)
+  store_id: "매장",
+  part_id: "파트",
+  rank_id: "직급",
+  phone: "연락처",
+  employment_type: "고용 형태",
+  hired_at: "입사일",
+  resigned_at: "퇴사일",
+  notes: "비고",
 }

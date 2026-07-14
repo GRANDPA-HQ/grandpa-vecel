@@ -400,6 +400,25 @@ export async function getProdOptions(): Promise<{ value: string; label: string }
 }
 
 /**
+ * 임의 테이블의 id → 라벨 컬럼 옵션 목록 조회 (FK 드롭다운/이름 표시용).
+ */
+export async function getIdLabelOptions(
+  table: string,
+  labelColumn: string,
+): Promise<{ value: string; label: string }[]> {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/${encodeURIComponent(table)}?select=id,${encodeURIComponent(labelColumn)}&order=${encodeURIComponent(labelColumn)}`,
+    { headers: authHeaders(), cache: "no-store" },
+  )
+  if (!res.ok) return []
+  const rows = (await res.json()) as Record<string, unknown>[]
+  return rows.map((r) => ({
+    value: String(r.id),
+    label: String(r[labelColumn] ?? r.id),
+  }))
+}
+
+/**
  * Insert a single row into a table.
  */
 export async function insertTableRow(

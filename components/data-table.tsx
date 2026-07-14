@@ -55,6 +55,17 @@ const ENUM_COLUMNS: Record<string, { value: string; label: string; className: st
     { value: "냉동", label: "냉동", className: "bg-sky-100 text-sky-700 border-sky-200" },
     { value: "상온", label: "상온", className: "bg-amber-100 text-amber-700 border-amber-200" },
   ],
+  // 직원 (CHECK 제약 허용 값)
+  "employees.employment_type": [
+    { value: "정규직",   label: "정규직",   className: "bg-blue-100 text-blue-700 border-blue-200" },
+    { value: "파트타임", label: "파트타임", className: "bg-amber-100 text-amber-700 border-amber-200" },
+    { value: "프리랜서", label: "프리랜서", className: "bg-purple-100 text-purple-700 border-purple-200" },
+  ],
+  "employees.status": [
+    { value: "재직", label: "재직", className: "bg-emerald-100 text-emerald-700 border-emerald-200" },
+    { value: "휴직", label: "휴직", className: "bg-yellow-100 text-yellow-700 border-yellow-200" },
+    { value: "퇴사", label: "퇴사", className: "bg-gray-100 text-gray-500 border-gray-200" },
+  ],
 }
 
 const CODE_RE = /^(?:(?:RAW|PROD)-)?([A-Z][A-Z0-9_]*)[-_](\d+)$/i

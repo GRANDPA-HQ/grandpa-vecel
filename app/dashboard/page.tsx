@@ -1,6 +1,6 @@
 import Link from "next/link"
-import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { getCurrentEmployee } from "@/lib/permissions"
 import {
   Users,
   Database,
@@ -69,29 +69,17 @@ const MENU_CARDS = [
 ] as const
 
 export default async function DashboardPage() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const employee = await getCurrentEmployee()
+  const userName = employee?.name ?? "사용자"
+  const isManager = employee?.isSenior ?? false
 
   const admin = createAdminClient()
-
-  const { data: userData } = await admin
-    .from("users")
-    .select("name, positions(name_ko)")
-    .eq("id", user?.id ?? "")
-    .maybeSingle()
-
-  const userName = userData?.name ?? user?.email?.split("@")[0] ?? "사용자"
-  const positionName =
-    (userData?.positions as { name_ko: string } | null)?.name_ko ?? ""
-  const isManager = positionName === "점장"
 
   // 통계 데이터
   const [bugResult, recipeResult, employeeResult] = await Promise.allSettled([
     admin.from("bug_reports").select("id", { count: "exact", head: true }),
     admin.from("recipe_guides").select("id", { count: "exact", head: true }),
-    admin.from("users").select("id", { count: "exact", head: true }),
+    admin.from("employees").select("id", { count: "exact", head: true }),
   ])
 
   const bugCount =

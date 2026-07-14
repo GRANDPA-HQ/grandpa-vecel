@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { getCurrentEmployee } from "@/lib/permissions"
 
 type StepInput = {
   step_order: number
@@ -74,28 +75,17 @@ export async function saveProductionProcess(
 export async function approveProductionProcess(
   processId: string,
 ): Promise<{ error?: string; success?: boolean }> {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) return { error: "로그인이 필요합니다." }
+  const employee = await getCurrentEmployee()
+  if (!employee) return { error: "로그인이 필요합니다." }
+  if (!employee.isSenior) return { error: "승인 권한이 없습니다." }
 
   const admin = createAdminClient()
-
-  const { data: userData } = await admin
-    .from("users")
-    .select("positions(name_ko)")
-    .eq("id", user.id)
-    .maybeSingle()
-
-  const positionName = (userData?.positions as { name_ko: string } | null)?.name_ko ?? ""
-  if (positionName !== "점장") return { error: "승인 권한이 없습니다." }
 
   const { error } = await admin
     .from("tb_production_process")
     .update({
       status: "approved",
-      approved_by: user.id,
+      approved_by: employee.id,
       approved_at: new Date().toISOString(),
       reject_reason: null,
     })
@@ -112,28 +102,17 @@ export async function rejectProductionProcess(
   processId: string,
   reason: string,
 ): Promise<{ error?: string; success?: boolean }> {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) return { error: "로그인이 필요합니다." }
+  const employee = await getCurrentEmployee()
+  if (!employee) return { error: "로그인이 필요합니다." }
+  if (!employee.isSenior) return { error: "반려 권한이 없습니다." }
 
   const admin = createAdminClient()
-
-  const { data: userData } = await admin
-    .from("users")
-    .select("positions(name_ko)")
-    .eq("id", user.id)
-    .maybeSingle()
-
-  const positionName = (userData?.positions as { name_ko: string } | null)?.name_ko ?? ""
-  if (positionName !== "점장") return { error: "반려 권한이 없습니다." }
 
   const { error } = await admin
     .from("tb_production_process")
     .update({
       status: "rejected",
-      approved_by: user.id,
+      approved_by: employee.id,
       approved_at: new Date().toISOString(),
       reject_reason: reason || "사유 없음",
     })

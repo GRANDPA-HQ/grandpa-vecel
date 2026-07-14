@@ -2,7 +2,7 @@
 
 import { createClient as createAdminClient } from "@supabase/supabase-js"
 import { revalidatePath } from "next/cache"
-import { createClient } from "@/lib/supabase/server"
+import { getCurrentEmployee } from "@/lib/permissions"
 
 const DEFAULT_PASSWORD = "1111"
 
@@ -13,34 +13,34 @@ function createAdmin() {
   )
 }
 
-// 호출자가 점장인지 확인 (직원 관리 페이지와 동일한 기준)
-async function requireManager(): Promise<{ userId: string } | { error: string }> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: "로그인이 필요합니다." }
-
-  const admin = createAdmin()
-  const { data: userData } = await admin
-    .from("users")
-    .select("positions(name_ko)")
-    .eq("id", user.id)
-    .single()
-
-  const positionName =
-    (userData?.positions as unknown as { name_ko: string } | null)?.name_ko ?? ""
-  if (positionName !== "점장") return { error: "점장만 직원을 관리할 수 있습니다." }
-  return { userId: user.id }
+// 호출자가 시니어 직급인지 확인 (직원 관리 권한)
+async function requireSenior(): Promise<{ userId: string } | { error: string }> {
+  const employee = await getCurrentEmployee()
+  if (!employee) return { error: "로그인이 필요합니다." }
+  if (!employee.isSenior) return { error: "시니어 직급만 직원을 관리할 수 있습니다." }
+  return { userId: employee.id }
 }
 
-async function getStaffPositionId(admin: ReturnType<typeof createAdmin>): Promise<string | null> {
-  const { data } = await admin.from("positions").select("*")
-  const positions = (data ?? []) as Record<string, unknown>[]
-  if (positions.length === 0) return null
-  // name_ko 컬럼에서 '스태프' 검색, 없으면 첫 번째 행
-  const staff = positions.find(
-    (p) => typeof p.name_ko === "string" && p.name_ko.includes("스태프"),
-  )
-  return String((staff ?? positions[0]).id)
+type Row = Record<string, unknown>
+
+// 신규 직원 기본값: 매장(첫 매장), 파트(정렬 첫 파트), 직책(스태프), 직급(최하위 레벨)
+async function getInviteDefaults(admin: ReturnType<typeof createAdmin>) {
+  const [stores, parts, positions, ranks] = await Promise.all([
+    admin.from("stores").select("id").order("created_at").limit(1),
+    admin.from("parts").select("id").order("sort_order").limit(1),
+    admin.from("positions").select("id, name_ko"),
+    admin.from("ranks").select("id, level").order("level").limit(1),
+  ])
+  const positionRows = (positions.data ?? []) as Row[]
+  const staff =
+    positionRows.find((p) => typeof p.name_ko === "string" && p.name_ko.includes("스태프")) ??
+    positionRows[0]
+  return {
+    store_id: (stores.data?.[0] as Row | undefined)?.id ?? null,
+    part_id: (parts.data?.[0] as Row | undefined)?.id ?? null,
+    position_id: staff?.id ?? null,
+    rank_id: (ranks.data?.[0] as Row | undefined)?.id ?? null,
+  }
 }
 
 export type InviteState = {
@@ -50,15 +50,14 @@ export type InviteState = {
 }
 
 /**
- * 직원 추가: 계정을 즉시 생성한다 (아이디 = 이메일, 비밀번호 = 1111).
- * 이메일 확인 절차 없이 바로 로그인 가능한 상태로 만들어지므로,
- * 아이디/비밀번호를 직원에게 직접 전달하면 된다.
+ * 직원 추가: 계정을 즉시 생성하고 (아이디 = 이메일, 비밀번호 = 1111)
+ * 직원(employees) 테이블에 등록한다. users에도 함께 기록해 작성자 표시 등 기존 기능과 호환.
  */
 export async function inviteEmployee(
   _prevState: InviteState | undefined,
   formData: FormData,
 ): Promise<InviteState> {
-  const auth = await requireManager()
+  const auth = await requireSenior()
   if ("error" in auth) return { error: auth.error }
 
   const email = String(formData.get("email") ?? "").trim().toLowerCase()
@@ -68,12 +67,12 @@ export async function inviteEmployee(
   const admin = createAdmin()
 
   // 이미 등록된 직원인지 확인
-  const { data: existingUser } = await admin
-    .from("users")
+  const { data: existing } = await admin
+    .from("employees")
     .select("email")
     .eq("email", email)
     .maybeSingle()
-  if (existingUser) return { error: "이미 등록된 직원 이메일입니다." }
+  if (existing) return { error: "이미 등록된 직원 이메일입니다." }
 
   // 1) 인증 계정 즉시 생성 (이메일 확인 절차 없이 바로 로그인 가능)
   const { data: created, error: createError } = await admin.auth.admin.createUser({
@@ -87,14 +86,22 @@ export async function inviteEmployee(
     return { error: `계정 생성에 실패했습니다. ${msg}` }
   }
 
-  // 2) 직원 테이블에 등록 (기본 직책: 스태프, 상태: 재직)
-  const positionId = await getStaffPositionId(admin)
-  const { error: insertError } = await admin.from("users").insert({
+  // 2) 직원 테이블에 등록
+  const defaults = await getInviteDefaults(admin)
+  if (!defaults.store_id || !defaults.part_id || !defaults.position_id || !defaults.rank_id) {
+    await admin.auth.admin.deleteUser(created.user.id).catch(() => {})
+    return { error: "매장/파트/직책/직급 기본 데이터가 없어 직원을 등록할 수 없습니다." }
+  }
+
+  const name = email.split("@")[0]
+  const { error: insertError } = await admin.from("employees").insert({
     id: created.user.id,
+    ...defaults,
+    name,
     email,
-    name: email.split("@")[0],
-    ...(positionId ? { position_id: positionId } : {}),
+    employment_type: "정규직",
     status: "재직",
+    hired_at: new Date().toISOString().slice(0, 10),
   })
   if (insertError) {
     // 직원 등록 실패 시 계정도 되돌린다
@@ -102,29 +109,50 @@ export async function inviteEmployee(
     return { error: `직원 등록에 실패했습니다. ${insertError.message}` }
   }
 
+  // 3) 레거시 users 행 기록 (작성자 표시 등 기존 FK 호환 — 실패해도 무시)
+  await admin
+    .from("users")
+    .insert({
+      id: created.user.id,
+      email,
+      name,
+      position_id: defaults.position_id,
+      status: "재직",
+    })
+    .then(
+      () => {},
+      () => {},
+    )
+
   revalidatePath("/dashboard/employees")
   return { success: true, email }
 }
 
 /**
- * 직원 삭제: 직원 테이블과 인증 계정을 함께 삭제한다.
+ * 직원 삭제: 직원 테이블, 레거시 users 행, 인증 계정을 함께 삭제한다.
  */
-export async function deleteEmployee(userId: string): Promise<{ error: string | null }> {
-  const auth = await requireManager()
+export async function deleteEmployee(employeeId: string): Promise<{ error: string | null }> {
+  const auth = await requireSenior()
   if ("error" in auth) return { error: auth.error }
-  if (auth.userId === userId) return { error: "본인 계정은 삭제할 수 없습니다." }
+  if (auth.userId === employeeId) return { error: "본인 계정은 삭제할 수 없습니다." }
 
   const admin = createAdmin()
 
   // 1) 인증 계정 삭제 (계정이 이미 없는 경우는 계속 진행)
-  const { error: authError } = await admin.auth.admin.deleteUser(userId)
+  const { error: authError } = await admin.auth.admin.deleteUser(employeeId)
   if (authError && !/not.?found/i.test(authError.message)) {
     return { error: `계정 삭제에 실패했습니다. ${authError.message}` }
   }
 
   // 2) 직원 테이블에서 삭제
-  const { error: rowError } = await admin.from("users").delete().eq("id", userId)
+  const { error: rowError } = await admin.from("employees").delete().eq("id", employeeId)
   if (rowError) return { error: `직원 삭제에 실패했습니다. ${rowError.message}` }
+
+  // 3) 레거시 users 행 삭제 (실패해도 무시)
+  await admin.from("users").delete().eq("id", employeeId).then(
+    () => {},
+    () => {},
+  )
 
   revalidatePath("/dashboard/employees")
   return { error: null }

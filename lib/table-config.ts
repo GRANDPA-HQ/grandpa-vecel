@@ -23,7 +23,16 @@ export const TABLE_LABELS: Record<string, string> = {
   tb_sku_mst:            "판매품",
   tb_sku_recipe:         "판매품 레시피",
   tb_production_process: "생산 공정",
+  employees:             "직원",
 }
+
+// employees 테이블의 FK 컬럼 → 이름 표시용 조회 설정 (화면·엑셀 추출 공용)
+export const EMPLOYEE_FK_LOOKUPS: { column: string; table: string; labelColumn: string }[] = [
+  { column: "store_id",    table: "stores",    labelColumn: "store_name" },
+  { column: "part_id",     table: "parts",     labelColumn: "name_ko" },
+  { column: "position_id", table: "positions", labelColumn: "name_ko" },
+  { column: "rank_id",     table: "ranks",     labelColumn: "name_ko" },
+]
 
 // 가격 컬럼 판별: 판매가(sell_price), 구매 단가(purchase_price), 가격(price), 원가(cost) 등
 // 표시할 때 천 단위 쉼표(예: 10,000)를 적용한다.
@@ -81,6 +90,7 @@ export const TABLE_DEFAULT_SORT: Record<string, { column: string; dir: "asc" | "
   tb_category_mst: { column: "category_code", dir: "asc" },
   // 같은 SKU에 속한 재료끼리 뒤섞이지 않고 모여서 보이도록 SKU 기준 정렬
   tb_sku_recipe:   { column: "sku_id", dir: "asc" },
+  employees:       { column: "name", dir: "asc" },
 }
 
 // 테이블별 검색 대상 컬럼 (코드/이름 등)
@@ -93,4 +103,5 @@ export const TABLE_SEARCH_COLUMNS: Record<string, string[]> = {
   // sku_id/prod_id는 UUID라 직접 검색이 안 되므로, SKU/생산품 코드·이름은
   // id 목록으로 변환해 별도로 검색한다 (memo만 텍스트로 직접 검색)
   tb_sku_recipe:   ["memo"],
+  employees:       ["name", "phone", "email"],
 }

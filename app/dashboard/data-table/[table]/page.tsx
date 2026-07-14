@@ -1,4 +1,4 @@
-import { getTables, getTableRows, getCategoryIdMap, getSkuOptions, getProdOptions } from "@/lib/supabase/db"
+import { getTables, getTableRows, getCategoryIdMap, getSkuOptions, getProdOptions, getIdLabelOptions } from "@/lib/supabase/db"
 import { DataTable } from "@/components/data-table"
 import { AddRowDialog, type ColumnDef } from "@/components/add-row-dialog"
 import {
@@ -10,6 +10,7 @@ import {
   TABLE_HIDDEN_COLS,
   TABLE_COLUMN_ORDER,
   ALLERGEN_OPTIONS,
+  EMPLOYEE_FK_LOOKUPS,
 } from "@/lib/table-config"
 
 type SelectOption = { value: string; label: string }
@@ -120,6 +121,19 @@ export default async function TablePage({
         { column: "prod_id", ids: prodOpts.filter((o) => norm(o.label).includes(q)).map((o) => o.value) },
       ]
     }
+  }
+
+  // employees: 매장/파트/직책/직급 FK를 이름으로 표시하고 드롭다운으로 편집
+  if (tableName === "employees") {
+    const lookups = await Promise.all(
+      EMPLOYEE_FK_LOOKUPS.map((l) =>
+        getIdLabelOptions(l.table, l.labelColumn).catch(() => [] as SelectOption[]),
+      ),
+    )
+    EMPLOYEE_FK_LOOKUPS.forEach((l, i) => {
+      columnOptions[l.column] = lookups[i]
+      columnResolvers[l.column] = Object.fromEntries(lookups[i].map((o) => [o.value, o.label]))
+    })
   }
 
   let rows: Record<string, unknown>[] = []
