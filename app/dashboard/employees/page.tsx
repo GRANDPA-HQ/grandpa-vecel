@@ -1,39 +1,33 @@
 import { redirect } from "next/navigation"
-import { getTableRows } from "@/lib/supabase/db"
-import { createClient } from "@/lib/supabase/server"
-import { createAdminClient } from "@/lib/supabase/admin"
+import { getTableRows, getIdLabelOptions } from "@/lib/supabase/db"
+import { getCurrentEmployee } from "@/lib/permissions"
+import { EMPLOYEE_FK_LOOKUPS } from "@/lib/table-config"
 import { EmployeeTable } from "@/components/employee-table"
 import { InviteButton } from "@/components/invite-button"
 
 export default async function EmployeesPage() {
-  // 점장만 접근 가능
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect("/login")
+  // 시니어 직급만 접근 가능
+  const employee = await getCurrentEmployee()
+  if (!employee) redirect("/login")
+  if (!employee.isSenior) redirect("/dashboard/bug-report")
 
-  const admin = createAdminClient()
-  const { data: userData } = await admin
-    .from("users")
-    .select("positions(name_ko)")
-    .eq("id", user.id)
-    .single()
-
-  const positionName = (userData?.positions as { name_ko: string } | null)?.name_ko ?? ""
-  if (positionName !== "점장") redirect("/dashboard/bug-report")
-
-  let users: Record<string, unknown>[] = []
-  let positions: Record<string, unknown>[] = []
+  let employees: Record<string, unknown>[] = []
   let total: number | null = null
   let error: string | null = null
+  const lookupOptions: Record<string, { value: string; label: string }[]> = {}
 
   try {
-    const [usersResult, positionsResult] = await Promise.all([
-      getTableRows("users", 1000, 0),
-      getTableRows("positions", 1000, 0),
+    const [employeesResult, ...lookups] = await Promise.all([
+      getTableRows("employees", 1000, 0, { orderBy: "name", orderDir: "asc" }),
+      ...EMPLOYEE_FK_LOOKUPS.map((l) =>
+        getIdLabelOptions(l.table, l.labelColumn).catch(() => [] as { value: string; label: string }[]),
+      ),
     ])
-    users = usersResult.rows
-    total = usersResult.total
-    positions = positionsResult.rows
+    employees = employeesResult.rows
+    total = employeesResult.total
+    EMPLOYEE_FK_LOOKUPS.forEach((l, i) => {
+      lookupOptions[l.column] = lookups[i]
+    })
   } catch (e) {
     error = e instanceof Error ? e.message : "직원 정보를 불러오지 못했습니다."
   }
@@ -55,7 +49,11 @@ export default async function EmployeesPage() {
           {error}
         </div>
       ) : (
-        <EmployeeTable users={users} positions={positions} currentUserId={user.id} />
+        <EmployeeTable
+          employees={employees}
+          lookupOptions={lookupOptions}
+          currentUserId={employee.id}
+        />
       )}
     </div>
   )

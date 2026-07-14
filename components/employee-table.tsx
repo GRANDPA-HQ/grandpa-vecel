@@ -2,64 +2,76 @@
 
 import { useState, useTransition } from "react"
 import { Trash2 } from "lucide-react"
-import { updateUserStatus, updateUserPosition, updateUserField } from "@/app/actions/users"
+import { updateEmployeeField } from "@/app/actions/users"
 import { deleteEmployee } from "@/app/actions/invitations"
+import { COLUMN_LABELS } from "@/lib/column-labels"
 import { cn } from "@/lib/utils"
 
-const STATUS_OPTIONS = ["재직", "휴직", "퇴사"] as const
+type Option = { value: string; label: string }
 
-// positions 행에서 표시할 레이블을 추출
-function getPositionLabel(pos: Record<string, unknown>): string {
-  return typeof pos.name_ko === "string" ? pos.name_ko : String(pos.id ?? "")
+// 표시 컬럼 순서 (employees)
+const COLUMNS = [
+  "name",
+  "phone",
+  "email",
+  "store_id",
+  "part_id",
+  "position_id",
+  "rank_id",
+  "employment_type",
+  "status",
+  "hired_at",
+  "resigned_at",
+  "notes",
+] as const
+
+// FK 드롭다운 컬럼 (옵션은 서버에서 전달)
+const FK_COLUMNS = new Set(["store_id", "part_id", "position_id", "rank_id"])
+
+// CHECK 제약 드롭다운 컬럼
+const ENUM_OPTIONS: Record<string, string[]> = {
+  employment_type: ["정규직", "파트타임", "프리랜서"],
+  status: ["재직", "휴직", "퇴사"],
 }
 
-type Position = { id: string; label: string }
-
-function toPositions(rows: Record<string, unknown>[]): Position[] {
-  return rows.map((r) => ({ id: String(r.id), label: getPositionLabel(r) }))
-}
+const DATE_COLUMNS = new Set(["hired_at", "resigned_at"])
 
 export function EmployeeTable({
-  users,
-  positions: positionRows,
+  employees,
+  lookupOptions,
   currentUserId,
 }: {
-  users: Record<string, unknown>[]
-  positions: Record<string, unknown>[]
+  employees: Record<string, unknown>[]
+  lookupOptions: Record<string, Option[]>
   currentUserId?: string
 }) {
-  const positions = toPositions(positionRows)
-
-  if (users.length === 0) {
-    return <p className="text-sm text-muted-foreground">등록된 직원이 없습니다.</p>
+  if (employees.length === 0) {
+    return <p className="text-sm text-muted-foreground">등록된 직원이 없습니다. 오른쪽 위 &quot;직원 추가&quot;로 초대하세요.</p>
   }
-
-  const columns = Object.keys(users[0])
 
   return (
     <div className="overflow-x-auto rounded-lg border border-border">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-border bg-muted/50">
-            {columns.map((col) => (
+            {COLUMNS.map((col) => (
               <th
                 key={col}
-                className="whitespace-nowrap px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground"
+                className="whitespace-nowrap px-3 py-3 text-left text-xs font-medium tracking-wide text-muted-foreground"
               >
-                {col}
+                {COLUMN_LABELS[col] ?? col}
               </th>
             ))}
-            <th className="w-10 px-4 py-3" />
+            <th className="w-10 px-3 py-3" />
           </tr>
         </thead>
         <tbody>
-          {users.map((user, i) => (
-            <UserRow
-              key={String(user.id ?? i)}
-              user={user}
-              columns={columns}
-              positions={positions}
-              isSelf={currentUserId !== undefined && String(user.id ?? "") === currentUserId}
+          {employees.map((emp, i) => (
+            <EmployeeRow
+              key={String(emp.id ?? i)}
+              employee={emp}
+              lookupOptions={lookupOptions}
+              isSelf={currentUserId !== undefined && String(emp.id ?? "") === currentUserId}
             />
           ))}
         </tbody>
@@ -68,81 +80,58 @@ export function EmployeeTable({
   )
 }
 
-function UserRow({
-  user,
-  columns,
-  positions,
+function EmployeeRow({
+  employee,
+  lookupOptions,
   isSelf,
 }: {
-  user: Record<string, unknown>
-  columns: string[]
-  positions: Position[]
+  employee: Record<string, unknown>
+  lookupOptions: Record<string, Option[]>
   isSelf: boolean
 }) {
-  const [status, setStatus] = useState(String(user.status ?? "재직"))
-  const [positionId, setPositionId] = useState(String(user.position_id ?? ""))
-  const [fieldValues, setFieldValues] = useState<Record<string, string>>(() => {
+  const [values, setValues] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {}
-    for (const col of columns) {
-      if (col !== "status" && col !== "position_id") {
-        init[col] = user[col] === null || user[col] === undefined ? "" : String(user[col])
-      }
+    for (const col of COLUMNS) {
+      init[col] = employee[col] === null || employee[col] === undefined ? "" : String(employee[col])
     }
     return init
   })
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
 
-  function handleStatusChange(newStatus: string) {
-    const prev = status
-    setStatus(newStatus)
+  const employeeId = String(employee.id ?? "")
+
+  function commit(col: string, value: string) {
+    const original = employee[col] === null || employee[col] === undefined ? "" : String(employee[col])
     setError(null)
     startTransition(async () => {
-      try {
-        await updateUserStatus(user.id, newStatus)
-      } catch (e) {
-        setStatus(prev)
-        setError(e instanceof Error ? e.message : "변경 실패")
+      const result = await updateEmployeeField(employeeId, col, value)
+      if (result.error) {
+        setValues((prev) => ({ ...prev, [col]: original }))
+        setError(result.error)
       }
     })
   }
 
-  function handlePositionChange(newPositionId: string) {
-    const prev = positionId
-    setPositionId(newPositionId)
-    setError(null)
-    startTransition(async () => {
-      try {
-        await updateUserPosition(user.id, newPositionId)
-      } catch (e) {
-        setPositionId(prev)
-        setError(e instanceof Error ? e.message : "변경 실패")
-      }
-    })
+  function handleSelect(col: string, value: string) {
+    setValues((prev) => ({ ...prev, [col]: value }))
+    commit(col, value)
+  }
+
+  function handleBlur(col: string, value: string) {
+    const original = employee[col] === null || employee[col] === undefined ? "" : String(employee[col])
+    if (value === original) return
+    commit(col, value)
   }
 
   function handleDelete() {
-    const label = String(user.name ?? user.email ?? "이 직원")
+    const label = values.name || values.email || "이 직원"
     if (!window.confirm(`${label} 직원을 삭제하시겠습니까?\n로그인 계정도 함께 삭제되며 되돌릴 수 없습니다.`)) return
     setError(null)
     startTransition(async () => {
-      const result = await deleteEmployee(String(user.id ?? ""))
+      const result = await deleteEmployee(employeeId)
       if (result.error) setError(result.error)
       // 성공 시 revalidatePath로 목록이 자동 갱신된다
-    })
-  }
-
-  function handleFieldBlur(col: string, value: string) {
-    const original = user[col] === null || user[col] === undefined ? "" : String(user[col])
-    if (value === original) return
-    setError(null)
-    startTransition(async () => {
-      try {
-        await updateUserField(user.id, col, value)
-      } catch (e) {
-        setFieldValues((prev) => ({ ...prev, [col]: original }))
-        setError(e instanceof Error ? e.message : "변경 실패")
-      }
     })
   }
 
@@ -155,50 +144,48 @@ function UserRow({
   return (
     <>
       <tr className="border-b border-border last:border-0 transition-colors hover:bg-muted/30">
-        {columns.map((col) => (
-          <td key={col} className="px-4 py-3">
-            {col === "status" ? (
+        {COLUMNS.map((col) => (
+          <td key={col} className="px-3 py-2">
+            {FK_COLUMNS.has(col) ? (
               <select
-                value={status}
-                onChange={(e) => handleStatusChange(e.target.value)}
+                value={values[col]}
+                onChange={(e) => handleSelect(col, e.target.value)}
+                disabled={isPending || (lookupOptions[col] ?? []).length === 0}
+                className={selectClass}
+              >
+                <option value="">— 선택 —</option>
+                {(lookupOptions[col] ?? []).map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            ) : ENUM_OPTIONS[col] ? (
+              <select
+                value={values[col]}
+                onChange={(e) => handleSelect(col, e.target.value)}
                 disabled={isPending}
                 className={selectClass}
               >
-                {STATUS_OPTIONS.map((s) => (
-                  <option key={s} value={s}>{s}</option>
+                {ENUM_OPTIONS[col].map((v) => (
+                  <option key={v} value={v}>{v}</option>
                 ))}
               </select>
-            ) : col === "position_id" ? (
-              <select
-                value={positionId}
-                onChange={(e) => handlePositionChange(e.target.value)}
-                disabled={isPending || positions.length === 0}
-                className={selectClass}
-              >
-                {positions.map((p) => (
-                  <option key={p.id} value={p.id}>{p.label}</option>
-                ))}
-              </select>
-            ) : col === "id" ? (
-              <span className="font-mono text-xs text-muted-foreground">
-                {String(user[col] ?? "")}
-              </span>
             ) : (
               <input
-                value={fieldValues[col] ?? ""}
+                type={DATE_COLUMNS.has(col) ? "date" : "text"}
+                value={values[col]}
                 disabled={isPending}
-                onChange={(e) => setFieldValues((prev) => ({ ...prev, [col]: e.target.value }))}
-                onBlur={(e) => handleFieldBlur(col, e.target.value)}
+                onChange={(e) => setValues((prev) => ({ ...prev, [col]: e.target.value }))}
+                onBlur={(e) => handleBlur(col, e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur() }}
                 className={cn(
-                  "w-full min-w-[80px] rounded border border-transparent bg-transparent px-1 py-0.5 font-mono text-xs outline-none hover:border-border focus:border-ring focus:ring-1 focus:ring-ring",
+                  "w-full min-w-[90px] rounded border border-transparent bg-transparent px-1 py-0.5 text-xs outline-none hover:border-border focus:border-ring focus:ring-1 focus:ring-ring",
                   isPending && "cursor-not-allowed opacity-50",
                 )}
               />
             )}
           </td>
         ))}
-        <td className="px-4 py-3">
+        <td className="px-3 py-2">
           {!isSelf && (
             <button
               onClick={handleDelete}
@@ -213,7 +200,7 @@ function UserRow({
       </tr>
       {error && (
         <tr className="border-b border-border last:border-0">
-          <td colSpan={columns.length + 1} className="px-4 py-2 text-xs text-destructive">
+          <td colSpan={COLUMNS.length + 1} className="px-3 py-2 text-xs text-destructive">
             {error}
           </td>
         </tr>

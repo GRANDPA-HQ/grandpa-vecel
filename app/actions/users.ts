@@ -39,3 +39,55 @@ export async function updateUserPosition(userId: unknown, positionId: string) {
 export async function updateUserField(userId: unknown, field: string, value: string) {
   await patchUser(userId, { [field]: value })
 }
+
+// employees와 users(레거시 호환)가 공유하는 컬럼 — 직원 정보 수정 시 함께 동기화
+const USER_SYNC_FIELDS = new Set(["name", "email", "position_id", "status"])
+
+/**
+ * 직원(employees) 필드 수정. 빈 문자열은 null로 저장한다.
+ * 이름/이메일/직책/상태는 작성자 표시 등에 쓰이는 users 테이블에도 함께 반영한다.
+ */
+export async function updateEmployeeField(
+  employeeId: string,
+  field: string,
+  value: string,
+): Promise<{ error: string | null }> {
+  const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!
+  const payload = { [field]: value === "" ? null : value }
+
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/employees?id=eq.${encodeURIComponent(employeeId)}`,
+    {
+      method: "PATCH",
+      headers: {
+        apikey: SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+        "Content-Type": "application/json",
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify(payload),
+    },
+  )
+
+  if (!res.ok) {
+    const text = await res.text()
+    return { error: `수정 실패 (${res.status}): ${text.slice(0, 200)}` }
+  }
+
+  if (USER_SYNC_FIELDS.has(field)) {
+    // 레거시 users 행 동기화 (없거나 실패해도 무시)
+    await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${encodeURIComponent(employeeId)}`, {
+      method: "PATCH",
+      headers: {
+        apikey: SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+        "Content-Type": "application/json",
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify(payload),
+    }).catch(() => {})
+  }
+
+  revalidatePath("/dashboard/employees")
+  return { error: null }
+}
