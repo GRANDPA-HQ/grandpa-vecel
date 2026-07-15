@@ -1,9 +1,10 @@
 "use client"
 
 import Image from "next/image"
+import Link from "next/link"
 import { useState, useRef, useCallback, useEffect } from "react"
 import { useRouter, usePathname, useSearchParams } from "next/navigation"
-import { ArrowUp, ArrowDown, ArrowUpDown, ExternalLink, FileSpreadsheet, Search, Trash2 } from "lucide-react"
+import { ArrowUp, ArrowDown, ArrowUpDown, ExternalLink, FileSpreadsheet, NotebookPen, Search, Trash2 } from "lucide-react"
 import {
   Table,
   TableBody,
@@ -46,6 +47,11 @@ const ENUM_COLUMNS: Record<string, { value: string; label: string; className: st
     { value: "상온", label: "상온", className: "bg-amber-100 text-amber-700 border-amber-200" },
   ],
   "tb_sku_recipe.unit": [
+    { value: "g",  label: "g",  className: "bg-green-100 text-green-700 border-green-200" },
+    { value: "ml", label: "ml", className: "bg-blue-100 text-blue-700 border-blue-200" },
+    { value: "ea", label: "ea", className: "bg-gray-100 text-gray-700 border-gray-200" },
+  ],
+  "tb_prod_recipe.unit": [
     { value: "g",  label: "g",  className: "bg-green-100 text-green-700 border-green-200" },
     { value: "ml", label: "ml", className: "bg-blue-100 text-blue-700 border-blue-200" },
     { value: "ea", label: "ea", className: "bg-gray-100 text-gray-700 border-gray-200" },
@@ -508,6 +514,7 @@ export function DataTable({
   searchEnabled,
   searchPlaceholder,
   bulkDeleteEnabled,
+  rowLinks,
 }: {
   columns: string[]
   rows: Record<string, unknown>[]
@@ -524,6 +531,8 @@ export function DataTable({
   searchEnabled?: boolean
   searchPlaceholder?: string
   bulkDeleteEnabled?: boolean
+  // PK 값 → 내부 링크 href. 값이 있는 행에만 링크 컬럼(header)을 표시한다
+  rowLinks?: { header: string; hrefByPk: Record<string, string> }
 }) {
   const [rows, setRows] = useState(initialRows)
   const [errors, setErrors] = useState<ErrorEntry[]>([])
@@ -654,6 +663,7 @@ export function DataTable({
 
   const editable = !!tableName && !!pkColumn
   const bulkSelectable = editable && !!bulkDeleteEnabled
+  const hasLinkColumn = !!rowLinks && !!pkColumn
 
   const [selectedPks, setSelectedPks] = useState<Set<string>>(new Set())
   const [bulkDeleting, setBulkDeleting] = useState(false)
@@ -806,6 +816,11 @@ export function DataTable({
                   </TableHead>
                 )
               })}
+              {hasLinkColumn && (
+                <TableHead className="sticky top-0 z-10 whitespace-nowrap bg-card text-xs">
+                  {rowLinks!.header}
+                </TableHead>
+              )}
               {editable && (
                 <TableHead className="sticky top-0 z-10 w-10 bg-card text-xs" />
               )}
@@ -814,7 +829,7 @@ export function DataTable({
           <TableBody>
             {rows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={columns.length + (editable ? 1 : 0) + (bulkSelectable ? 1 : 0)} className="py-12 text-center text-sm text-muted-foreground">
+                <TableCell colSpan={columns.length + (editable ? 1 : 0) + (bulkSelectable ? 1 : 0) + (hasLinkColumn ? 1 : 0)} className="py-12 text-center text-sm text-muted-foreground">
                   데이터가 없습니다.
                 </TableCell>
               </TableRow>
@@ -856,6 +871,24 @@ export function DataTable({
                     )}
                   </TableCell>
                 ))}
+                {hasLinkColumn && (
+                  <TableCell className="align-top">
+                    {(() => {
+                      const href = rowLinks!.hrefByPk[String(row[pkColumn!] ?? "")]
+                      if (!href) return <span className="text-xs text-muted-foreground">-</span>
+                      return (
+                        <Link
+                          href={href}
+                          title="레시피 작성 페이지에서 열기"
+                          className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-indigo-500/10 px-2 py-0.5 text-xs font-medium text-indigo-600 hover:bg-indigo-500/20"
+                        >
+                          <NotebookPen className="h-3 w-3 shrink-0" />
+                          레시피
+                        </Link>
+                      )
+                    })()}
+                  </TableCell>
+                )}
                 {editable && (
                   <TableCell className="align-top">
                     {(() => {
@@ -880,7 +913,7 @@ export function DataTable({
             {cursor && (
               <tr>
                 <td
-                  colSpan={columns.length + (editable ? 1 : 0) + (bulkSelectable ? 1 : 0)}
+                  colSpan={columns.length + (editable ? 1 : 0) + (bulkSelectable ? 1 : 0) + (hasLinkColumn ? 1 : 0)}
                   className="p-0"
                 >
                   <div ref={sentinelRef} className="flex h-10 items-center justify-center text-xs text-muted-foreground">

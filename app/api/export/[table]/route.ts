@@ -6,6 +6,7 @@ import {
   getAllTableRows,
   getSkuOptions,
   getProdOptions,
+  getRawOptions,
   getCategoryIdMap,
   getIdLabelOptions,
 } from "@/lib/supabase/db"
@@ -69,6 +70,22 @@ export async function GET(
         idInColumns = [
           { column: "sku_id",  ids: skuOpts.filter((o) => norm(o.label).includes(nq)).map((o) => o.value) },
           { column: "prod_id", ids: prodOpts.filter((o) => norm(o.label).includes(nq)).map((o) => o.value) },
+        ]
+      }
+    }
+    if (tableName === "tb_prod_recipe") {
+      const [prodOpts, rawOpts] = await Promise.all([
+        getProdOptions().catch(() => []),
+        getRawOptions().catch(() => []),
+      ])
+      columnResolvers["prod_id"] = Object.fromEntries(prodOpts.map((o) => [o.value, o.label]))
+      columnResolvers["raw_id"]  = Object.fromEntries(rawOpts.map((o) => [o.value, o.label]))
+      if (searchQuery) {
+        const norm = (s: string) => s.replace(/\s+/g, "").toLowerCase()
+        const nq = norm(searchQuery)
+        idInColumns = [
+          { column: "prod_id", ids: prodOpts.filter((o) => norm(o.label).includes(nq)).map((o) => o.value) },
+          { column: "raw_id",  ids: rawOpts.filter((o) => norm(o.label).includes(nq)).map((o) => o.value) },
         ]
       }
     }

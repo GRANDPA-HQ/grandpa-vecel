@@ -47,13 +47,15 @@ export const COLUMN_LABELS: Record<string, string> = {
   approved_by: "승인자 ID",
   step_order: "순서",
   amount_g: "중량(g)",
-  // SKU 레시피 (tb_sku_recipe)
+  // SKU 레시피 (tb_sku_recipe) · 생산품 레시피 (tb_prod_recipe)
   input_id: "레시피 ID",
   sku_id: "SKU",
   prod_id: "생산품",
+  raw_id: "원자재",
   amount: "수량",
   unit: "단위",
   memo: "메모",
+  sort_order: "순서",
   // 사용자 (users)
   email: "이메일",
   password: "비밀번호",

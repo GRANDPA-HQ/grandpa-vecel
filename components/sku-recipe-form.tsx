@@ -84,12 +84,15 @@ export function SkuRecipeForm({
   prodOptions,
   prodLabelById,
   initialRecipes,
+  initialSkuId,
 }: {
   skuOptions: SelectOption[]
   prodOptions: SelectOption[]
   // 드롭다운 필터(PREP/COOK) 밖의 생산품을 기존 레시피가 참조할 때 라벨 표시용
   prodLabelById?: Record<string, string>
   initialRecipes: InitialRecipe[]
+  // URL(?sku=)로 전달된 SKU — 마운트 시 해당 SKU 탭을 열어 선택 상태로 시작
+  initialSkuId?: string
 }) {
   const [isPending, startTransition] = useTransition()
   const [tabs, setTabs] = useState<SkuTab[]>([createTab()])
@@ -97,6 +100,9 @@ export function SkuRecipeForm({
   const [msg, setMsg] = useState<{ type: "success" | "error"; text: string } | null>(null)
   const [tabQuery, setTabQuery] = useState("")
   const [dragId, setDragId] = useState<string | null>(null)
+  // 행 드래그 순서 변경: armed = 핸들을 누른 행만 draggable로 만들어 입력 필드 조작과 충돌 방지
+  const [rowDragId, setRowDragId] = useState<string | null>(null)
+  const [rowDragArmed, setRowDragArmed] = useState<string | null>(null)
   const [draftReady, setDraftReady] = useState(false)
 
   function flash(type: "success" | "error", text: string) {
@@ -105,16 +111,39 @@ export function SkuRecipeForm({
   }
 
   // 마운트 시 임시저장된 초안이 있으면 복원 (SSR 하이드레이션 이후에 실행)
+  // URL(?sku=)로 전달된 SKU가 있으면 초안 복원 후 해당 SKU 탭을 열어 활성화한다
   useEffect(() => {
     const draft = loadDraft()
-    if (draft) {
-      setTabs(draft.tabs)
-      setActiveId(
-        draft.tabs.some((t) => t.localId === draft.activeId) ? draft.activeId : draft.tabs[0].localId,
-      )
-      flash("success", "임시저장된 작성 내용을 불러왔습니다.")
+    let nextTabs = draft ? draft.tabs : null
+    let nextActiveId = draft
+      ? draft.tabs.some((t) => t.localId === draft.activeId)
+        ? draft.activeId
+        : draft.tabs[0].localId
+      : null
+    if (draft) flash("success", "임시저장된 작성 내용을 불러왔습니다.")
+
+    if (initialSkuId && skuOptions.some((o) => o.value === initialSkuId)) {
+      const baseTabs = nextTabs ?? tabs
+      const existingTab = baseTabs.find((t) => t.skuId === initialSkuId)
+      if (existingTab) {
+        nextActiveId = existingTab.localId
+      } else {
+        const existing = initialRecipes.filter((r) => r.sku_id === initialSkuId)
+        const tab: SkuTab = {
+          localId: crypto.randomUUID(),
+          skuId: initialSkuId,
+          rows: existing.length > 0 ? toRows(existing) : [createRow()],
+        }
+        // 빈 기본 탭 하나뿐이면 교체, 초안 등 작성 중 내용이 있으면 탭 추가
+        nextTabs = hasDraftContent(baseTabs) ? [...baseTabs, tab] : [tab]
+        nextActiveId = tab.localId
+      }
     }
+
+    if (nextTabs) setTabs(nextTabs)
+    if (nextActiveId) setActiveId(nextActiveId)
     setDraftReady(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // 작성 내용이 바뀔 때마다 자동 임시저장 (내용이 비면 초안 삭제)
@@ -201,6 +230,30 @@ export function SkuRecipeForm({
       ),
     )
   }
+
+  function moveRow(fromId: string, toId: string) {
+    if (fromId === toId) return
+    setTabs((prev) =>
+      prev.map((t) => {
+        if (t.localId !== activeId) return t
+        const fromIdx = t.rows.findIndex((r) => r.localId === fromId)
+        const toIdx = t.rows.findIndex((r) => r.localId === toId)
+        if (fromIdx === -1 || toIdx === -1) return t
+        const rows = [...t.rows]
+        const [moved] = rows.splice(fromIdx, 1)
+        rows.splice(toIdx, 0, moved)
+        return { ...t, rows }
+      }),
+    )
+  }
+
+  // 핸들을 누른 채 드래그하지 않고 놓았을 때 armed 상태가 남지 않도록 정리
+  useEffect(() => {
+    if (!rowDragArmed) return
+    const clear = () => setRowDragArmed(null)
+    window.addEventListener("mouseup", clear)
+    return () => window.removeEventListener("mouseup", clear)
+  }, [rowDragArmed])
 
   // ── 저장 (선택된 모든 탭) ──────────────────────────
   function handleSaveAll() {
@@ -357,7 +410,7 @@ export function SkuRecipeForm({
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-muted/50 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  <th className="w-12 px-4 py-3 text-center">#</th>
+                  <th className="w-16 px-4 py-3 text-center">#</th>
                   <th className="px-4 py-3">생산품</th>
                   <th className="w-32 px-4 py-3">수량</th>
                   <th className="w-24 px-4 py-3">단위</th>
@@ -367,10 +420,44 @@ export function SkuRecipeForm({
               </thead>
               <tbody className="divide-y divide-border">
                 {active.rows.map((row, idx) => (
-                  <tr key={row.localId} className="group transition-colors hover:bg-muted/30">
-                    <td className="px-4 py-2.5 text-center">
-                      <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-indigo-500/10 text-xs font-bold text-indigo-600">
-                        {idx + 1}
+                  <tr
+                    key={row.localId}
+                    draggable={rowDragArmed === row.localId}
+                    onDragStart={(e) => {
+                      setRowDragId(row.localId)
+                      e.dataTransfer.effectAllowed = "move"
+                    }}
+                    onDragOver={(e) => {
+                      if (rowDragId) e.preventDefault()
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault()
+                      if (rowDragId) moveRow(rowDragId, row.localId)
+                      setRowDragId(null)
+                      setRowDragArmed(null)
+                    }}
+                    onDragEnd={() => {
+                      setRowDragId(null)
+                      setRowDragArmed(null)
+                    }}
+                    className={cn(
+                      "group transition-colors hover:bg-muted/30",
+                      rowDragId === row.localId && "opacity-40",
+                    )}
+                  >
+                    <td className="px-4 py-2.5">
+                      <span className="flex items-center justify-center gap-1">
+                        <button
+                          type="button"
+                          onMouseDown={() => setRowDragArmed(row.localId)}
+                          title="드래그하여 순서 변경"
+                          className="cursor-grab text-muted-foreground/40 transition-colors hover:text-muted-foreground active:cursor-grabbing"
+                        >
+                          <GripVertical className="h-3.5 w-3.5" />
+                        </button>
+                        <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-500/10 text-xs font-bold text-indigo-600">
+                          {idx + 1}
+                        </span>
                       </span>
                     </td>
 

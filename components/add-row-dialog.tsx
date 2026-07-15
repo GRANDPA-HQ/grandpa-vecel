@@ -55,12 +55,17 @@ export function AddRowDialog({
   columnOptions,
   columnMultiOptions,
   fieldOrder,
+  buttonLabel = "데이터 추가",
+  dialogTitle,
 }: {
   tableName: string
   columns: ColumnDef[]
   columnOptions?: Record<string, SelectOption[]>
   columnMultiOptions?: Record<string, MultiOption[]>
   fieldOrder?: string[]
+  // 레시피 작성 등 데이터 테이블 밖에서 쓸 때 버튼/제목 문구 교체용
+  buttonLabel?: string
+  dialogTitle?: string
 }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
@@ -147,7 +152,7 @@ export function AddRowDialog({
     <>
       <Button onClick={handleOpen} size="sm" className="gap-1.5">
         <Plus className="h-4 w-4" />
-        데이터 추가
+        {buttonLabel}
       </Button>
 
       {open && (
@@ -155,7 +160,9 @@ export function AddRowDialog({
           <div className="absolute inset-0 bg-black/50" onClick={handleClose} />
           <div className="relative z-10 flex max-h-[80vh] w-full max-w-lg flex-col rounded-xl border border-border bg-background shadow-xl">
             <div className="border-b border-border px-6 py-4">
-              <h2 className="font-mono text-base font-semibold">{tableName}</h2>
+              <h2 className={dialogTitle ? "text-base font-semibold" : "font-mono text-base font-semibold"}>
+                {dialogTitle ?? tableName}
+              </h2>
               <p className="mt-0.5 text-sm text-muted-foreground">새 데이터를 입력하세요</p>
             </div>
 
