@@ -11,7 +11,8 @@ export type RowCursor = {
 
 // 테이블별 PK 컬럼 (기본 "id" 외 추가)
 export const TABLE_PK: Record<string, string> = {
-  tb_sku_recipe: "input_id",
+  tb_sku_recipe:  "input_id",
+  tb_prod_recipe: "input_id",
 }
 
 // 테이블 한글 이름 (엑셀 파일명/시트명 등 표시에 사용)
@@ -22,6 +23,7 @@ export const TABLE_LABELS: Record<string, string> = {
   users:                 "유저",
   tb_sku_mst:            "판매품",
   tb_sku_recipe:         "판매품 레시피",
+  tb_prod_recipe:        "생산품 레시피",
   tb_production_process: "생산 공정",
   employees:             "직원",
 }
@@ -46,8 +48,10 @@ export const HIDDEN_COLS = new Set(["id", "created_at", "updated_at"])
 // 테이블별 추가 숨김 컬럼
 export const TABLE_HIDDEN_COLS: Record<string, Set<string>> = {
   tb_prod_mst:   new Set(["active", "owner", "owner_part", "part", "yield_rate"]),
-  tb_sku_mst:    new Set(["is_active"]),
-  tb_sku_recipe: new Set(["input_id"]),
+  tb_sku_mst:     new Set(["is_active"]),
+  // sort_order: 작성 화면의 드래그 순서 저장용 내부 컬럼
+  tb_sku_recipe:  new Set(["input_id", "sort_order"]),
+  tb_prod_recipe: new Set(["input_id", "sort_order"]),
 }
 
 // 테이블별 데이터 테이블 컬럼 표시 순서 (지정 안 한 나머지 컬럼은 기존 순서 그대로 뒤에 붙음)
@@ -82,6 +86,35 @@ export const ALLERGEN_OPTIONS: { value: string; label: string }[] = [
   { value: "SULFITE",    label: "아황산류" },
 ]
 
+// ── 등록 폼/데이터 테이블 공용 드롭박스 옵션 ──────────────────────
+export type SelectOption = { value: string; label: string }
+export type MultiOption = string | SelectOption
+
+export const CATEGORY_OPTIONS: SelectOption[] = [
+  "VFR","COND","BWL","BEV","MTS","HRS","FLR","SDW","ETC","SDS","NUT","DAI","YGF","SOUP","GC",
+].map((c) => ({ value: c, label: c }))
+
+export const STORAGE_OPTIONS: SelectOption[] = ["냉장", "냉동", "상온"].map((v) => ({ value: v, label: v }))
+
+export const STATUS_OPTIONS: SelectOption[] = ["SEMI", "PREP", "COOK", "UNPROC"].map((v) => ({ value: v, label: v }))
+
+export const UNIT_OPTIONS: SelectOption[] = ["g", "ml", "ea"].map((v) => ({ value: v, label: v }))
+
+export const SKU_MULTI_OPTIONS: Record<string, MultiOption[]> = {
+  concept_tags:   ["Daily Balance", "Light & Clean", "Protein Care", "Digestive Comfort", "Recovery Food"],
+  meal_time_tags: ["Breakfast", "Lunch", "Dinner"],
+  diet_tags:      ["Vegan", "Vegetarian", "Lacto-Ovo"],
+  nutrition_tags: ["Gluten-Free", "Low-Carb", "No Sugar", "Low-Sodium", "High-Protein", "Dairy-Free", "Caffeine-Free"],
+  allergen_tags:  ALLERGEN_OPTIONS,
+}
+
+// 테이블별 등록 폼 입력 순서 (지정 안 한 나머지 컬럼은 기존 순서 그대로 뒤에 붙음)
+export const TABLE_FIELD_ORDER: Record<string, string[]> = {
+  tb_sku_mst:  ["category_code", "sku_code"],
+  tb_raw_mst:  ["category_code", "raw_code"],
+  tb_prod_mst: ["category_code", "prod_code"],
+}
+
 // 테이블별 기본 정렬 컬럼
 export const TABLE_DEFAULT_SORT: Record<string, { column: string; dir: "asc" | "desc" }> = {
   tb_sku_mst:      { column: "sku_code", dir: "asc" },
@@ -90,6 +123,8 @@ export const TABLE_DEFAULT_SORT: Record<string, { column: string; dir: "asc" | "
   tb_category_mst: { column: "category_code", dir: "asc" },
   // 같은 SKU에 속한 재료끼리 뒤섞이지 않고 모여서 보이도록 SKU 기준 정렬
   tb_sku_recipe:   { column: "sku_id", dir: "asc" },
+  // 같은 생산품에 속한 원자재끼리 모여서 보이도록 생산품 기준 정렬
+  tb_prod_recipe:  { column: "prod_id", dir: "asc" },
   employees:       { column: "name", dir: "asc" },
 }
 
@@ -103,5 +138,6 @@ export const TABLE_SEARCH_COLUMNS: Record<string, string[]> = {
   // sku_id/prod_id는 UUID라 직접 검색이 안 되므로, SKU/생산품 코드·이름은
   // id 목록으로 변환해 별도로 검색한다 (memo만 텍스트로 직접 검색)
   tb_sku_recipe:   ["memo"],
+  tb_prod_recipe:  ["memo"],
   employees:       ["name", "phone", "email"],
 }

@@ -1,4 +1,5 @@
-import { getTables, getTableRows, getCategoryIdMap, getSkuOptions, getProdOptions, getIdLabelOptions } from "@/lib/supabase/db"
+import { getTables, getTableRows, getCategoryIdMap, getSkuOptions, getProdOptions, getRawOptions, getIdLabelOptions } from "@/lib/supabase/db"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { DataTable } from "@/components/data-table"
 import { AddRowDialog, type ColumnDef } from "@/components/add-row-dialog"
 import {
@@ -11,11 +12,16 @@ import {
   TABLE_COLUMN_ORDER,
   ALLERGEN_OPTIONS,
   EMPLOYEE_FK_LOOKUPS,
+  CATEGORY_OPTIONS,
+  STORAGE_OPTIONS,
+  STATUS_OPTIONS,
+  UNIT_OPTIONS,
+  SKU_MULTI_OPTIONS,
+  TABLE_FIELD_ORDER,
+  type SelectOption,
 } from "@/lib/table-config"
 
-type SelectOption = { value: string; label: string }
-
-const INSERTABLE_TABLES = new Set(["tb_prod_mst", "tb_raw_mst", "tb_sku_mst", "tb_sku_recipe"])
+const INSERTABLE_TABLES = new Set(["tb_prod_mst", "tb_raw_mst", "tb_sku_mst", "tb_sku_recipe", "tb_prod_recipe"])
 
 // 체크박스 선택 일괄 삭제를 지원하는 테이블
 const BULK_DELETE_TABLES = new Set(["tb_raw_mst", "tb_prod_mst", "tb_sku_mst"])
@@ -23,40 +29,15 @@ const BULK_DELETE_TABLES = new Set(["tb_raw_mst", "tb_prod_mst", "tb_sku_mst"])
 // 카테고리 드롭박스를 사용할 테이블
 const CATEGORY_TABLES = new Set(["tb_prod_mst", "tb_raw_mst", "tb_sku_mst"])
 
-// 테이블별 등록 폼 입력 순서 (지정 안 한 나머지 컬럼은 기존 순서 그대로 뒤에 붙음)
-const TABLE_FIELD_ORDER: Record<string, string[]> = {
-  tb_sku_mst:  ["category_code", "sku_code"],
-  tb_raw_mst:  ["category_code", "raw_code"],
-  tb_prod_mst: ["category_code", "prod_code"],
-}
-
 // 테이블별 검색창 placeholder (지정 없으면 검색 대상 컬럼명을 그대로 사용)
 const TABLE_SEARCH_PLACEHOLDER: Record<string, string> = {
-  tb_sku_recipe: "SKU/생산품 코드·이름, 메모 검색",
+  tb_sku_recipe:  "SKU/생산품 코드·이름, 메모 검색",
+  tb_prod_recipe: "생산품/원자재 코드·이름, 메모 검색",
 }
 
-const CATEGORY_OPTIONS: SelectOption[] = [
-  "VFR","COND","BWL","BEV","MTS","HRS","FLR","SDW","ETC","SDS","NUT","DAI","YGF","SOUP","GC",
-].map((c) => ({ value: c, label: c }))
-
-const STORAGE_OPTIONS: SelectOption[] = ["냉장", "냉동", "상온"].map((v) => ({ value: v, label: v }))
 const STORAGE_TABLES = new Set(["tb_prod_mst", "tb_raw_mst"])
-
-const STATUS_OPTIONS: SelectOption[] = ["SEMI", "PREP", "COOK", "UNPROC"].map((v) => ({ value: v, label: v }))
 const STATUS_TABLES = new Set(["tb_prod_mst"])
-
-const UNIT_OPTIONS: SelectOption[] = ["g", "ml", "EA"].map((v) => ({ value: v, label: v }))
 const UNIT_TABLES = new Set(["tb_prod_mst"])
-
-type MultiOption = string | SelectOption
-
-const SKU_MULTI_OPTIONS: Record<string, MultiOption[]> = {
-  concept_tags:   ["Daily Balance", "Light & Clean", "Protein Care", "Digestive Comfort", "Recovery Food"],
-  meal_time_tags: ["Breakfast", "Lunch", "Dinner"],
-  diet_tags:      ["Vegan", "Vegetarian", "Lacto-Ovo"],
-  nutrition_tags: ["Gluten-Free", "Low-Carb", "No Sugar", "Low-Sodium", "High-Protein", "Dairy-Free", "Caffeine-Free"],
-  allergen_tags:  ALLERGEN_OPTIONS,
-}
 
 export default async function TablePage({
   params,
@@ -119,6 +100,32 @@ export default async function TablePage({
       recipeIdFilter = [
         { column: "sku_id",  ids: skuOpts.filter((o) => norm(o.label).includes(q)).map((o) => o.value) },
         { column: "prod_id", ids: prodOpts.filter((o) => norm(o.label).includes(q)).map((o) => o.value) },
+      ]
+    }
+  }
+
+  // tb_prod_recipe: prod_id / raw_id 드롭박스 + UUID → 이름 resolver
+  if (tableName === "tb_prod_recipe") {
+    const [prodOpts, rawOpts] = await Promise.all([
+      getProdOptions().catch(() => [] as SelectOption[]),
+      getRawOptions().catch(() => [] as SelectOption[]),
+    ])
+    columnOptions["prod_id"] = prodOpts
+    columnOptions["raw_id"]  = rawOpts
+    columnOptions["unit"]    = [
+      { value: "g",  label: "g"  },
+      { value: "ml", label: "ml" },
+      { value: "ea", label: "ea" },
+    ]
+    columnResolvers["prod_id"] = Object.fromEntries(prodOpts.map((o) => [o.value, o.label]))
+    columnResolvers["raw_id"]  = Object.fromEntries(rawOpts.map((o) => [o.value, o.label]))
+
+    if (searchQuery) {
+      const norm = (s: string) => s.replace(/\s+/g, "").toLowerCase()
+      const q = norm(searchQuery)
+      recipeIdFilter = [
+        { column: "prod_id", ids: prodOpts.filter((o) => norm(o.label).includes(q)).map((o) => o.value) },
+        { column: "raw_id",  ids: rawOpts.filter((o) => norm(o.label).includes(q)).map((o) => o.value) },
       ]
     }
   }
@@ -190,6 +197,31 @@ export default async function TablePage({
     columnResolvers["allergen_tags"] = Object.fromEntries(ALLERGEN_OPTIONS.map((o) => [o.value, o.label]))
   }
 
+  // tb_sku_mst: 레시피(tb_sku_recipe)가 등록된 SKU에 레시피 작성 페이지로 가는 링크 표시
+  // URL은 UUID 대신 sku_code를 사용해 짧게 유지 (/dashboard/production-write?sku=VFR_001)
+  let rowLinks: { header: string; hrefByPk: Record<string, string> } | undefined
+  if (tableName === "tb_sku_mst") {
+    try {
+      const admin = createAdminClient()
+      const { data: recipeRows } = await admin.from("tb_sku_recipe").select("sku_id")
+      const skuIds = Array.from(new Set((recipeRows ?? []).map((r) => r.sku_id as string).filter(Boolean)))
+      if (skuIds.length > 0) {
+        const { data: skus } = await admin.from("tb_sku_mst").select("id,sku_code").in("id", skuIds)
+        rowLinks = {
+          header: "레시피",
+          hrefByPk: Object.fromEntries(
+            (skus ?? [])
+              .filter((s) => s.sku_code)
+              .map((s) => [
+                s.id as string,
+                `/dashboard/production-write?sku=${encodeURIComponent(s.sku_code as string)}`,
+              ]),
+          ),
+        }
+      }
+    } catch {}
+  }
+
   // FK 컬럼 → 사람이 읽을 수 있는 값으로 변환 (catgegory_id → category_code)
   // tb_sku_mst는 category_code 직접 컬럼으로 변경되어 resolver 불필요
   if (CATEGORY_TABLES.has(tableName) && tableName !== "tb_sku_mst") {
@@ -242,6 +274,7 @@ export default async function TablePage({
           searchEnabled={searchEnabled}
           searchPlaceholder={searchEnabled ? TABLE_SEARCH_PLACEHOLDER[tableName] ?? `${searchColumns.join(", ")} 검색` : undefined}
           bulkDeleteEnabled={BULK_DELETE_TABLES.has(tableName)}
+          rowLinks={rowLinks}
         />
       )}
     </div>

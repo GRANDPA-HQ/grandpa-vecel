@@ -400,6 +400,22 @@ export async function getProdOptions(): Promise<{ value: string; label: string }
 }
 
 /**
+ * Fetch id → display label mapping for tb_raw_mst (used in tb_prod_recipe dropdown).
+ */
+export async function getRawOptions(): Promise<{ value: string; label: string }[]> {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/tb_raw_mst?select=id,raw_code,raw_name&order=raw_code`,
+    { headers: authHeaders(), cache: "no-store" },
+  )
+  if (!res.ok) return []
+  const rows = (await res.json()) as { id: string; raw_code?: string; raw_name?: string }[]
+  return rows.map((r) => ({
+    value: r.id,
+    label: [r.raw_code, r.raw_name].filter(Boolean).join(" · ") || r.id,
+  }))
+}
+
+/**
  * 임의 테이블의 id → 라벨 컬럼 옵션 목록 조회 (FK 드롭다운/이름 표시용).
  */
 export async function getIdLabelOptions(

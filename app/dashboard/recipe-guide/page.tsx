@@ -46,11 +46,19 @@ export default async function RecipeGuidePage() {
   // 판매 레시피(SKU별 생산품 구성) — 작성 모달 드롭다운에서 본문 삽입용
   let skuRecipes: SkuRecipeSummary[] = []
   try {
-    const [skuRes, prodRes, recipeRes] = await Promise.all([
+    const [skuRes, prodRes] = await Promise.all([
       admin.from("tb_sku_mst").select("id,sku_code,sku_name").order("sku_code"),
       admin.from("tb_prod_mst").select("id,prod_code,prod_name"),
-      admin.from("tb_sku_recipe").select("sku_id,prod_id,amount,unit,memo"),
     ])
+
+    // 작성 화면에서 드래그로 정한 행 순서(sort_order)대로 본문에 삽입되도록 정렬 조회
+    let recipeRes = await admin
+      .from("tb_sku_recipe")
+      .select("sku_id,prod_id,amount,unit,memo")
+      .order("sort_order")
+    if (recipeRes.error) {
+      recipeRes = await admin.from("tb_sku_recipe").select("sku_id,prod_id,amount,unit,memo")
+    }
 
     const prodLabels = new Map(
       (prodRes.data ?? []).map((p) => [
