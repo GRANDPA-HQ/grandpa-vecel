@@ -2,7 +2,8 @@
 
 import { useState, useTransition, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
-import { Plus } from "lucide-react"
+import { Plus, Eye, EyeOff } from "lucide-react"
+import { useDraggableModal } from "@/components/use-draggable-modal"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -73,6 +74,8 @@ export function AddRowDialog({
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
   const lastAutoCode = useRef<string | null>(null)
+  // 뒤의 내용을 보며 작성할 수 있도록 창 드래그 이동 + 임시 숨기기 지원
+  const { offset, hidden, setHidden, startDrag, resetModal } = useDraggableModal()
 
   const orderedColumns = fieldOrder
     ? [
@@ -104,7 +107,8 @@ export function AddRowDialog({
   }, [tableName, categoryValue])
 
   useEffect(() => {
-    if (!open) return
+    // 임시 숨김 중에는 뒤 내용을 스크롤할 수 있도록 잠금 해제
+    if (!open || hidden) return
     document.body.style.overflow = "hidden"
     const handleEsc = (e: KeyboardEvent) => {
       if (e.key === "Escape") handleClose()
@@ -115,12 +119,13 @@ export function AddRowDialog({
       document.removeEventListener("keydown", handleEsc)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open])
+  }, [open, hidden])
 
   function handleOpen() {
     setValues({})
     setError(null)
     lastAutoCode.current = null
+    resetModal()
     setOpen(true)
   }
 
@@ -155,15 +160,44 @@ export function AddRowDialog({
         {buttonLabel}
       </Button>
 
-      {open && (
+      {open && hidden && (
+        <button
+          type="button"
+          onClick={() => setHidden(false)}
+          className="fixed bottom-4 right-4 z-50 inline-flex items-center gap-2 rounded-full border border-border bg-background px-4 py-2 text-sm font-medium shadow-lg transition-colors hover:bg-accent"
+        >
+          <Eye className="h-4 w-4" />
+          작성 중인 입력창 열기
+        </button>
+      )}
+
+      {open && !hidden && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50" onClick={handleClose} />
-          <div className="relative z-10 flex max-h-[80vh] w-full max-w-lg flex-col rounded-xl border border-border bg-background shadow-xl">
-            <div className="border-b border-border px-6 py-4">
-              <h2 className={dialogTitle ? "text-base font-semibold" : "font-mono text-base font-semibold"}>
-                {dialogTitle ?? tableName}
-              </h2>
-              <p className="mt-0.5 text-sm text-muted-foreground">새 데이터를 입력하세요</p>
+          <div
+            className="relative z-10 flex max-h-[80vh] w-full max-w-lg flex-col rounded-xl border border-border bg-background shadow-xl"
+            style={{ transform: `translate(${offset.x}px, ${offset.y}px)` }}
+          >
+            <div
+              onMouseDown={startDrag}
+              title="드래그하여 창 이동"
+              className="flex cursor-move select-none items-start justify-between border-b border-border px-6 py-4"
+            >
+              <div>
+                <h2 className={dialogTitle ? "text-base font-semibold" : "font-mono text-base font-semibold"}>
+                  {dialogTitle ?? tableName}
+                </h2>
+                <p className="mt-0.5 text-sm text-muted-foreground">새 데이터를 입력하세요 · 이 영역을 드래그하면 창이 이동됩니다</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setHidden(true)}
+                title="창을 잠시 숨기고 뒤 내용 보기 (입력 내용 유지)"
+                className="inline-flex shrink-0 items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                <EyeOff className="h-3 w-3" />
+                임시 숨기기
+              </button>
             </div>
 
             <form onSubmit={handleSubmit} className="flex flex-col overflow-hidden">

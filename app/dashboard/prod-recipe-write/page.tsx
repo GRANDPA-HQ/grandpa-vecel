@@ -23,7 +23,7 @@ export default async function ProdRecipeWritePage() {
     admin.from("tb_prod_mst").select("id,prod_code,prod_name").order("prod_code"),
     admin
       .from("tb_raw_mst")
-      .select("id,raw_code,raw_name,kcal_100g,carb_100g,protein_100g,fat_100g")
+      .select("id,raw_code,raw_name,usage_unit,kcal_100g,carb_100g,protein_100g,fat_100g")
       .order("raw_code"),
   ])
 
@@ -45,6 +45,11 @@ export default async function ProdRecipeWritePage() {
     value: r.id as string,
     label: [r.raw_code, r.raw_name].filter(Boolean).join(" · "),
   }))
+
+  // 원자재에 등록된 사용 단위 — 레시피 행에서 원자재 선택 시 단위 자동 입력용
+  const rawUnitById = Object.fromEntries(
+    (rawRes.data ?? []).filter((r) => r.usage_unit).map((r) => [r.id as string, String(r.usage_unit)]),
+  ) as Record<string, string>
 
   // 원자재 100g 기준 영양성분 — 폼에서 투입량 기준 합계 자동 계산에 사용
   const rawNutritionById = Object.fromEntries(
@@ -101,6 +106,7 @@ export default async function ProdRecipeWritePage() {
       <ProdRecipeForm
         prodOptions={prodOptions}
         rawOptions={rawOptions}
+        rawUnitById={rawUnitById}
         rawNutritionById={rawNutritionById}
         initialRecipes={initialRecipes}
       />

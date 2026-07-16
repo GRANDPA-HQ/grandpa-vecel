@@ -83,6 +83,7 @@ export function SkuRecipeForm({
   skuOptions,
   prodOptions,
   prodLabelById,
+  prodUnitById,
   initialRecipes,
   initialSkuId,
 }: {
@@ -90,6 +91,8 @@ export function SkuRecipeForm({
   prodOptions: SelectOption[]
   // 드롭다운 필터(PREP/COOK) 밖의 생산품을 기존 레시피가 참조할 때 라벨 표시용
   prodLabelById?: Record<string, string>
+  // 생산품에 등록된 단위 — 생산품 선택 시 행의 단위를 자동으로 맞춘다
+  prodUnitById?: Record<string, string>
   initialRecipes: InitialRecipe[]
   // URL(?sku=)로 전달된 SKU — 마운트 시 해당 SKU 탭을 열어 선택 상태로 시작
   initialSkuId?: string
@@ -209,6 +212,24 @@ export function SkuRecipeForm({
         t.localId !== activeId
           ? t
           : { ...t, rows: t.rows.map((r) => (r.localId === rowId ? { ...r, [field]: value } : r)) },
+      ),
+    )
+  }
+
+  // 생산품 선택 시 해당 생산품에 등록된 단위(g/ml/ea)를 자동 적용
+  function handleProdSelect(rowId: string, prodId: string) {
+    const unit = prodUnitById?.[prodId]?.toLowerCase()
+    const autoUnit = unit === "g" || unit === "ml" || unit === "ea" ? unit : null
+    setTabs((prev) =>
+      prev.map((t) =>
+        t.localId !== activeId
+          ? t
+          : {
+              ...t,
+              rows: t.rows.map((r) =>
+                r.localId === rowId ? { ...r, prodId, unit: autoUnit ?? r.unit } : r,
+              ),
+            },
       ),
     )
   }
@@ -464,7 +485,7 @@ export function SkuRecipeForm({
                     <td className="px-4 py-2">
                       <SearchableSelect
                         value={row.prodId}
-                        onChange={(v) => updateRow(row.localId, "prodId", v)}
+                        onChange={(v) => handleProdSelect(row.localId, v)}
                         placeholder="— 선택 —"
                         searchPlaceholder="생산품 검색..."
                         options={

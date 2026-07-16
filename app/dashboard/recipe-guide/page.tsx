@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { RecipeGuideList } from "@/components/recipe-guide-list"
 import type { SkuRecipeSummary } from "@/components/recipe-guide-composer"
+import { renderRecipeEmbeds } from "@/lib/recipe-embed"
 
 type RecipeGuide = {
   id: string
@@ -90,6 +91,14 @@ export default async function RecipeGuidePage() {
     // 판매 레시피 조회 실패 시 드롭다운만 숨김 (가이드 목록은 정상 표시)
   }
 
+  // 본문의 레시피 라이브 마커를 조회 시점의 최신 구성으로 치환 (표시용)
+  // 원본 content는 수정 모달에서 마커 상태 그대로 편집되도록 유지한다
+  const recipesBySkuId = new Map(skuRecipes.map((r) => [r.skuId, r]))
+  const guidesForDisplay = guides.map((g) => ({
+    ...g,
+    displayContent: renderRecipeEmbeds(g.content, recipesBySkuId),
+  }))
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -102,7 +111,7 @@ export default async function RecipeGuidePage() {
           {error}
         </div>
       ) : (
-        <RecipeGuideList guides={guides} authorName={authorName} skuRecipes={skuRecipes} />
+        <RecipeGuideList guides={guidesForDisplay} authorName={authorName} skuRecipes={skuRecipes} />
       )}
     </div>
   )

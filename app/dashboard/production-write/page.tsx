@@ -20,7 +20,7 @@ export default async function ProductionWritePage({
 
   const [skuRes, prodRes] = await Promise.all([
     admin.from("tb_sku_mst").select("id,sku_code,sku_name").order("sku_code"),
-    admin.from("tb_prod_mst").select("id,prod_code,prod_name,status").order("prod_code"),
+    admin.from("tb_prod_mst").select("id,prod_code,prod_name,status,unit").order("prod_code"),
   ])
 
   // 드래그로 정한 행 순서(sort_order)대로 조회 — 컬럼이 아직 없는 DB에서는 기존 방식 폴백
@@ -46,6 +46,11 @@ export default async function ProductionWritePage({
       value: r.id as string,
       label: [r.prod_code, r.prod_name].filter(Boolean).join(" · "),
     }))
+
+  // 생산품에 등록된 단위 — 레시피 행에서 생산품 선택 시 단위 자동 입력용
+  const prodUnitById = Object.fromEntries(
+    allProds.filter((r) => r.unit).map((r) => [r.id as string, String(r.unit)]),
+  ) as Record<string, string>
 
   // 기존 레시피가 참조 중인 필터 밖 생산품(SEMI 등)의 라벨 표시용 전체 맵
   const prodLabelById = Object.fromEntries(
@@ -98,6 +103,7 @@ export default async function ProductionWritePage({
         skuOptions={skuOptions}
         prodOptions={prodOptions}
         prodLabelById={prodLabelById}
+        prodUnitById={prodUnitById}
         initialRecipes={initialRecipes}
         initialSkuId={initialSkuId}
       />

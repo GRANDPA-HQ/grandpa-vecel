@@ -208,6 +208,22 @@
   outline: 2px solid var(--ring);
 }
 
+/* 레시피 라이브 마커 칩 (편집 모드) — 게시 시 최신 레시피 구성으로 치환됨 */
+.tiptap-editor .ProseMirror div.sku-recipe-embed {
+  margin: 0.5em 0;
+  padding: 0.5em 0.75em;
+  border: 1px dashed var(--ring);
+  border-radius: 0.5rem;
+  background: color-mix(in oklab, var(--primary) 6%, transparent);
+  font-size: 0.8125rem;
+  color: var(--muted-foreground);
+  cursor: default;
+  user-select: none;
+}
+.tiptap-editor .ProseMirror div.sku-recipe-embed.ProseMirror-selectednode {
+  outline: 2px solid var(--ring);
+}
+
 .tiptap-editor .ProseMirror p.is-editor-empty:first-child::before {
   color: var(--muted-foreground);
   content: attr(data-placeholder);
