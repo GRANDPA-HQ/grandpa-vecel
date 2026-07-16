@@ -91,6 +91,19 @@ export default async function RecipeGuidePage() {
     // 판매 레시피 조회 실패 시 드롭다운만 숨김 (가이드 목록은 정상 표시)
   }
 
+  // 분류 목록 (recipe_guide_categories 테이블) — 테이블이 아직 없으면 null로
+  // 두고 기존 방식(기본값 + 가이드에서 쓰인 분류)으로 동작한다
+  let managedCategories: { id: string; name: string }[] | null = null
+  {
+    const { data, error: catError } = await admin
+      .from("recipe_guide_categories")
+      .select("id,name")
+      .order("name")
+    if (!catError) {
+      managedCategories = (data ?? []).map((c) => ({ id: String(c.id), name: String(c.name) }))
+    }
+  }
+
   // 본문의 레시피 라이브 마커를 조회 시점의 최신 구성으로 치환 (표시용)
   // 원본 content는 수정 모달에서 마커 상태 그대로 편집되도록 유지한다
   const recipesBySkuId = new Map(skuRecipes.map((r) => [r.skuId, r]))
@@ -111,7 +124,12 @@ export default async function RecipeGuidePage() {
           {error}
         </div>
       ) : (
-        <RecipeGuideList guides={guidesForDisplay} authorName={authorName} skuRecipes={skuRecipes} />
+        <RecipeGuideList
+          guides={guidesForDisplay}
+          authorName={authorName}
+          skuRecipes={skuRecipes}
+          managedCategories={managedCategories}
+        />
       )}
     </div>
   )
