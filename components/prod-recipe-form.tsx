@@ -95,11 +95,14 @@ function fmt(n: number): string {
 export function ProdRecipeForm({
   prodOptions,
   rawOptions,
+  rawUnitById,
   rawNutritionById,
   initialRecipes,
 }: {
   prodOptions: SelectOption[]
   rawOptions: SelectOption[]
+  // 원자재에 등록된 사용 단위 — 원자재 선택 시 행의 단위를 자동으로 맞춘다
+  rawUnitById?: Record<string, string>
   rawNutritionById: Record<string, RawNutrition>
   initialRecipes: InitialProdRecipe[]
 }) {
@@ -233,6 +236,24 @@ export function ProdRecipeForm({
         t.localId !== activeId
           ? t
           : { ...t, rows: t.rows.map((r) => (r.localId === rowId ? { ...r, [field]: value } : r)) },
+      ),
+    )
+  }
+
+  // 원자재 선택 시 해당 원자재에 등록된 사용 단위(g/ml/ea)를 자동 적용
+  function handleRawSelect(rowId: string, rawId: string) {
+    const unit = rawUnitById?.[rawId]?.toLowerCase()
+    const autoUnit = unit === "g" || unit === "ml" || unit === "ea" ? unit : null
+    setTabs((prev) =>
+      prev.map((t) =>
+        t.localId !== activeId
+          ? t
+          : {
+              ...t,
+              rows: t.rows.map((r) =>
+                r.localId === rowId ? { ...r, rawId, unit: autoUnit ?? r.unit } : r,
+              ),
+            },
       ),
     )
   }
@@ -500,7 +521,7 @@ export function ProdRecipeForm({
                       <td className="px-4 py-2">
                         <SearchableSelect
                           value={row.rawId}
-                          onChange={(v) => updateRow(row.localId, "rawId", v)}
+                          onChange={(v) => handleRawSelect(row.localId, v)}
                           placeholder="— 선택 —"
                           searchPlaceholder="원자재 검색..."
                           options={rawOptions.map((opt) => ({ value: opt.value, label: opt.label }))}

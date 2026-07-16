@@ -9,6 +9,7 @@ import TextAlignExtension from "@tiptap/extension-text-align"
 import { TextStyle, FontFamily, FontSize, Color } from "@tiptap/extension-text-style"
 import { Highlight as HighlightExtension } from "@tiptap/extension-highlight"
 import { Placeholder as PlaceholderExtension } from "@tiptap/extension-placeholder"
+import { SkuRecipeEmbed } from "@/components/sku-recipe-embed"
 import { useRef, useCallback, useEffect } from "react"
 import {
   Bold,
@@ -109,6 +110,7 @@ export function RichTextEditor({
       HighlightExtension.configure({ multicolor: true }),
       ImageExtension.configure({ inline: false, allowBase64: true }),
       YoutubeExtension.configure({ nocookie: true, width: 480, height: 270 }),
+      SkuRecipeEmbed,
       PlaceholderExtension.configure({ placeholder }),
     ],
     onUpdate({ editor }) {

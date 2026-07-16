@@ -537,11 +537,6 @@ export function DataTable({
   const [rows, setRows] = useState(initialRows)
   const [errors, setErrors] = useState<ErrorEntry[]>([])
   const errorCounter = useRef(0)
-  const [viewCell, setViewCell] = useState<{ label: string; text: string } | null>(null)
-
-  const openFullView = useCallback((col: string, value: unknown) => {
-    setViewCell({ label: COLUMN_LABELS[col] ?? col, text: formatCell(value) })
-  }, [])
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -850,7 +845,6 @@ export function DataTable({
                   <TableCell
                     key={col}
                     className="max-w-[20ch] overflow-hidden font-mono text-xs align-top"
-                    onDoubleClick={() => openFullView(col, row[col])}
                   >
 
                     {editable ? (
@@ -979,27 +973,6 @@ export function DataTable({
         </div>
       )}
 
-      {viewCell && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setViewCell(null)} />
-          <div className="relative z-10 flex max-h-[80vh] w-full max-w-lg flex-col rounded-xl border border-border bg-background shadow-xl">
-            <div className="flex items-center justify-between border-b border-border px-6 py-4">
-              <h2 className="font-mono text-sm font-semibold">{viewCell.label}</h2>
-              <button
-                onClick={() => setViewCell(null)}
-                className="text-xs text-muted-foreground underline hover:text-foreground"
-              >
-                닫기
-              </button>
-            </div>
-            <div className="overflow-y-auto px-6 py-4">
-              <p className="whitespace-pre-wrap break-words font-mono text-sm">
-                {viewCell.text || <span className="text-muted-foreground">null</span>}
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

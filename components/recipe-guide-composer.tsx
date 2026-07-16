@@ -1,12 +1,14 @@
 "use client"
 
-import { useActionState, useEffect, useRef } from "react"
+import { useActionState, useEffect, useRef, useState } from "react"
 import { createRecipeGuide } from "@/app/actions/recipe-guides"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { RichTextEditor, type RichTextEditorApi } from "@/components/rich-text-editor"
 import { SearchableSelect } from "@/components/searchable-select"
-import { X, Send } from "lucide-react"
+import { X, Send, Sparkles, Eye, EyeOff } from "lucide-react"
+import { useDraggableModal } from "@/components/use-draggable-modal"
+import { cn } from "@/lib/utils"
 
 // 판매 레시피(SKU별 생산품 구성) 요약 — 드롭다운 선택 시 본문에 삽입됨
 export type SkuRecipeSummary = {
@@ -15,19 +17,14 @@ export type SkuRecipeSummary = {
   rows: { prodLabel: string; amount: number; unit: string; memo: string | null }[]
 }
 
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+function escapeAttr(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
 }
 
-// 선택한 판매 레시피를 에디터에 삽입할 HTML 블록으로 변환
-function recipeToHtml(recipe: SkuRecipeSummary): string {
-  const items = recipe.rows
-    .map((r) => {
-      const memo = r.memo ? ` <em>(${escapeHtml(r.memo)})</em>` : ""
-      return `<li><p>${escapeHtml(r.prodLabel)} — <strong>${r.amount}${escapeHtml(r.unit)}</strong>${memo}</p></li>`
-    })
-    .join("")
-  return `<h3>${escapeHtml(recipe.label)}</h3><ol>${items}</ol><p></p>`
+// 선택한 판매 레시피의 라이브 마커 — 본문에는 자리표시자만 저장되고,
+// 가이드를 볼 때 서버(lib/recipe-embed.ts)가 최신 레시피 구성으로 치환한다.
+function recipeToMarkerHtml(recipe: SkuRecipeSummary): string {
+  return `<div data-sku-recipe="${escapeAttr(recipe.skuId)}" data-label="${escapeAttr(recipe.label)}"></div><p></p>`
 }
 
 export function RecipeGuideComposer({
@@ -43,11 +40,46 @@ export function RecipeGuideComposer({
 }) {
   const [state, formAction, pending] = useActionState(createRecipeGuide, undefined)
   const editorApi = useRef<RichTextEditorApi | null>(null)
+  // 뒤의 내용을 보며 작성할 수 있도록 창 드래그 이동 + 임시 숨기기 지원
+  // (숨김은 CSS로만 처리해 에디터 작성 내용이 유지된다)
+  const { offset, hidden, setHidden, startDrag } = useDraggableModal()
+
+  // ── 제목 자동 생성 ──────────────────────────────────
+  // 분류·선택한 레시피로 "[분류] SKU명 레시피 가이드"를 만든다.
+  // 직접 입력한 제목은 덮어쓰지 않고, 비어있거나 자동 생성된 상태일 때만 갱신한다.
+  const [title, setTitle] = useState("")
+  const [category, setCategory] = useState("")
+  const lastAutoTitle = useRef<string | null>(null)
+  const lastRecipe = useRef<SkuRecipeSummary | null>(null)
+
+  function buildTitle(recipe: SkuRecipeSummary | null, cat: string): string {
+    // 라벨 "SKU_BEV_001 · 요거트 랜치"에서 이름 부분만 사용
+    const name = recipe ? (recipe.label.split("·").pop() ?? recipe.label).trim() : ""
+    const prefix = cat ? `[${cat}] ` : ""
+    if (name) return `${prefix}${name} 레시피 가이드`
+    const date = new Date().toLocaleDateString("ko-KR", { month: "long", day: "numeric" })
+    return `${prefix}${date} 레시피 가이드`
+  }
+
+  function applyAutoTitle(recipe: SkuRecipeSummary | null, cat: string, force: boolean) {
+    const next = buildTitle(recipe, cat)
+    // force(버튼 클릭)가 아니면 직접 입력한 제목은 보존
+    if (!force && title !== "" && title !== lastAutoTitle.current) return
+    lastAutoTitle.current = next
+    setTitle(next)
+  }
+
+  function handleCategoryChange(cat: string) {
+    setCategory(cat)
+    applyAutoTitle(lastRecipe.current, cat, false)
+  }
 
   function handleRecipeSelect(skuId: string) {
     const recipe = skuRecipes?.find((r) => r.skuId === skuId)
     if (!recipe) return
-    editorApi.current?.insertHtml(recipeToHtml(recipe))
+    editorApi.current?.insertHtml(recipeToMarkerHtml(recipe))
+    lastRecipe.current = recipe
+    applyAutoTitle(recipe, category, false)
   }
 
   useEffect(() => {
@@ -62,20 +94,50 @@ export function RecipeGuideComposer({
   })
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <>
+      {hidden && (
+        <button
+          type="button"
+          onClick={() => setHidden(false)}
+          className="fixed bottom-4 right-4 z-50 inline-flex items-center gap-2 rounded-full border border-border bg-background px-4 py-2 text-sm font-medium shadow-lg transition-colors hover:bg-accent"
+        >
+          <Eye className="h-4 w-4" />
+          작성 중인 가이드 열기
+        </button>
+      )}
+
+    <div className={cn("fixed inset-0 z-50 flex items-center justify-center p-4", hidden && "hidden")}>
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
 
-      <div className="relative z-10 flex h-[90vh] w-full max-w-3xl flex-col rounded-2xl border border-border bg-background shadow-2xl">
-        {/* 상단 헤더 */}
-        <div className="flex items-center justify-between border-b border-border px-5 py-3">
+      <div
+        className="relative z-10 flex h-[90vh] w-full max-w-3xl flex-col rounded-2xl border border-border bg-background shadow-2xl"
+        style={{ transform: `translate(${offset.x}px, ${offset.y}px)` }}
+      >
+        {/* 상단 헤더 (드래그하여 창 이동) */}
+        <div
+          onMouseDown={startDrag}
+          title="드래그하여 창 이동"
+          className="flex cursor-move select-none items-center justify-between border-b border-border px-5 py-3"
+        >
           <span className="text-sm font-semibold">새 레시피 가이드 작성</span>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          >
-            <X className="h-4 w-4" />
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setHidden(true)}
+              title="창을 잠시 숨기고 뒤 내용 보기 (작성 내용 유지)"
+              className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <EyeOff className="h-3 w-3" />
+              임시 숨기기
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </div>
 
         <form action={formAction} className="flex flex-1 flex-col overflow-hidden">
@@ -101,7 +163,8 @@ export function RecipeGuideComposer({
               <select
                 id="rg-category"
                 name="category"
-                defaultValue=""
+                value={category}
+                onChange={(e) => handleCategoryChange(e.target.value)}
                 className="cursor-pointer bg-transparent text-sm focus:outline-none"
               >
                 <option value="">— 분류 선택 (선택사항) —</option>
@@ -136,11 +199,22 @@ export function RecipeGuideComposer({
               <Input
                 id="rg-title"
                 name="title"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
                 placeholder="레시피 가이드 제목을 입력하세요"
                 required
                 autoFocus
                 className="h-auto border-none bg-transparent p-0 text-sm font-medium shadow-none focus-visible:ring-0"
               />
+              <button
+                type="button"
+                onClick={() => applyAutoTitle(lastRecipe.current, category, true)}
+                title="분류·선택한 레시피로 제목 자동 생성"
+                className="inline-flex shrink-0 items-center gap-1 rounded-full bg-indigo-500/10 px-2.5 py-1 text-xs font-medium text-indigo-600 transition-colors hover:bg-indigo-500/20"
+              >
+                <Sparkles className="h-3 w-3" />
+                자동 생성
+              </button>
             </div>
           </div>
 
@@ -173,5 +247,6 @@ export function RecipeGuideComposer({
         </form>
       </div>
     </div>
+    </>
   )
 }

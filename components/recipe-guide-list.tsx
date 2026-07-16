@@ -12,6 +12,8 @@ type RecipeGuide = {
   title: string
   category: string | null
   content: string
+  // 레시피 라이브 마커가 최신 구성으로 치환된 표시용 본문 (수정 시에는 원본 content 사용)
+  displayContent?: string
   created_at: string
   author: { name: string } | null
 }
@@ -65,7 +67,7 @@ function RecipeGuideCard({ item, categories }: { item: RecipeGuide; categories: 
           <div className="border-t border-border/50">
             <div
               className="recipe-content px-5 pt-4 pb-3 text-sm text-card-foreground"
-              dangerouslySetInnerHTML={{ __html: item.content }}
+              dangerouslySetInnerHTML={{ __html: item.displayContent ?? item.content }}
             />
 
             {deleteState?.error && (
