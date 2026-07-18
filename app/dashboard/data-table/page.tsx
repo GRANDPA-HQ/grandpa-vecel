@@ -1,13 +1,13 @@
 import Link from "next/link"
 import { getTableCount } from "@/lib/supabase/db"
-import { Package, Tag, Factory, Users, ClipboardList, Barcode, BookOpen, Contact } from "lucide-react"
+import { Package, Factory, ClipboardList, Barcode, BookOpen } from "lucide-react"
 
 const TABLES = [
   {
-    label: "원자재 테이블",
+    label: "원재료 테이블",
     table: "tb_raw_mst",
     icon: Package,
-    description: "원자재 마스터 데이터를 조회합니다",
+    description: "원재료 마스터 데이터를 조회합니다",
     color: "text-orange-500",
     bg: "bg-orange-50 hover:bg-orange-100 border-orange-100 hover:border-orange-300",
   },
@@ -18,6 +18,14 @@ const TABLES = [
     description: "생산품 마스터 데이터를 조회합니다",
     color: "text-emerald-500",
     bg: "bg-emerald-50 hover:bg-emerald-100 border-emerald-100 hover:border-emerald-300",
+  },
+  {
+    label: "생산품 레시피 테이블",
+    table: "tb_prod_recipe",
+    icon: ClipboardList,
+    description: "생산품별 원재료 구성 레시피를 조회합니다",
+    color: "text-teal-500",
+    bg: "bg-teal-50 hover:bg-teal-100 border-teal-100 hover:border-teal-300",
   },
   {
     label: "판매품 테이블",
@@ -34,38 +42,6 @@ const TABLES = [
     description: "판매품별 생산품 구성 레시피를 조회합니다",
     color: "text-rose-500",
     bg: "bg-rose-50 hover:bg-rose-100 border-rose-100 hover:border-rose-300",
-  },
-  {
-    label: "카테고리 테이블",
-    table: "tb_category_mst",
-    icon: Tag,
-    description: "카테고리 분류 데이터를 조회합니다",
-    color: "text-blue-500",
-    bg: "bg-blue-50 hover:bg-blue-100 border-blue-100 hover:border-blue-300",
-  },
-  {
-    label: "유저 테이블",
-    table: "users",
-    icon: Users,
-    description: "사용자 계정 데이터를 조회합니다",
-    color: "text-purple-500",
-    bg: "bg-purple-50 hover:bg-purple-100 border-purple-100 hover:border-purple-300",
-  },
-  {
-    label: "직원 테이블",
-    table: "employees",
-    icon: Contact,
-    description: "매장 직원 데이터를 조회합니다",
-    color: "text-cyan-500",
-    bg: "bg-cyan-50 hover:bg-cyan-100 border-cyan-100 hover:border-cyan-300",
-  },
-  {
-    label: "생산 공정 테이블",
-    table: "tb_production_process",
-    icon: ClipboardList,
-    description: "생산 공정 및 승인 현황을 조회합니다",
-    color: "text-teal-500",
-    bg: "bg-teal-50 hover:bg-teal-100 border-teal-100 hover:border-teal-300",
   },
 ] as const
 

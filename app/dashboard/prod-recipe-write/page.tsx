@@ -67,13 +67,18 @@ export default async function ProdRecipeWritePage() {
   // 테이블이 아직 없으면(recipeRes.error) 빈 목록으로 시작 — 저장 시점에 에러가 표시된다
   const initialRecipes = (recipeRes.data ?? []) as InitialProdRecipe[]
 
-  // 생산품 등록 다이얼로그용 컬럼 정의 (데이터 테이블의 등록 폼과 동일 구성)
+  // 생산품/원재료 등록 다이얼로그용 컬럼 정의 (데이터 테이블의 등록 폼과 동일 구성)
   let prodInsertColumns: ColumnDef[] = []
+  let rawInsertColumns: ColumnDef[] = []
   try {
     const tables = await getTables()
-    const hidden = TABLE_HIDDEN_COLS["tb_prod_mst"] ?? new Set<string>()
+    const prodHidden = TABLE_HIDDEN_COLS["tb_prod_mst"] ?? new Set<string>()
     prodInsertColumns = (tables.find((t) => t.name === "tb_prod_mst")?.columns ?? []).filter(
-      (c) => !HIDDEN_COLS.has(c.name) && !hidden.has(c.name),
+      (c) => !HIDDEN_COLS.has(c.name) && !prodHidden.has(c.name),
+    )
+    const rawHidden = TABLE_HIDDEN_COLS["tb_raw_mst"] ?? new Set<string>()
+    rawInsertColumns = (tables.find((t) => t.name === "tb_raw_mst")?.columns ?? []).filter(
+      (c) => !HIDDEN_COLS.has(c.name) && !rawHidden.has(c.name),
     )
   } catch {}
 
@@ -83,24 +88,39 @@ export default async function ProdRecipeWritePage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">생산품 레시피 작성</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            생산품별 원자재 구성을 등록하고 영양성분 합계를 확인합니다.
+            생산품별 원재료 구성을 등록하고 영양성분 합계를 확인합니다.
           </p>
         </div>
-        {prodInsertColumns.length > 0 && (
-          <AddRowDialog
-            tableName="tb_prod_mst"
-            columns={prodInsertColumns}
-            columnOptions={{
-              category_code: CATEGORY_OPTIONS,
-              storage: STORAGE_OPTIONS,
-              status: STATUS_OPTIONS,
-              unit: UNIT_OPTIONS,
-            }}
-            fieldOrder={TABLE_FIELD_ORDER["tb_prod_mst"]}
-            buttonLabel="생산품 등록"
-            dialogTitle="생산품 등록"
-          />
-        )}
+        <div className="flex items-center gap-2">
+          {rawInsertColumns.length > 0 && (
+            <AddRowDialog
+              tableName="tb_raw_mst"
+              columns={rawInsertColumns}
+              columnOptions={{
+                category_code: CATEGORY_OPTIONS,
+                storage: STORAGE_OPTIONS,
+              }}
+              fieldOrder={TABLE_FIELD_ORDER["tb_raw_mst"]}
+              buttonLabel="원재료 등록"
+              dialogTitle="원재료 등록"
+            />
+          )}
+          {prodInsertColumns.length > 0 && (
+            <AddRowDialog
+              tableName="tb_prod_mst"
+              columns={prodInsertColumns}
+              columnOptions={{
+                category_code: CATEGORY_OPTIONS,
+                storage: STORAGE_OPTIONS,
+                status: STATUS_OPTIONS,
+                unit: UNIT_OPTIONS,
+              }}
+              fieldOrder={TABLE_FIELD_ORDER["tb_prod_mst"]}
+              buttonLabel="생산품 등록"
+              dialogTitle="생산품 등록"
+            />
+          )}
+        </div>
       </div>
 
       <ProdRecipeForm

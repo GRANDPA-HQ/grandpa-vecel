@@ -38,10 +38,13 @@ function RecipeGuideRow({
   item,
   number,
   onEdit,
+  canDelete,
 }: {
   item: RecipeGuide
   number: number
   onEdit: () => void
+  // 삭제 버튼 표시 여부 (점장/시니어 직급 전용)
+  canDelete: boolean
 }) {
   const [expanded, setExpanded] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -94,7 +97,7 @@ function RecipeGuideRow({
             )}
 
             <div className="flex items-center justify-end gap-2 px-5 pb-4">
-              {confirmDelete ? (
+              {canDelete && confirmDelete ? (
                 <>
                   <span className="mr-1 text-xs text-muted-foreground">정말 삭제하시겠어요?</span>
                   <Button
@@ -122,16 +125,18 @@ function RecipeGuideRow({
                 </>
               ) : (
                 <>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    className="gap-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                    onClick={() => setConfirmDelete(true)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    삭제
-                  </Button>
+                  {canDelete && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="gap-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      onClick={() => setConfirmDelete(true)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      삭제
+                    </Button>
+                  )}
                   <Button
                     type="button"
                     size="sm"
@@ -157,12 +162,15 @@ export function RecipeGuideList({
   authorName,
   skuRecipes,
   managedCategories,
+  canDelete = false,
 }: {
   guides: RecipeGuide[]
   authorName: string
   skuRecipes?: SkuRecipeSummary[]
   // 분류 테이블(recipe_guide_categories) 목록 — null이면 테이블 미생성 (기존 방식 폴백)
   managedCategories?: ManagedCategory[] | null
+  // 삭제 버튼 표시 여부 (점장/시니어 직급 전용)
+  canDelete?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const [managing, setManaging] = useState(false)
@@ -257,6 +265,7 @@ export function RecipeGuideList({
                     item={item}
                     number={numberById.get(item.id) ?? 0}
                     onEdit={() => setEditingGuide(item)}
+                    canDelete={canDelete}
                   />
                 ))
               )}

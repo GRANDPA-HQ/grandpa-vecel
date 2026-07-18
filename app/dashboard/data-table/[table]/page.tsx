@@ -12,6 +12,7 @@ import {
   TABLE_COLUMN_ORDER,
   ALLERGEN_OPTIONS,
   EMPLOYEE_FK_LOOKUPS,
+  sortOptionsByLabelOrder,
   CATEGORY_OPTIONS,
   STORAGE_OPTIONS,
   STATUS_OPTIONS,
@@ -32,7 +33,7 @@ const CATEGORY_TABLES = new Set(["tb_prod_mst", "tb_raw_mst", "tb_sku_mst"])
 // 테이블별 검색창 placeholder (지정 없으면 검색 대상 컬럼명을 그대로 사용)
 const TABLE_SEARCH_PLACEHOLDER: Record<string, string> = {
   tb_sku_recipe:  "SKU/생산품 코드·이름, 메모 검색",
-  tb_prod_recipe: "생산품/원자재 코드·이름, 메모 검색",
+  tb_prod_recipe: "생산품/원재료 코드·이름, 메모 검색",
 }
 
 const STORAGE_TABLES = new Set(["tb_prod_mst", "tb_raw_mst"])
@@ -138,7 +139,7 @@ export default async function TablePage({
       ),
     )
     EMPLOYEE_FK_LOOKUPS.forEach((l, i) => {
-      columnOptions[l.column] = lookups[i]
+      columnOptions[l.column] = sortOptionsByLabelOrder(lookups[i], l.labelOrder)
       columnResolvers[l.column] = Object.fromEntries(lookups[i].map((o) => [o.value, o.label]))
     })
   }

@@ -465,7 +465,7 @@ export function ProdRecipeForm({
               <thead>
                 <tr className="bg-muted/50 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   <th className="w-16 px-4 py-3 text-center">#</th>
-                  <th className="px-4 py-3">원자재</th>
+                  <th className="px-4 py-3">원재료</th>
                   <th className="w-32 px-4 py-3">수량</th>
                   <th className="w-24 px-4 py-3">단위</th>
                   <th className="w-24 px-4 py-3 text-right">열량</th>
@@ -523,7 +523,7 @@ export function ProdRecipeForm({
                           value={row.rawId}
                           onChange={(v) => handleRawSelect(row.localId, v)}
                           placeholder="— 선택 —"
-                          searchPlaceholder="원자재 검색..."
+                          searchPlaceholder="원재료 검색..."
                           options={rawOptions.map((opt) => ({ value: opt.value, label: opt.label }))}
                         />
                       </td>
@@ -588,7 +588,7 @@ export function ProdRecipeForm({
                 className="flex w-full items-center justify-center gap-1.5 py-3 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
               >
                 <Plus className="h-4 w-4" />
-                원자재 추가
+                원재료 추가
               </button>
             </div>
           </div>
@@ -599,7 +599,7 @@ export function ProdRecipeForm({
               <Flame className="h-4 w-4 text-orange-500" />
               <h2 className="text-sm font-semibold">영양성분 합계</h2>
               <span className="text-xs text-muted-foreground">
-                원자재 100g 기준 영양정보 × 투입량 자동 계산 (ml은 1g으로 근사)
+                원재료 100g 기준 영양정보 × 투입량 자동 계산 (ml은 1g으로 근사)
               </span>
             </div>
 
@@ -635,7 +635,7 @@ export function ProdRecipeForm({
               <p className="mt-2 text-xs text-amber-600">
                 {nutrition.eaExcluded > 0 && `ea 단위 ${nutrition.eaExcluded}건은 중량을 알 수 없어 합계에서 제외됐습니다.`}
                 {nutrition.eaExcluded > 0 && nutrition.noDataExcluded > 0 && " "}
-                {nutrition.noDataExcluded > 0 && `영양정보 미등록 원자재 ${nutrition.noDataExcluded}건은 중량만 합산됐습니다.`}
+                {nutrition.noDataExcluded > 0 && `영양정보 미등록 원재료 ${nutrition.noDataExcluded}건은 중량만 합산됐습니다.`}
               </p>
             )}
           </div>
@@ -649,7 +649,7 @@ export function ProdRecipeForm({
             <span className="font-semibold text-foreground">{tabs.filter((t) => t.prodId).length}</span>
             개 생산품 편집 중 ·{" "}
             <span className="font-semibold text-foreground">{active?.rows.length ?? 0}</span>
-            개 원자재 · 작성 내용은 이 기기에 자동 임시저장됩니다
+            개 원재료 · 작성 내용은 이 기기에 자동 임시저장됩니다
           </p>
           {msg && (
             <span

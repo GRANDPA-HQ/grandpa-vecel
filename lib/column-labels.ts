@@ -1,7 +1,7 @@
 export const COLUMN_LABELS: Record<string, string> = {
   // 원자재 (tb_raw_mst)
-  raw_code: "원자재 코드",
-  raw_name: "원자재명",
+  raw_code: "원재료 코드",
+  raw_name: "원재료명",
   // 생산품 (tb_prod_mst)
   prod_code: "생산품 코드",
   prod_name: "생산품명",
@@ -51,7 +51,7 @@ export const COLUMN_LABELS: Record<string, string> = {
   input_id: "레시피 ID",
   sku_id: "SKU",
   prod_id: "생산품",
-  raw_id: "원자재",
+  raw_id: "원재료",
   amount: "수량",
   unit: "단위",
   memo: "메모",

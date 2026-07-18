@@ -17,7 +17,7 @@ export const TABLE_PK: Record<string, string> = {
 
 // 테이블 한글 이름 (엑셀 파일명/시트명 등 표시에 사용)
 export const TABLE_LABELS: Record<string, string> = {
-  tb_raw_mst:            "원자재",
+  tb_raw_mst:            "원재료",
   tb_category_mst:       "카테고리",
   tb_prod_mst:           "생산품",
   users:                 "유저",
@@ -29,12 +29,31 @@ export const TABLE_LABELS: Record<string, string> = {
 }
 
 // employees 테이블의 FK 컬럼 → 이름 표시용 조회 설정 (화면·엑셀 추출 공용)
-export const EMPLOYEE_FK_LOOKUPS: { column: string; table: string; labelColumn: string }[] = [
+// labelOrder: 드롭다운 표시 순서 (없으면 라벨 컬럼 기준 기본 정렬)
+export const EMPLOYEE_FK_LOOKUPS: {
+  column: string
+  table: string
+  labelColumn: string
+  labelOrder?: string[]
+}[] = [
   { column: "store_id",    table: "stores",    labelColumn: "store_name" },
   { column: "part_id",     table: "parts",     labelColumn: "name_ko" },
-  { column: "position_id", table: "positions", labelColumn: "name_ko" },
-  { column: "rank_id",     table: "ranks",     labelColumn: "name_ko" },
+  { column: "position_id", table: "positions", labelColumn: "name_ko", labelOrder: ["스태프", "리드", "매니저", "점장"] },
+  { column: "rank_id",     table: "ranks",     labelColumn: "name_ko", labelOrder: ["수습", "정규", "시니어"] },
 ]
+
+// 지정한 라벨 순서대로 옵션 정렬 (순서 목록에 없는 라벨은 기존 순서 그대로 뒤에 붙음)
+export function sortOptionsByLabelOrder(
+  options: { value: string; label: string }[],
+  labelOrder?: string[],
+): { value: string; label: string }[] {
+  if (!labelOrder || labelOrder.length === 0) return options
+  const orderIndex = new Map(labelOrder.map((l, i) => [l, i]))
+  return [...options].sort(
+    (a, b) =>
+      (orderIndex.get(a.label) ?? labelOrder.length) - (orderIndex.get(b.label) ?? labelOrder.length),
+  )
+}
 
 // 가격 컬럼 판별: 판매가(sell_price), 구매 단가(purchase_price), 가격(price), 원가(cost) 등
 // 표시할 때 천 단위 쉼표(예: 10,000)를 적용한다.
