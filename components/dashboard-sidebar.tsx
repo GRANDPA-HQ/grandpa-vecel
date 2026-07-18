@@ -74,7 +74,7 @@ export function DashboardSidebar({
               테이블 선택
             </p>
             {[
-              { label: "원자재 테이블", table: "tb_raw_mst" },
+              { label: "원재료 테이블", table: "tb_raw_mst" },
               { label: "카테고리 테이블", table: "tb_category_mst" },
               { label: "생산품 테이블", table: "tb_prod_mst" },
               { label: "생산품 레시피 테이블", table: "tb_prod_recipe" },

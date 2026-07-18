@@ -17,14 +17,21 @@ export type SkuRecipeSummary = {
   rows: { prodLabel: string; amount: number; unit: string; memo: string | null }[]
 }
 
-function escapeAttr(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
 }
 
-// 선택한 판매 레시피의 라이브 마커 — 본문에는 자리표시자만 저장되고,
-// 가이드를 볼 때 서버(lib/recipe-embed.ts)가 최신 레시피 구성으로 치환한다.
-function recipeToMarkerHtml(recipe: SkuRecipeSummary): string {
-  return `<div data-sku-recipe="${escapeAttr(recipe.skuId)}" data-label="${escapeAttr(recipe.label)}"></div><p></p>`
+// 선택한 판매 레시피를 편집 가능한 본문(제목 + 번호 목록)으로 변환해 삽입한다.
+// 삽입 시점의 구성이 그대로 저장되므로 이후 레시피가 수정돼도 본문에는 반영되지 않는다.
+// (기존 글에 남아 있는 라이브 마커는 lib/recipe-embed.ts가 열람 시 계속 치환한다)
+function recipeToContentHtml(recipe: SkuRecipeSummary): string {
+  const items = recipe.rows
+    .map((r) => {
+      const memo = r.memo ? ` <em>(${escapeHtml(r.memo)})</em>` : ""
+      return `<li><p>${escapeHtml(r.prodLabel)} — <strong>${r.amount}${escapeHtml(r.unit)}</strong>${memo}</p></li>`
+    })
+    .join("")
+  return `<h3>${escapeHtml(recipe.label)}</h3><ol>${items}</ol><p></p>`
 }
 
 export function RecipeGuideComposer({
@@ -77,7 +84,7 @@ export function RecipeGuideComposer({
   function handleRecipeSelect(skuId: string) {
     const recipe = skuRecipes?.find((r) => r.skuId === skuId)
     if (!recipe) return
-    editorApi.current?.insertHtml(recipeToMarkerHtml(recipe))
+    editorApi.current?.insertHtml(recipeToContentHtml(recipe))
     lastRecipe.current = recipe
     applyAutoTitle(recipe, category, false)
   }

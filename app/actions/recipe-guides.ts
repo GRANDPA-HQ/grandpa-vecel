@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { getCurrentEmployee } from "@/lib/permissions"
 
 export async function createRecipeGuide(
   _prevState: { error?: string; success?: boolean } | undefined,
@@ -53,6 +54,10 @@ export async function deleteRecipeGuide(
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) return { error: "로그인이 필요합니다." }
+
+  // 삭제는 점장(시니어 직급) 전용 — 버튼 숨김과 별개로 서버에서도 차단
+  const employee = await getCurrentEmployee()
+  if (!employee?.isSenior) return { error: "점장만 레시피 가이드를 삭제할 수 있습니다." }
 
   const admin = createAdminClient()
   const { error } = await admin.from("recipe_guides").delete().eq("id", id)

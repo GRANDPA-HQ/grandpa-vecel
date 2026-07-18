@@ -1,11 +1,14 @@
 import { createAdminClient } from "@/lib/supabase/admin"
 import { getTables } from "@/lib/supabase/db"
-import { SkuRecipeForm, type InitialRecipe } from "@/components/sku-recipe-form"
+import { SkuRecipeForm, type InitialRecipe, type ProdNutrition } from "@/components/sku-recipe-form"
 import { AddRowDialog, type ColumnDef } from "@/components/add-row-dialog"
 import {
   HIDDEN_COLS,
   TABLE_HIDDEN_COLS,
   CATEGORY_OPTIONS,
+  STORAGE_OPTIONS,
+  STATUS_OPTIONS,
+  UNIT_OPTIONS,
   SKU_MULTI_OPTIONS,
   TABLE_FIELD_ORDER,
 } from "@/lib/table-config"
@@ -18,9 +21,12 @@ export default async function ProductionWritePage({
   const { sku } = await searchParams
   const admin = createAdminClient()
 
-  const [skuRes, prodRes] = await Promise.all([
+  const [skuRes, prodRes, prodRecipeRes, rawRes] = await Promise.all([
     admin.from("tb_sku_mst").select("id,sku_code,sku_name").order("sku_code"),
     admin.from("tb_prod_mst").select("id,prod_code,prod_name,status,unit").order("prod_code"),
+    // 생산품별 원재료 구성 — 생산품 100g당 영양성분 계산용
+    admin.from("tb_prod_recipe").select("prod_id,raw_id,amount,unit"),
+    admin.from("tb_raw_mst").select("id,kcal_100g,carb_100g,protein_100g,fat_100g"),
   ])
 
   // 드래그로 정한 행 순서(sort_order)대로 조회 — 컬럼이 아직 없는 DB에서는 기존 방식 폴백
@@ -62,18 +68,70 @@ export default async function ProductionWritePage({
 
   const initialRecipes = (recipeRes.data ?? []) as InitialRecipe[]
 
+  // 생산품 100g당 영양성분 — 생산품 레시피의 원재료 영양정보(100g 기준) × 투입량으로 계산.
+  // ea 단위 원재료는 중량을 알 수 없어 제외하며, 프로덕트 레시피 합계 방식과 동일한 근사(ml≈1g)를 쓴다.
+  const rawNutritionMap = new Map(
+    (rawRes.data ?? []).map((r) => [
+      r.id as string,
+      {
+        kcal: (r.kcal_100g as number | null) ?? null,
+        carb: (r.carb_100g as number | null) ?? null,
+        protein: (r.protein_100g as number | null) ?? null,
+        fat: (r.fat_100g as number | null) ?? null,
+      },
+    ]),
+  )
+  const acc: Record<
+    string,
+    { grams: number; kcal: number; carb: number; protein: number; fat: number; hasData: boolean }
+  > = {}
+  for (const r of prodRecipeRes.data ?? []) {
+    const prodId = r.prod_id as string | null
+    const amount = Number(r.amount)
+    const unit = String(r.unit ?? "").toLowerCase()
+    if (!prodId || !r.raw_id || !Number.isFinite(amount) || amount <= 0 || unit === "ea") continue
+    const a = (acc[prodId] ??= { grams: 0, kcal: 0, carb: 0, protein: 0, fat: 0, hasData: false })
+    a.grams += amount
+    const n = rawNutritionMap.get(r.raw_id as string)
+    if (!n || (n.kcal === null && n.carb === null && n.protein === null && n.fat === null)) continue
+    const factor = amount / 100
+    a.kcal += (n.kcal ?? 0) * factor
+    a.carb += (n.carb ?? 0) * factor
+    a.protein += (n.protein ?? 0) * factor
+    a.fat += (n.fat ?? 0) * factor
+    a.hasData = true
+  }
+  const prodNutritionById = Object.fromEntries(
+    Object.entries(acc)
+      .filter(([, a]) => a.hasData && a.grams > 0)
+      .map(([id, a]) => [
+        id,
+        {
+          kcal: (a.kcal / a.grams) * 100,
+          carb: (a.carb / a.grams) * 100,
+          protein: (a.protein / a.grams) * 100,
+          fat: (a.fat / a.grams) * 100,
+        },
+      ]),
+  ) as Record<string, ProdNutrition>
+
   // ?sku=<sku_code> 짧은 URL로 진입하면 해당 SKU 탭이 선택된 상태로 시작
   const initialSkuId = sku
     ? ((skuRes.data ?? []).find((r) => r.sku_code === sku)?.id as string | undefined)
     : undefined
 
-  // 판매품 등록 다이얼로그용 컬럼 정의 (데이터 테이블의 등록 폼과 동일 구성)
+  // 판매품/생산품 등록 다이얼로그용 컬럼 정의 (데이터 테이블의 등록 폼과 동일 구성)
   let skuInsertColumns: ColumnDef[] = []
+  let prodInsertColumns: ColumnDef[] = []
   try {
     const tables = await getTables()
-    const hidden = TABLE_HIDDEN_COLS["tb_sku_mst"] ?? new Set<string>()
+    const skuHidden = TABLE_HIDDEN_COLS["tb_sku_mst"] ?? new Set<string>()
     skuInsertColumns = (tables.find((t) => t.name === "tb_sku_mst")?.columns ?? []).filter(
-      (c) => !HIDDEN_COLS.has(c.name) && !hidden.has(c.name),
+      (c) => !HIDDEN_COLS.has(c.name) && !skuHidden.has(c.name),
+    )
+    const prodHidden = TABLE_HIDDEN_COLS["tb_prod_mst"] ?? new Set<string>()
+    prodInsertColumns = (tables.find((t) => t.name === "tb_prod_mst")?.columns ?? []).filter(
+      (c) => !HIDDEN_COLS.has(c.name) && !prodHidden.has(c.name),
     )
   } catch {}
 
@@ -86,17 +144,34 @@ export default async function ProductionWritePage({
             SKU별 생산품 구성을 등록하고 편집합니다.
           </p>
         </div>
-        {skuInsertColumns.length > 0 && (
-          <AddRowDialog
-            tableName="tb_sku_mst"
-            columns={skuInsertColumns}
-            columnOptions={{ category_code: CATEGORY_OPTIONS }}
-            columnMultiOptions={SKU_MULTI_OPTIONS}
-            fieldOrder={TABLE_FIELD_ORDER["tb_sku_mst"]}
-            buttonLabel="판매품 등록"
-            dialogTitle="판매품 등록"
-          />
-        )}
+        <div className="flex items-center gap-2">
+          {prodInsertColumns.length > 0 && (
+            <AddRowDialog
+              tableName="tb_prod_mst"
+              columns={prodInsertColumns}
+              columnOptions={{
+                category_code: CATEGORY_OPTIONS,
+                storage: STORAGE_OPTIONS,
+                status: STATUS_OPTIONS,
+                unit: UNIT_OPTIONS,
+              }}
+              fieldOrder={TABLE_FIELD_ORDER["tb_prod_mst"]}
+              buttonLabel="생산품 등록"
+              dialogTitle="생산품 등록"
+            />
+          )}
+          {skuInsertColumns.length > 0 && (
+            <AddRowDialog
+              tableName="tb_sku_mst"
+              columns={skuInsertColumns}
+              columnOptions={{ category_code: CATEGORY_OPTIONS }}
+              columnMultiOptions={SKU_MULTI_OPTIONS}
+              fieldOrder={TABLE_FIELD_ORDER["tb_sku_mst"]}
+              buttonLabel="판매품 등록"
+              dialogTitle="판매품 등록"
+            />
+          )}
+        </div>
       </div>
 
       <SkuRecipeForm
@@ -104,6 +179,7 @@ export default async function ProductionWritePage({
         prodOptions={prodOptions}
         prodLabelById={prodLabelById}
         prodUnitById={prodUnitById}
+        prodNutritionById={prodNutritionById}
         initialRecipes={initialRecipes}
         initialSkuId={initialSkuId}
       />

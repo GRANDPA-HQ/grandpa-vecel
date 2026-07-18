@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation"
 import { getTableRows, getIdLabelOptions } from "@/lib/supabase/db"
 import { getCurrentEmployee } from "@/lib/permissions"
-import { EMPLOYEE_FK_LOOKUPS } from "@/lib/table-config"
+import { EMPLOYEE_FK_LOOKUPS, sortOptionsByLabelOrder } from "@/lib/table-config"
 import { EmployeeTable } from "@/components/employee-table"
 import { InviteButton } from "@/components/invite-button"
 
@@ -26,7 +26,7 @@ export default async function EmployeesPage() {
     employees = employeesResult.rows
     total = employeesResult.total
     EMPLOYEE_FK_LOOKUPS.forEach((l, i) => {
-      lookupOptions[l.column] = lookups[i]
+      lookupOptions[l.column] = sortOptionsByLabelOrder(lookups[i], l.labelOrder)
     })
   } catch (e) {
     error = e instanceof Error ? e.message : "직원 정보를 불러오지 못했습니다."

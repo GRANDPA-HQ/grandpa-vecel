@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useTransition, useEffect } from "react"
-import { Plus, Trash2, Save, X, Search, GripVertical } from "lucide-react"
+import { useState, useTransition, useEffect, useMemo } from "react"
+import { Plus, Trash2, Save, X, Search, GripVertical, Flame } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
@@ -24,6 +24,14 @@ export type InitialRecipe = {
   amount: number
   unit: string
   memo: string | null
+}
+
+// 생산품 100g당 영양성분 — 생산품 레시피(원재료 구성)로부터 서버에서 계산해 전달
+export type ProdNutrition = {
+  kcal: number
+  carb: number
+  protein: number
+  fat: number
 }
 
 type SkuTab = {
@@ -79,11 +87,17 @@ function toRows(recipes: InitialRecipe[]): RecipeRow[] {
   }))
 }
 
+// 숫자 표시: 소수 1자리까지, 불필요한 .0 제거 (예: 1234.5 → "1,234.5", 120 → "120")
+function fmt(n: number): string {
+  return n.toLocaleString("ko-KR", { maximumFractionDigits: 1 })
+}
+
 export function SkuRecipeForm({
   skuOptions,
   prodOptions,
   prodLabelById,
   prodUnitById,
+  prodNutritionById,
   initialRecipes,
   initialSkuId,
 }: {
@@ -93,6 +107,8 @@ export function SkuRecipeForm({
   prodLabelById?: Record<string, string>
   // 생산품에 등록된 단위 — 생산품 선택 시 행의 단위를 자동으로 맞춘다
   prodUnitById?: Record<string, string>
+  // 생산품 100g당 영양성분 (레시피 미등록 생산품은 항목 없음)
+  prodNutritionById?: Record<string, ProdNutrition>
   initialRecipes: InitialRecipe[]
   // URL(?sku=)로 전달된 SKU — 마운트 시 해당 SKU 탭을 열어 선택 상태로 시작
   initialSkuId?: string
@@ -160,6 +176,52 @@ export function SkuRecipeForm({
 
   const active = tabs.find((t) => t.localId === activeId)
   const usedSkuIds = new Set(tabs.map((t) => t.skuId).filter(Boolean))
+
+  // ── 영양성분 합계 (활성 탭) ──────────────────────────
+  // 생산품 100g당 영양성분 × 투입량으로 합산. g/ml 단위 행만 합산(ml은 1g≈1ml로 근사),
+  // ea 단위·레시피 영양정보 없는 생산품은 제외하고 건수 표시.
+  const nutrition = useMemo(() => {
+    let grams = 0
+    let kcal = 0
+    let carb = 0
+    let protein = 0
+    let fat = 0
+    let counted = 0
+    let eaExcluded = 0
+    let noDataExcluded = 0
+
+    for (const row of active?.rows ?? []) {
+      const amount = parseFloat(row.amount)
+      if (!row.prodId || !Number.isFinite(amount) || amount <= 0) continue
+      if (row.unit === "ea") {
+        eaExcluded++
+        continue
+      }
+      const n = prodNutritionById?.[row.prodId]
+      grams += amount
+      if (!n) {
+        noDataExcluded++
+        continue
+      }
+      const factor = amount / 100
+      kcal += n.kcal * factor
+      carb += n.carb * factor
+      protein += n.protein * factor
+      fat += n.fat * factor
+      counted++
+    }
+
+    return { grams, kcal, carb, protein, fat, counted, eaExcluded, noDataExcluded }
+  }, [active, prodNutritionById])
+
+  // 행별 열량 미리보기 (g/ml 단위 + 레시피 영양정보 있는 생산품만)
+  function rowKcal(row: RecipeRow): number | null {
+    const amount = parseFloat(row.amount)
+    if (!row.prodId || !Number.isFinite(amount) || amount <= 0 || row.unit === "ea") return null
+    const n = prodNutritionById?.[row.prodId]
+    if (!n) return null
+    return (n.kcal * amount) / 100
+  }
 
   // ── 탭 조작 ──────────────────────────────────────────
   function addTab() {
@@ -435,12 +497,15 @@ export function SkuRecipeForm({
                   <th className="px-4 py-3">생산품</th>
                   <th className="w-32 px-4 py-3">수량</th>
                   <th className="w-24 px-4 py-3">단위</th>
+                  <th className="w-24 px-4 py-3 text-right">열량</th>
                   <th className="px-4 py-3">메모</th>
                   <th className="w-10 px-2 py-3" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {active.rows.map((row, idx) => (
+                {active.rows.map((row, idx) => {
+                  const kcal = rowKcal(row)
+                  return (
                   <tr
                     key={row.localId}
                     draggable={rowDragArmed === row.localId}
@@ -529,6 +594,10 @@ export function SkuRecipeForm({
                       </select>
                     </td>
 
+                    <td className="px-4 py-2 text-right font-mono text-xs text-muted-foreground">
+                      {kcal !== null ? `${fmt(kcal)} kcal` : "-"}
+                    </td>
+
                     <td className="px-4 py-2">
                       <Input
                         value={row.memo}
@@ -549,7 +618,8 @@ export function SkuRecipeForm({
                       </button>
                     </td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
 
@@ -563,6 +633,53 @@ export function SkuRecipeForm({
                 생산품 추가
               </button>
             </div>
+          </div>
+
+          {/* ── 영양성분 합계 (생산품 레시피에서 계산한 100g당 영양성분 × 투입량으로 자동 계산) ── */}
+          <div className="rounded-xl border border-border bg-muted/20 p-4">
+            <div className="mb-3 flex items-center gap-1.5">
+              <Flame className="h-4 w-4 text-orange-500" />
+              <h2 className="text-sm font-semibold">영양성분 합계</h2>
+              <span className="text-xs text-muted-foreground">
+                생산품 레시피의 원재료 영양정보로 계산한 100g당 영양성분 × 투입량 자동 계산 (ml은 1g으로 근사)
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+              {[
+                { label: "총 중량", value: `${fmt(nutrition.grams)} g` },
+                { label: "열량", value: `${fmt(nutrition.kcal)} kcal`, highlight: true },
+                { label: "탄수화물", value: `${fmt(nutrition.carb)} g` },
+                { label: "단백질", value: `${fmt(nutrition.protein)} g` },
+                { label: "지방", value: `${fmt(nutrition.fat)} g` },
+              ].map((item) => (
+                <div
+                  key={item.label}
+                  className={cn(
+                    "rounded-lg border bg-background px-3 py-2.5",
+                    item.highlight ? "border-orange-200" : "border-border",
+                  )}
+                >
+                  <p className="text-[11px] font-medium text-muted-foreground">{item.label}</p>
+                  <p
+                    className={cn(
+                      "mt-0.5 font-mono text-base font-semibold tabular-nums",
+                      item.highlight && "text-orange-600",
+                    )}
+                  >
+                    {item.value}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            {(nutrition.eaExcluded > 0 || nutrition.noDataExcluded > 0) && (
+              <p className="mt-2 text-xs text-amber-600">
+                {nutrition.eaExcluded > 0 && `ea 단위 ${nutrition.eaExcluded}건은 중량을 알 수 없어 합계에서 제외됐습니다.`}
+                {nutrition.eaExcluded > 0 && nutrition.noDataExcluded > 0 && " "}
+                {nutrition.noDataExcluded > 0 && `레시피 영양정보가 없는 생산품 ${nutrition.noDataExcluded}건은 중량만 합산됐습니다.`}
+              </p>
+            )}
           </div>
         </>
       )}

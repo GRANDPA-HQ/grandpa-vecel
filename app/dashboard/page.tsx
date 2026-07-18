@@ -25,7 +25,7 @@ const MENU_CARDS = [
     href: "/dashboard/data-table",
     icon: Database,
     label: "데이터 테이블",
-    description: "원자재 · 카테고리 · 생산품 데이터 조회",
+    description: "원재료 · 카테고리 · 생산품 데이터 조회",
     color: "bg-blue-50 border-blue-100",
     iconColor: "bg-blue-100 text-blue-600",
     managerOnly: false,

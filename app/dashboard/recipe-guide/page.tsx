@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { getCurrentEmployee } from "@/lib/permissions"
 import { RecipeGuideList } from "@/components/recipe-guide-list"
 import type { SkuRecipeSummary } from "@/components/recipe-guide-composer"
 import { renderRecipeEmbeds } from "@/lib/recipe-embed"
@@ -28,6 +29,10 @@ export default async function RecipeGuidePage() {
     .maybeSingle()
 
   const authorName = userData?.name ?? "알 수 없음"
+
+  // 삭제 버튼은 점장(시니어 직급)에게만 표시
+  const employee = await getCurrentEmployee()
+  const canDelete = employee?.isSenior ?? false
 
   let guides: RecipeGuide[] = []
   let error: string | null = null
@@ -129,6 +134,7 @@ export default async function RecipeGuidePage() {
           authorName={authorName}
           skuRecipes={skuRecipes}
           managedCategories={managedCategories}
+          canDelete={canDelete}
         />
       )}
     </div>
