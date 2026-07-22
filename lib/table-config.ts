@@ -115,7 +115,7 @@ export const CATEGORY_OPTIONS: SelectOption[] = [
 
 export const STORAGE_OPTIONS: SelectOption[] = ["냉장", "냉동", "상온"].map((v) => ({ value: v, label: v }))
 
-export const STATUS_OPTIONS: SelectOption[] = ["SEMI", "PREP", "COOK", "UNPROC"].map((v) => ({ value: v, label: v }))
+export const STATUS_OPTIONS: SelectOption[] = ["SEMI", "PREP", "COOK"].map((v) => ({ value: v, label: v }))
 
 export const UNIT_OPTIONS: SelectOption[] = ["g", "ml", "ea"].map((v) => ({ value: v, label: v }))
 

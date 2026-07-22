@@ -39,7 +39,6 @@ const ENUM_COLUMNS: Record<string, { value: string; label: string; className: st
     { value: "SEMI", label: "SEMI", className: "bg-blue-100 text-blue-700 border-blue-200" },
     { value: "PREP", label: "PREP", className: "bg-yellow-100 text-yellow-700 border-yellow-200" },
     { value: "COOK", label: "COOK", className: "bg-orange-100 text-orange-700 border-orange-200" },
-    { value: "UNPROC", label: "UNPROC", className: "bg-gray-100 text-gray-700 border-gray-200" },
   ],
   "tb_raw_mst.storage": [
     { value: "냉장", label: "냉장", className: "bg-blue-100 text-blue-700 border-blue-200" },
