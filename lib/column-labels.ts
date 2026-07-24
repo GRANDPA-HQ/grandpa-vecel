@@ -19,6 +19,7 @@ export const COLUMN_LABELS: Record<string, string> = {
   purchase_price: "구매 단가",
   supplier: "거래처",
   shelf_life_days: "보관 기한 (일)",
+  std_batch_qty: "표준 배치 수량",
   price: "가격",
   cost: "원가",
   stock: "재고",
