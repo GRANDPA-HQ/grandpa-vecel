@@ -26,12 +26,16 @@ export type InitialProdRecipe = {
   memo: string | null
 }
 
-// 원자재 100g 기준 영양성분 (null = 미등록)
+// 원자재 영양성분 (null = 미등록) — g/ml 단위는 100g 기준, ea 단위는 개당 기준
 export type RawNutrition = {
   kcal: number | null
   carb: number | null
   protein: number | null
   fat: number | null
+  kcalEa: number | null
+  carbEa: number | null
+  proteinEa: number | null
+  fatEa: number | null
 }
 
 type ProdTab = {
@@ -148,7 +152,9 @@ export function ProdRecipeForm({
   const usedProdIds = new Set(tabs.map((t) => t.prodId).filter(Boolean))
 
   // ── 영양성분 합계 (활성 탭) ──────────────────────────
-  // g/ml 단위 행만 합산 (ml은 1g≈1ml로 근사). ea 단위·영양정보 미등록 원자재는 제외하고 건수 표시.
+  // g/ml 단위: 100g 기준 영양정보 × 투입량 (ml은 1g≈1ml로 근사)
+  // ea 단위: 개당 영양정보 × 개수
+  // 영양정보 미등록 원자재는 제외하고 건수만 표시.
   const nutrition = useMemo(() => {
     let grams = 0
     let kcal = 0
@@ -162,11 +168,23 @@ export function ProdRecipeForm({
     for (const row of active?.rows ?? []) {
       const amount = parseFloat(row.amount)
       if (!row.rawId || !Number.isFinite(amount) || amount <= 0) continue
+      const n = rawNutritionById[row.rawId]
+
       if (row.unit === "ea") {
-        eaExcluded++
+        const hasEaData =
+          n && (n.kcalEa !== null || n.carbEa !== null || n.proteinEa !== null || n.fatEa !== null)
+        if (!hasEaData) {
+          eaExcluded++
+          continue
+        }
+        kcal += (n.kcalEa ?? 0) * amount
+        carb += (n.carbEa ?? 0) * amount
+        protein += (n.proteinEa ?? 0) * amount
+        fat += (n.fatEa ?? 0) * amount
+        counted++
         continue
       }
-      const n = rawNutritionById[row.rawId]
+
       const hasData =
         n && (n.kcal !== null || n.carb !== null || n.protein !== null || n.fat !== null)
       grams += amount
@@ -300,12 +318,17 @@ export function ProdRecipeForm({
     return () => window.removeEventListener("mouseup", clear)
   }, [rowDragArmed])
 
-  // 행별 열량 미리보기 (g/ml 단위 + 영양정보 있는 원자재만)
+  // 행별 열량 미리보기 (영양정보 있는 원자재만)
   function rowKcal(row: RecipeRow): number | null {
     const amount = parseFloat(row.amount)
-    if (!row.rawId || !Number.isFinite(amount) || amount <= 0 || row.unit === "ea") return null
+    if (!row.rawId || !Number.isFinite(amount) || amount <= 0) return null
     const n = rawNutritionById[row.rawId]
-    if (!n || n.kcal === null) return null
+    if (!n) return null
+    if (row.unit === "ea") {
+      if (n.kcalEa === null) return null
+      return n.kcalEa * amount
+    }
+    if (n.kcal === null) return null
     return (n.kcal * amount) / 100
   }
 
@@ -599,7 +622,7 @@ export function ProdRecipeForm({
               <Flame className="h-4 w-4 text-orange-500" />
               <h2 className="text-sm font-semibold">영양성분 합계</h2>
               <span className="text-xs text-muted-foreground">
-                원재료 100g 기준 영양정보 × 투입량 자동 계산 (ml은 1g으로 근사)
+                g/ml은 100g 기준, ea는 개당 기준 영양정보 × 투입량 자동 계산 (ml은 1g으로 근사)
               </span>
             </div>
 
@@ -633,7 +656,7 @@ export function ProdRecipeForm({
 
             {(nutrition.eaExcluded > 0 || nutrition.noDataExcluded > 0) && (
               <p className="mt-2 text-xs text-amber-600">
-                {nutrition.eaExcluded > 0 && `ea 단위 ${nutrition.eaExcluded}건은 중량을 알 수 없어 합계에서 제외됐습니다.`}
+                {nutrition.eaExcluded > 0 && `ea 단위 ${nutrition.eaExcluded}건은 개당 영양정보가 미등록되어 합계에서 제외됐습니다.`}
                 {nutrition.eaExcluded > 0 && nutrition.noDataExcluded > 0 && " "}
                 {nutrition.noDataExcluded > 0 && `영양정보 미등록 원재료 ${nutrition.noDataExcluded}건은 중량만 합산됐습니다.`}
               </p>

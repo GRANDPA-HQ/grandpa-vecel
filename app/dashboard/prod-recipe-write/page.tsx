@@ -23,7 +23,9 @@ export default async function ProdRecipeWritePage() {
     admin.from("tb_prod_mst").select("id,prod_code,prod_name").order("prod_code"),
     admin
       .from("tb_raw_mst")
-      .select("id,raw_code,raw_name,usage_unit,kcal_100g,carb_100g,protein_100g,fat_100g")
+      .select(
+        "id,raw_code,raw_name,usage_unit,kcal_100g,carb_100g,protein_100g,fat_100g,kcal_ea,carb_ea,protein_ea,fat_ea",
+      )
       .order("raw_code"),
   ])
 
@@ -51,7 +53,8 @@ export default async function ProdRecipeWritePage() {
     (rawRes.data ?? []).filter((r) => r.usage_unit).map((r) => [r.id as string, String(r.usage_unit)]),
   ) as Record<string, string>
 
-  // 원자재 100g 기준 영양성분 — 폼에서 투입량 기준 합계 자동 계산에 사용
+  // 원자재 영양성분 — 폼에서 투입량 기준 합계 자동 계산에 사용
+  // (g/ml 단위: 100g당 기준, ea 단위: 개당 기준)
   const rawNutritionById = Object.fromEntries(
     (rawRes.data ?? []).map((r) => [
       r.id as string,
@@ -60,6 +63,10 @@ export default async function ProdRecipeWritePage() {
         carb: (r.carb_100g as number | null) ?? null,
         protein: (r.protein_100g as number | null) ?? null,
         fat: (r.fat_100g as number | null) ?? null,
+        kcalEa: (r.kcal_ea as number | null) ?? null,
+        carbEa: (r.carb_ea as number | null) ?? null,
+        proteinEa: (r.protein_ea as number | null) ?? null,
+        fatEa: (r.fat_ea as number | null) ?? null,
       },
     ]),
   ) as Record<string, RawNutrition>
