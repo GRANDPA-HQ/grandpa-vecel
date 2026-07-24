@@ -26,6 +26,9 @@ export const TABLE_LABELS: Record<string, string> = {
   tb_prod_recipe:        "생산품 레시피",
   tb_production_process: "생산 공정",
   employees:             "직원",
+  tb_sales_order:        "매출 주문",
+  tb_sales_order_item:   "매출 주문 품목",
+  tb_sku_platform_alias: "판매품 플랫폼 별칭",
 }
 
 // employees 테이블의 FK 컬럼 → 이름 표시용 조회 설정 (화면·엑셀 추출 공용)
@@ -71,6 +74,8 @@ export const TABLE_HIDDEN_COLS: Record<string, Set<string>> = {
   // sort_order: 작성 화면의 드래그 순서 저장용 내부 컬럼
   tb_sku_recipe:  new Set(["input_id", "sort_order"]),
   tb_prod_recipe: new Set(["input_id", "sort_order"]),
+  // raw: 원본 플랫폼 JSON 전체 — 목록 화면에서는 숨기고 필요 시 상세 조회로만 확인
+  tb_sales_order: new Set(["raw"]),
 }
 
 // 테이블별 데이터 테이블 컬럼 표시 순서 (지정 안 한 나머지 컬럼은 기존 순서 그대로 뒤에 붙음)
@@ -115,7 +120,7 @@ export const CATEGORY_OPTIONS: SelectOption[] = [
 
 export const STORAGE_OPTIONS: SelectOption[] = ["냉장", "냉동", "상온"].map((v) => ({ value: v, label: v }))
 
-export const STATUS_OPTIONS: SelectOption[] = ["SEMI", "PREP", "COOK"].map((v) => ({ value: v, label: v }))
+export const STATUS_OPTIONS: SelectOption[] = ["SEMI", "PREP", "COOK", "UNPROC"].map((v) => ({ value: v, label: v }))
 
 export const UNIT_OPTIONS: SelectOption[] = ["g", "ml", "ea"].map((v) => ({ value: v, label: v }))
 
@@ -145,6 +150,7 @@ export const TABLE_DEFAULT_SORT: Record<string, { column: string; dir: "asc" | "
   // 같은 생산품에 속한 원자재끼리 모여서 보이도록 생산품 기준 정렬
   tb_prod_recipe:  { column: "prod_id", dir: "asc" },
   employees:       { column: "name", dir: "asc" },
+  tb_sales_order:  { column: "order_datetime", dir: "desc" },
 }
 
 // 테이블별 검색 대상 컬럼 (코드/이름 등)

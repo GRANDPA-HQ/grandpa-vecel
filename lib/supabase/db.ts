@@ -460,6 +460,68 @@ export async function insertTableRow(
   }
 }
 
+export type SalesOrderRecord = {
+  platform: string
+  order_datetime: string
+  status: string
+  total_amount: number | null
+  settlement_amount: number | null
+}
+
+/**
+ * Fetch 쿠팡이츠/배민 매출 주문 (tb_sales_order) — [startIso, endIsoExclusive) 구간.
+ * 테이블이 아직 생성되지 않은 경우(마이그레이션 미실행) null을 반환해 페이지에서 안내 문구를 보여줄 수 있게 한다.
+ */
+export async function getSalesOrdersInRange(
+  startIso: string,
+  endIsoExclusive: string,
+): Promise<SalesOrderRecord[] | null> {
+  const url =
+    `${SUPABASE_URL}/rest/v1/tb_sales_order` +
+    `?select=platform,order_datetime,status,total_amount,settlement_amount` +
+    `&order_datetime=gte.${encodeURIComponent(startIso)}` +
+    `&order_datetime=lt.${encodeURIComponent(endIsoExclusive)}` +
+    `&order=order_datetime.asc`
+
+  const res = await fetch(url, { headers: authHeaders(), cache: "no-store" })
+
+  if (!res.ok) {
+    if (res.status === 404 || res.status === 400) return null
+    throw new Error(`Failed to read sales orders (${res.status})`)
+  }
+
+  return (await res.json()) as SalesOrderRecord[]
+}
+
+/**
+ * Fetch 판매품(tb_sku_mst) 재고 관리용 목록 — 코드/이름/가격/재고수량.
+ */
+export type SkuStockRow = {
+  id: string
+  sku_code: string
+  sku_name: string
+  category_code: string | null
+  sell_price: number | null
+  stock_qty: number
+  is_active: boolean
+}
+
+export async function getSkuStockRows(): Promise<SkuStockRow[] | null> {
+  const url =
+    `${SUPABASE_URL}/rest/v1/tb_sku_mst` +
+    `?select=id,sku_code,sku_name,category_code,sell_price,stock_qty,is_active` +
+    `&order=sku_code.asc`
+
+  const res = await fetch(url, { headers: authHeaders(), cache: "no-store" })
+
+  if (!res.ok) {
+    if (res.status === 404 || res.status === 400) return null
+    throw new Error(`Failed to read SKU stock (${res.status})`)
+  }
+
+  return (await res.json()) as SkuStockRow[]
+}
+
 /**
  * Fetch just the exact row count for a table (cheap HEAD-style request).
  */
