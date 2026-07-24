@@ -15,7 +15,7 @@ function SignInForm({ onSwitch }: { onSwitch: () => void }) {
     <main className="flex min-h-svh flex-col items-center justify-center bg-[#f5f6f8] px-4 py-12">
       {/* 로고 */}
       <div className="mb-8 flex flex-col items-center gap-1">
-        <span className="text-4xl font-extrabold tracking-tight text-blue-600">Granpa-co</span>
+        <span className="text-4xl font-extrabold tracking-tight text-red-600">Granpa-co</span>
         <span className="text-sm text-gray-500">스마트 생산 관리 시스템</span>
       </div>
 
@@ -63,7 +63,7 @@ function SignInForm({ onSwitch }: { onSwitch: () => void }) {
           <Button
             type="submit"
             disabled={pending}
-            className="mt-1 h-11 w-full bg-blue-600 text-base font-semibold hover:bg-blue-700"
+            className="mt-1 h-11 w-full bg-red-600 text-base font-semibold hover:bg-red-700"
           >
             {pending ? "로그인 중..." : "로그인"}
           </Button>
@@ -74,7 +74,7 @@ function SignInForm({ onSwitch }: { onSwitch: () => void }) {
           <button
             type="button"
             onClick={onSwitch}
-            className="font-semibold text-blue-600 hover:underline"
+            className="font-semibold text-red-600 hover:underline"
           >
             회원가입
           </button>
@@ -97,7 +97,7 @@ function RegisterForm({ onSwitch }: { onSwitch: () => void }) {
       {/* 왼쪽 브랜드 패널 */}
       <div className="hidden flex-col items-center justify-center gap-6 bg-gray-900 px-12 lg:flex lg:w-[45%]">
         <div className="text-center">
-          <span className="text-5xl font-extrabold tracking-tight text-blue-400">
+          <span className="text-5xl font-extrabold tracking-tight text-red-400">
             Granpa-co
           </span>
           <p className="mt-3 text-gray-400">스마트 생산 관리 시스템</p>
@@ -106,7 +106,7 @@ function RegisterForm({ onSwitch }: { onSwitch: () => void }) {
           {["직원 관리 및 권한 제어", "생산 공정 모니터링", "레시피 가이드 문서 관리", "실시간 데이터 테이블 조회"].map(
             (item) => (
               <li key={item} className="flex items-center gap-2">
-                <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+                <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
                 {item}
               </li>
             ),
@@ -119,7 +119,7 @@ function RegisterForm({ onSwitch }: { onSwitch: () => void }) {
         <div className="w-full max-w-sm">
           {/* 모바일용 로고 */}
           <div className="mb-8 text-center lg:hidden">
-            <span className="text-3xl font-extrabold text-blue-600">Granpa-co</span>
+            <span className="text-3xl font-extrabold text-red-600">Granpa-co</span>
           </div>
 
           <h2 className="text-2xl font-bold text-gray-900">회원가입</h2>
