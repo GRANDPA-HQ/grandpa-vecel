@@ -2,6 +2,15 @@ export const COLUMN_LABELS: Record<string, string> = {
   // 원자재 (tb_raw_mst)
   raw_code: "원재료 코드",
   raw_name: "원재료명",
+  usage_unit: "사용 단위",
+  kcal_100g: "열량(100g당, kcal)",
+  carb_100g: "탄수화물(100g당, g)",
+  protein_100g: "단백질(100g당, g)",
+  fat_100g: "지방(100g당, g)",
+  kcal_ea: "열량(개당, kcal)",
+  carb_ea: "탄수화물(개당, g)",
+  protein_ea: "단백질(개당, g)",
+  fat_ea: "지방(개당, g)",
   // 생산품 (tb_prod_mst)
   prod_code: "생산품 코드",
   prod_name: "생산품명",
