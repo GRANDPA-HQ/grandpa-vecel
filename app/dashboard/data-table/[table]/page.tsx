@@ -10,6 +10,7 @@ import {
   HIDDEN_COLS,
   TABLE_HIDDEN_COLS,
   TABLE_COLUMN_ORDER,
+  TABLE_TRAILING_COLS,
   ALLERGEN_OPTIONS,
   EMPLOYEE_FK_LOOKUPS,
   sortOptionsByLabelOrder,
@@ -178,6 +179,15 @@ export default async function TablePage({
     ]
   }
 
+  // 지정된 컬럼(예: photo_url)은 항상 맨 뒤로 보낸다
+  const trailingCols = TABLE_TRAILING_COLS[tableName]
+  if (trailingCols && trailingCols.length > 0) {
+    columns = [
+      ...columns.filter((c) => !trailingCols.includes(c)),
+      ...trailingCols.filter((c) => columns.includes(c)),
+    ]
+  }
+
   const canInsert = INSERTABLE_TABLES.has(tableName)
 
   // 드롭박스 옵션 (category_code, status, storage 등)
@@ -200,7 +210,8 @@ export default async function TablePage({
 
   // tb_sku_mst: 레시피(tb_sku_recipe)가 등록된 SKU에 레시피 작성 페이지로 가는 링크 표시
   // URL은 UUID 대신 sku_code를 사용해 짧게 유지 (/dashboard/production-write?sku=VFR_001)
-  let rowLinks: { header: string; hrefByPk: Record<string, string> } | undefined
+  // insertBeforeIndex: photo_url 컬럼 바로 앞에 표시되도록 위치 지정 (photo_url은 TABLE_TRAILING_COLS로 맨 뒤 고정됨)
+  let rowLinks: { header: string; hrefByPk: Record<string, string>; insertBeforeIndex?: number } | undefined
   if (tableName === "tb_sku_mst") {
     try {
       const admin = createAdminClient()
@@ -208,6 +219,7 @@ export default async function TablePage({
       const skuIds = Array.from(new Set((recipeRows ?? []).map((r) => r.sku_id as string).filter(Boolean)))
       if (skuIds.length > 0) {
         const { data: skus } = await admin.from("tb_sku_mst").select("id,sku_code").in("id", skuIds)
+        const photoIdx = columns.indexOf("photo_url")
         rowLinks = {
           header: "레시피",
           hrefByPk: Object.fromEntries(
@@ -218,6 +230,7 @@ export default async function TablePage({
                 `/dashboard/production-write?sku=${encodeURIComponent(s.sku_code as string)}`,
               ]),
           ),
+          insertBeforeIndex: photoIdx !== -1 ? photoIdx : undefined,
         }
       }
     } catch {}
