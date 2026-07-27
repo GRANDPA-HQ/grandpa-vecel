@@ -435,6 +435,43 @@ export async function getIdLabelOptions(
 }
 
 /**
+ * Fetch id → display label mapping for tb_zone_type_mst (전사 공통 Zone 정의).
+ * TB_SUBMAT_MST 등 전사 공통 카탈로그 테이블은 zone_id가 아닌 zone_type_id를 참조한다.
+ * (물리 실체를 참조하는 자산·재고·로그 테이블만 zone_id를 참조 — 서대표 확정 v1.0 원칙)
+ */
+export async function getZoneTypeOptions(): Promise<{ value: string; label: string }[]> {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/tb_zone_type_mst?select=zone_type_id,zone_type_code,zone_type_name&order=zone_type_code`,
+    { headers: authHeaders(), cache: "no-store" },
+  )
+  if (!res.ok) return []
+  const rows = (await res.json()) as {
+    zone_type_id: string
+    zone_type_code?: string
+    zone_type_name?: string
+  }[]
+  return rows.map((r) => ({
+    value: r.zone_type_id,
+    label: [r.zone_type_code, r.zone_type_name].filter(Boolean).join(" · ") || r.zone_type_id,
+  }))
+}
+
+export type SubmatZoneLink = { submat_id: string; zone_type_id: string }
+
+/**
+ * Fetch all 포장 부자재 ↔ Zone유형 연결 (tb_submat_zone_link).
+ * 테이블이 아직 생성되지 않은 경우 빈 배열을 반환해 화면이 깨지지 않게 한다.
+ */
+export async function getSubmatZoneLinks(): Promise<SubmatZoneLink[]> {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/tb_submat_zone_link?select=submat_id,zone_type_id`,
+    { headers: authHeaders(), cache: "no-store" },
+  )
+  if (!res.ok) return []
+  return (await res.json()) as SubmatZoneLink[]
+}
+
+/**
  * Insert a single row into a table.
  */
 export async function insertTableRow(
