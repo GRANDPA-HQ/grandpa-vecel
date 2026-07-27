@@ -151,22 +151,20 @@ export default async function DataTablePage() {
                   <Link
                     key={table}
                     href={`/dashboard/data-table/${encodeURIComponent(table)}`}
-                    className={`flex flex-col gap-3 rounded-xl border p-4 transition-colors ${bg}`}
+                    className={`flex flex-col gap-2 rounded-xl border p-4 transition-colors ${bg}`}
                   >
-                    <div className={`flex h-9 w-9 items-center justify-center rounded-lg bg-white shadow-sm ${color}`}>
-                      <Icon className="h-4.5 w-4.5" />
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white shadow-sm ${color}`}>
+                          <Icon className="h-4 w-4" />
+                        </div>
+                        <p className="truncate font-semibold text-gray-900">{label}</p>
+                      </div>
+                      <span className="shrink-0 text-xs text-gray-400">
+                        {count !== null && count !== undefined ? `${count.toLocaleString()}개` : "…"}
+                      </span>
                     </div>
-                    <div>
-                      <p className="font-semibold text-gray-900">{label}</p>
-                      <p className="mt-0.5 text-xs text-gray-500">{description}</p>
-                    </div>
-                    <div className="mt-auto text-xs text-gray-400">
-                      {count !== null && count !== undefined ? (
-                        <span>{count.toLocaleString()}개의 데이터</span>
-                      ) : (
-                        <span>데이터 로드 중...</span>
-                      )}
-                    </div>
+                    <p className="text-xs text-gray-500">{description}</p>
                   </Link>
                 )
               })}
