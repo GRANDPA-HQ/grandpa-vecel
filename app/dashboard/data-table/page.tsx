@@ -44,7 +44,7 @@ type TableCard = {
 
 // 그룹별로 섹션을 나눠서, 화면 너비가 바뀌어도 같은 그룹의 카드끼리는 항상 같은 줄에 붙어있게 한다.
 // (하나의 큰 그리드에 다 넣으면 줄바꿈 위치가 그룹 경계와 어긋나 예: 생산품/생산품 레시피가 다른 줄로 떨어질 수 있음)
-// 나중에 존/집기 마스터 등 그룹이 추가돼도 세로 공간을 적게 차지하도록 알약(pill) 형태의 컴팩트한 카드를 쓴다.
+// 나중에 존/집기 마스터 등 그룹이 추가돼도 세로 공간을 적게 차지하도록 알약(pill) 형태의 카드를 쓴다.
 const GROUPS: { name: string; tables: TableCard[] }[] = [
   {
     name: "분류",
@@ -90,30 +90,30 @@ export default async function DataTablePage() {
   const countMap = new Map(counts.map((c) => [c.table, c.count]))
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-7">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">데이터 테이블</h1>
         <p className="mt-1 text-sm text-muted-foreground">조회할 테이블을 선택하세요</p>
       </div>
 
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-5">
         {GROUPS.map((group) => (
-          <div key={group.name} className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
-            <h2 className="w-16 shrink-0 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+          <div key={group.name} className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:gap-5">
+            <h2 className="w-20 shrink-0 text-sm font-semibold uppercase tracking-widest text-muted-foreground">
               {group.name}
             </h2>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-3">
               {group.tables.map(({ label, table, icon: Icon, color, bg }) => {
                 const count = countMap.get(table)
                 return (
                   <Link
                     key={table}
                     href={`/dashboard/data-table/${encodeURIComponent(table)}`}
-                    className={`flex items-center gap-2.5 rounded-full border px-4 py-2 transition-colors ${bg}`}
+                    className={`flex items-center gap-3 rounded-full border px-5 py-3 transition-colors ${bg}`}
                   >
-                    <Icon className={`h-4 w-4 shrink-0 ${color}`} />
-                    <span className="text-sm font-medium text-gray-900">{label}</span>
-                    <span className="text-xs text-gray-400">
+                    <Icon className={`h-5 w-5 shrink-0 ${color}`} />
+                    <span className="text-base font-medium text-gray-900">{label}</span>
+                    <span className="text-sm text-gray-400">
                       {count !== null && count !== undefined ? count.toLocaleString() : "…"}
                     </span>
                   </Link>
