@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { MessageCircle, Send, X } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useDraggableButton } from "@/components/use-draggable-button"
 
 type ChatMessage = { role: "user" | "assistant"; content: string }
 
@@ -15,6 +16,7 @@ export function DashboardChatSidebar() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const { offset, onMouseDown, wasDragged, resetPosition } = useDraggableButton("ai-chat-button-pos")
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
@@ -55,11 +57,18 @@ export function DashboardChatSidebar() {
     return (
       <button
         type="button"
-        onClick={() => setOpen(true)}
-        title="AI 도우미 열기"
-        className="fixed right-0 top-1/2 z-40 flex -translate-y-1/2 items-center gap-1.5 rounded-l-full border border-r-0 border-border bg-emerald-600 py-3 pl-4 pr-3 text-sm font-medium text-white shadow-lg transition-colors hover:bg-emerald-700"
+        onMouseDown={onMouseDown}
+        onDoubleClick={resetPosition}
+        onClick={() => {
+          // 드래그로 옮긴 직후의 클릭은 열기 동작으로 이어지지 않게 막는다
+          if (wasDragged()) return
+          setOpen(true)
+        }}
+        title="AI 도우미 열기 (드래그해서 위치를 옮기거나, 더블클릭으로 위치를 초기화할 수 있어요)"
+        style={{ transform: `translate(${offset.x}px, ${offset.y}px)` }}
+        className="fixed bottom-6 right-6 z-40 flex h-14 w-14 cursor-grab items-center justify-center rounded-full bg-emerald-600 text-white shadow-lg transition-colors hover:bg-emerald-700 active:cursor-grabbing"
       >
-        <MessageCircle className="h-4 w-4" />
+        <MessageCircle className="h-6 w-6" />
       </button>
     )
   }
