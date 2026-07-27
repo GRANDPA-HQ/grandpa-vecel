@@ -17,7 +17,8 @@ export function DashboardChatSidebar() {
   const [error, setError] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const { offset, onMouseDown, wasDragged, resetPosition } = useDraggableButton("ai-chat-button-pos")
-  const moved = offset.x !== 0 || offset.y !== 0
+  // 오른쪽 가장자리에 고정하고 세로로만 옮길 수 있게 한다 (x축 이동은 무시)
+  const moved = offset.y !== 0
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
@@ -56,12 +57,10 @@ export function DashboardChatSidebar() {
 
   if (!open) {
     return (
-      // 드래그로 옮긴 만큼 이 래퍼 전체를 이동시킨다. 되돌리기 배지가 버튼과 함께 움직이도록
-      // 배지는 이 래퍼 안에 절대 위치로 넣는다 (버튼에 onDoubleClick을 쓰면, 첫 클릭에서
-      // 버튼이 패널로 바뀌어 사라지는 바람에 두 번째 클릭이 도달하지 못해 더블클릭이 씹히는 문제가 있었음)
+      // 오른쪽 가장자리에 고정, 세로(y)로만 드래그해 옮긴다 (x축 이동값은 무시)
       <div
-        style={{ transform: `translate(${offset.x}px, ${offset.y}px)` }}
-        className="fixed bottom-6 right-6 z-40"
+        style={{ transform: `translateY(${offset.y}px)` }}
+        className="fixed bottom-24 right-0 z-40"
       >
         <button
           type="button"
@@ -71,10 +70,10 @@ export function DashboardChatSidebar() {
             if (wasDragged()) return
             setOpen(true)
           }}
-          title="AI 도우미 열기 (드래그해서 위치를 옮길 수 있어요)"
-          className="flex h-14 w-14 cursor-grab items-center justify-center rounded-full bg-emerald-600 text-white shadow-lg transition-colors hover:bg-emerald-700 active:cursor-grabbing"
+          title="AI 도우미 열기 (위아래로 드래그해서 위치를 옮길 수 있어요)"
+          className="flex cursor-grab items-center gap-1.5 rounded-l-full border border-r-0 border-border bg-emerald-600 py-3 pl-4 pr-3 text-sm font-medium text-white shadow-lg transition-colors hover:bg-emerald-700 active:cursor-grabbing"
         >
-          <MessageCircle className="h-6 w-6" />
+          <MessageCircle className="h-4 w-4" />
         </button>
 
         {moved && (
@@ -84,7 +83,7 @@ export function DashboardChatSidebar() {
               e.stopPropagation()
               resetPosition()
             }}
-            title="기본 위치(오른쪽 하단)로 되돌리기"
+            title="기본 위치로 되돌리기"
             className="absolute -left-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-border bg-white text-muted-foreground shadow transition-colors hover:bg-muted hover:text-foreground"
           >
             <RotateCcw className="h-3 w-3" />
