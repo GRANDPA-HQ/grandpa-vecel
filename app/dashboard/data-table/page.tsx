@@ -1,8 +1,17 @@
 import Link from "next/link"
 import { getTableCount } from "@/lib/supabase/db"
-import { Package, Factory, ClipboardList, Barcode, BookOpen, PackageOpen } from "lucide-react"
+import { Tags, Package, PackageOpen, Factory, ClipboardList, Barcode, BookOpen } from "lucide-react"
 
+// 구매(카테고리·원재료·부자재) → 생산(생산품·레시피) → 판매(판매품·레시피) 흐름 순서
 const TABLES = [
+  {
+    label: "카테고리 테이블",
+    table: "tb_category_mst",
+    icon: Tags,
+    description: "상품 카테고리 마스터 데이터를 조회합니다",
+    color: "text-purple-500",
+    bg: "bg-purple-50 hover:bg-purple-100 border-purple-100 hover:border-purple-300",
+  },
   {
     label: "원재료 테이블",
     table: "tb_raw_mst",
@@ -10,6 +19,14 @@ const TABLES = [
     description: "원재료 마스터 데이터를 조회합니다",
     color: "text-orange-500",
     bg: "bg-orange-50 hover:bg-orange-100 border-orange-100 hover:border-orange-300",
+  },
+  {
+    label: "포장 부자재 테이블",
+    table: "tb_submat_mst",
+    icon: PackageOpen,
+    description: "포장 부자재 마스터 데이터를 조회합니다",
+    color: "text-amber-500",
+    bg: "bg-amber-50 hover:bg-amber-100 border-amber-100 hover:border-amber-300",
   },
   {
     label: "생산품 테이블",
@@ -42,14 +59,6 @@ const TABLES = [
     description: "판매품별 생산품 구성 레시피를 조회합니다",
     color: "text-rose-500",
     bg: "bg-rose-50 hover:bg-rose-100 border-rose-100 hover:border-rose-300",
-  },
-  {
-    label: "포장 부자재 테이블",
-    table: "tb_submat_mst",
-    icon: PackageOpen,
-    description: "포장 부자재 마스터 데이터를 조회합니다",
-    color: "text-amber-500",
-    bg: "bg-amber-50 hover:bg-amber-100 border-amber-100 hover:border-amber-300",
   },
 ] as const
 
