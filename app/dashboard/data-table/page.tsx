@@ -90,29 +90,29 @@ export default async function DataTablePage() {
   const countMap = new Map(counts.map((c) => [c.table, c.count]))
 
   return (
-    <div className="flex flex-col gap-7">
+    <div className="flex flex-col gap-8">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">데이터 테이블</h1>
         <p className="mt-1 text-sm text-muted-foreground">조회할 테이블을 선택하세요</p>
       </div>
 
-      <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-6">
         {GROUPS.map((group) => (
-          <div key={group.name} className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:gap-5">
+          <div key={group.name} className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
             <h2 className="w-20 shrink-0 text-sm font-semibold uppercase tracking-widest text-muted-foreground">
               {group.name}
             </h2>
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap gap-4">
               {group.tables.map(({ label, table, icon: Icon, color, bg }) => {
                 const count = countMap.get(table)
                 return (
                   <Link
                     key={table}
                     href={`/dashboard/data-table/${encodeURIComponent(table)}`}
-                    className={`flex items-center gap-3 rounded-full border px-5 py-3 transition-colors ${bg}`}
+                    className={`flex items-center gap-3.5 rounded-2xl border px-7 py-4 transition-colors ${bg}`}
                   >
-                    <Icon className={`h-5 w-5 shrink-0 ${color}`} />
-                    <span className="text-base font-medium text-gray-900">{label}</span>
+                    <Icon className={`h-6 w-6 shrink-0 ${color}`} />
+                    <span className="text-lg font-medium text-gray-900">{label}</span>
                     <span className="text-sm text-gray-400">
                       {count !== null && count !== undefined ? count.toLocaleString() : "…"}
                     </span>
