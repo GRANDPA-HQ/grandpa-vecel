@@ -2,63 +2,70 @@ import Link from "next/link"
 import { getTableCount } from "@/lib/supabase/db"
 import { Tags, Package, PackageOpen, Factory, ClipboardList, Barcode, BookOpen } from "lucide-react"
 
-// 구매(카테고리·원재료·부자재) → 생산(생산품·레시피) → 판매(판매품·레시피) 흐름 순서
+// 구매(카테고리·원재료·부자재) → 생산(생산품·레시피) → 판매(판매품·레시피) 흐름 순서.
+// 색상도 이 3단계 그룹별로 통일 (구매: 톤, 생산: 에메랄드, 판매: 블루) — 아이콘으로 개별 테이블을 구분한다.
+const PURCHASE_STYLE = {
+  color: "text-amber-600",
+  bg: "bg-amber-50 hover:bg-amber-100 border-amber-100 hover:border-amber-300",
+}
+const PRODUCTION_STYLE = {
+  color: "text-emerald-600",
+  bg: "bg-emerald-50 hover:bg-emerald-100 border-emerald-100 hover:border-emerald-300",
+}
+const SALES_STYLE = {
+  color: "text-blue-600",
+  bg: "bg-blue-50 hover:bg-blue-100 border-blue-100 hover:border-blue-300",
+}
+
 const TABLES = [
   {
     label: "카테고리 테이블",
     table: "tb_category_mst",
     icon: Tags,
     description: "상품 카테고리 마스터 데이터를 조회합니다",
-    color: "text-purple-500",
-    bg: "bg-purple-50 hover:bg-purple-100 border-purple-100 hover:border-purple-300",
+    ...PURCHASE_STYLE,
   },
   {
     label: "원재료 테이블",
     table: "tb_raw_mst",
     icon: Package,
     description: "원재료 마스터 데이터를 조회합니다",
-    color: "text-orange-500",
-    bg: "bg-orange-50 hover:bg-orange-100 border-orange-100 hover:border-orange-300",
+    ...PURCHASE_STYLE,
   },
   {
     label: "포장 부자재 테이블",
     table: "tb_submat_mst",
     icon: PackageOpen,
     description: "포장 부자재 마스터 데이터를 조회합니다",
-    color: "text-amber-500",
-    bg: "bg-amber-50 hover:bg-amber-100 border-amber-100 hover:border-amber-300",
+    ...PURCHASE_STYLE,
   },
   {
     label: "생산품 테이블",
     table: "tb_prod_mst",
     icon: Factory,
     description: "생산품 마스터 데이터를 조회합니다",
-    color: "text-emerald-500",
-    bg: "bg-emerald-50 hover:bg-emerald-100 border-emerald-100 hover:border-emerald-300",
+    ...PRODUCTION_STYLE,
   },
   {
     label: "생산품 레시피 테이블",
     table: "tb_prod_recipe",
     icon: ClipboardList,
     description: "생산품별 원재료 구성 레시피를 조회합니다",
-    color: "text-teal-500",
-    bg: "bg-teal-50 hover:bg-teal-100 border-teal-100 hover:border-teal-300",
+    ...PRODUCTION_STYLE,
   },
   {
     label: "판매품 테이블",
     table: "tb_sku_mst",
     icon: Barcode,
     description: "판매품 마스터 데이터를 조회합니다",
-    color: "text-indigo-500",
-    bg: "bg-indigo-50 hover:bg-indigo-100 border-indigo-100 hover:border-indigo-300",
+    ...SALES_STYLE,
   },
   {
     label: "판매품 레시피 테이블",
     table: "tb_sku_recipe",
     icon: BookOpen,
     description: "판매품별 생산품 구성 레시피를 조회합니다",
-    color: "text-rose-500",
-    bg: "bg-rose-50 hover:bg-rose-100 border-rose-100 hover:border-rose-300",
+    ...SALES_STYLE,
   },
 ] as const
 
