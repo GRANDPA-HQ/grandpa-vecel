@@ -13,6 +13,7 @@ export type RowCursor = {
 export const TABLE_PK: Record<string, string> = {
   tb_sku_recipe:  "input_id",
   tb_prod_recipe: "input_id",
+  tb_submat_mst:  "submat_id",
 }
 
 // 테이블 한글 이름 (엑셀 파일명/시트명 등 표시에 사용)
@@ -29,6 +30,7 @@ export const TABLE_LABELS: Record<string, string> = {
   tb_sales_order:        "매출 주문",
   tb_sales_order_item:   "매출 주문 품목",
   tb_sku_platform_alias: "판매품 플랫폼 별칭",
+  tb_submat_mst:         "포장 부자재",
 }
 
 // employees 테이블의 FK 컬럼 → 이름 표시용 조회 설정 (화면·엑셀 추출 공용)
@@ -151,6 +153,7 @@ export const TABLE_DEFAULT_SORT: Record<string, { column: string; dir: "asc" | "
   tb_prod_recipe:  { column: "prod_id", dir: "asc" },
   employees:       { column: "name", dir: "asc" },
   tb_sales_order:  { column: "order_datetime", dir: "desc" },
+  tb_submat_mst:   { column: "submat_id", dir: "asc" },
 }
 
 // 테이블별 검색 대상 컬럼 (코드/이름 등)
@@ -165,4 +168,5 @@ export const TABLE_SEARCH_COLUMNS: Record<string, string[]> = {
   tb_sku_recipe:   ["memo"],
   tb_prod_recipe:  ["memo"],
   employees:       ["name", "phone", "email"],
+  tb_submat_mst:   ["submat_id", "item_name", "item_name_short"],
 }

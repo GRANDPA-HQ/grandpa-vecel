@@ -523,6 +523,81 @@ export async function getSkuStockRows(): Promise<SkuStockRow[] | null> {
 }
 
 /**
+ * 최근 등록된 판매품(tb_sku_mst)과 그 판매 레시피(tb_sku_recipe → tb_prod_mst 구성) 조회.
+ * 챗봇의 "최근 등록된 판매 레시피" 질문에 대응.
+ */
+export type RecentSkuRecipe = {
+  sku_code: string
+  sku_name: string
+  created_at: string
+  items: {
+    prod_code: string
+    prod_name: string
+    amount: number | null
+    unit: string | null
+    memo: string | null
+  }[]
+}
+
+export async function getRecentSkuRecipes(limit = 3): Promise<RecentSkuRecipe[]> {
+  const skuUrl =
+    `${SUPABASE_URL}/rest/v1/tb_sku_mst` +
+    `?select=id,sku_code,sku_name,created_at&order=created_at.desc&limit=${limit}`
+  const skuRes = await fetch(skuUrl, { headers: authHeaders(), cache: "no-store" })
+  if (!skuRes.ok) throw new Error(`Failed to read tb_sku_mst (${skuRes.status})`)
+  const skus = (await skuRes.json()) as {
+    id: string
+    sku_code: string
+    sku_name: string
+    created_at: string
+  }[]
+  if (skus.length === 0) return []
+
+  const skuIdsFilter = skus.map((s) => `"${s.id}"`).join(",")
+  const recipeUrl =
+    `${SUPABASE_URL}/rest/v1/tb_sku_recipe?select=sku_id,prod_id,amount,unit,memo` +
+    `&sku_id=in.${encodeURIComponent(`(${skuIdsFilter})`)}`
+  const recipeRes = await fetch(recipeUrl, { headers: authHeaders(), cache: "no-store" })
+  if (!recipeRes.ok) throw new Error(`Failed to read tb_sku_recipe (${recipeRes.status})`)
+  const recipeRows = (await recipeRes.json()) as {
+    sku_id: string
+    prod_id: string
+    amount: number | null
+    unit: string | null
+    memo: string | null
+  }[]
+
+  const prodIds = [...new Set(recipeRows.map((r) => r.prod_id))]
+  let prodMap: Record<string, { prod_code: string; prod_name: string }> = {}
+  if (prodIds.length > 0) {
+    const prodIdsFilter = prodIds.map((id) => `"${id}"`).join(",")
+    const prodUrl =
+      `${SUPABASE_URL}/rest/v1/tb_prod_mst?select=id,prod_code,prod_name` +
+      `&id=in.${encodeURIComponent(`(${prodIdsFilter})`)}`
+    const prodRes = await fetch(prodUrl, { headers: authHeaders(), cache: "no-store" })
+    if (prodRes.ok) {
+      const prodRows = (await prodRes.json()) as { id: string; prod_code: string; prod_name: string }[]
+      prodMap = Object.fromEntries(prodRows.map((p) => [p.id, { prod_code: p.prod_code, prod_name: p.prod_name }]))
+    }
+  }
+
+  return skus.map((sku) => ({
+    sku_code: sku.sku_code,
+    sku_name: sku.sku_name,
+    created_at: sku.created_at,
+    items: recipeRows
+      .filter((r) => r.sku_id === sku.id)
+      .map((r) => ({
+        prod_code: prodMap[r.prod_id]?.prod_code ?? r.prod_id,
+        prod_name: prodMap[r.prod_id]?.prod_name ?? "(알 수 없음)",
+        amount: r.amount,
+        unit: r.unit,
+        memo: r.memo,
+      })),
+  }))
+}
+
+/**
  * Fetch just the exact row count for a table (cheap HEAD-style request).
  */
 export async function getTableCount(table: string): Promise<number | null> {

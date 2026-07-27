@@ -1,8 +1,9 @@
 import Link from "next/link"
 import { AlertTriangle } from "lucide-react"
 import { getSalesOrdersInRange, type SalesOrderRecord } from "@/lib/supabase/db"
-import { addDaysKst, addMonthsKst, isValidDateStr, isoToKstDate, kstDateToIso, todayKst } from "@/lib/date-kst"
+import { addDaysKst, addMonthsKst, isValidDateStr, isoToKstDate, isoToKstHour, kstDateToIso, todayKst } from "@/lib/date-kst"
 import { SalesDailyChart } from "@/components/sales-daily-chart"
+import { SalesHourlyChart } from "@/components/sales-hourly-chart"
 
 const PLATFORM_LABEL: Record<string, string> = {
   coupang_eats: "쿠팡이츠",
@@ -140,15 +141,35 @@ export default async function SalesAnalyticsPage({
     platformTotals.set(o.platform, cur)
   }
 
+  const dateRange = buildDateRange(start, end)
+
   const dailyTotals = new Map<string, number>()
+  const hourlyByDate = new Map<string, { revenue: number; count: number }[]>()
+  for (const date of dateRange) {
+    hourlyByDate.set(
+      date,
+      Array.from({ length: 24 }, () => ({ revenue: 0, count: 0 })),
+    )
+  }
   for (const o of validOrders) {
     const day = isoToKstDate(o.order_datetime)
     dailyTotals.set(day, (dailyTotals.get(day) ?? 0) + (o.total_amount ?? 0))
+
+    const hourBuckets = hourlyByDate.get(day)
+    if (hourBuckets) {
+      const hour = isoToKstHour(o.order_datetime)
+      hourBuckets[hour].revenue += o.total_amount ?? 0
+      hourBuckets[hour].count += 1
+    }
   }
-  const dailySeries = buildDateRange(start, end).map((date) => ({
+  const dailySeries = dateRange.map((date) => ({
     date,
     total: dailyTotals.get(date) ?? 0,
   }))
+  const hourlyByDateObj: Record<string, { hour: number; revenue: number; count: number }[]> = {}
+  for (const [date, buckets] of hourlyByDate.entries()) {
+    hourlyByDateObj[date] = buckets.map((b, hour) => ({ hour, ...b }))
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -185,6 +206,12 @@ export default async function SalesAnalyticsPage({
           <div className="rounded-xl border border-border bg-card p-5">
             <h2 className="mb-4 text-sm font-semibold text-foreground">일별 매출 추이</h2>
             <SalesDailyChart data={dailySeries} />
+          </div>
+
+          {/* 시간대별 매출 / 주문 건수 차트 */}
+          <div className="rounded-xl border border-border bg-card p-5">
+            <h2 className="mb-4 text-sm font-semibold text-foreground">시간대별 매출 · 주문 건수</h2>
+            <SalesHourlyChart dates={dateRange} hourlyByDate={hourlyByDateObj} defaultDate={end} />
           </div>
 
           {/* 플랫폼별 매출 */}

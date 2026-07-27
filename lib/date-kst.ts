@@ -35,3 +35,15 @@ export function kstDateToIso(dateStr: string): string {
 export function isoToKstDate(iso: string): string {
   return KST_FORMATTER.format(new Date(iso))
 }
+
+const KST_HOUR_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  timeZone: "Asia/Seoul",
+  hour: "2-digit",
+  hourCycle: "h23",
+})
+
+/** ISO timestamptz 값을 KST 기준 시(0~23)로 변환 (시간대별 집계용) */
+export function isoToKstHour(iso: string): number {
+  const hourPart = KST_HOUR_FORMATTER.formatToParts(new Date(iso)).find((p) => p.type === "hour")
+  return hourPart ? Number(hourPart.value) : 0
+}

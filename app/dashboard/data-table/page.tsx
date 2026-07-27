@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { getTableCount } from "@/lib/supabase/db"
-import { Package, Factory, ClipboardList, Barcode, BookOpen } from "lucide-react"
+import { Package, Factory, ClipboardList, Barcode, BookOpen, PackageOpen } from "lucide-react"
 
 const TABLES = [
   {
@@ -42,6 +42,14 @@ const TABLES = [
     description: "판매품별 생산품 구성 레시피를 조회합니다",
     color: "text-rose-500",
     bg: "bg-rose-50 hover:bg-rose-100 border-rose-100 hover:border-rose-300",
+  },
+  {
+    label: "포장 부자재 테이블",
+    table: "tb_submat_mst",
+    icon: PackageOpen,
+    description: "포장 부자재 마스터 데이터를 조회합니다",
+    color: "text-amber-500",
+    bg: "bg-amber-50 hover:bg-amber-100 border-amber-100 hover:border-amber-300",
   },
 ] as const
 
