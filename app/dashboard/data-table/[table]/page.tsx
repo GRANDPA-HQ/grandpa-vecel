@@ -1,7 +1,20 @@
-import { getTables, getTableRows, getCategoryIdMap, getSkuOptions, getProdOptions, getRawOptions, getIdLabelOptions } from "@/lib/supabase/db"
+import type { ReactNode } from "react"
+import {
+  getTables,
+  getTableRows,
+  getCategoryIdMap,
+  getSkuOptions,
+  getProdOptions,
+  getRawOptions,
+  getIdLabelOptions,
+  getZoneTypeOptions,
+  getSubmatZoneLinks,
+  type SubmatZoneLink,
+} from "@/lib/supabase/db"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { DataTable } from "@/components/data-table"
 import { AddRowDialog, type ColumnDef } from "@/components/add-row-dialog"
+import { SubmatZoneCell } from "@/components/submat-zone-cell"
 import {
   PAGE_SIZE,
   TABLE_PK,
@@ -236,6 +249,42 @@ export default async function TablePage({
     } catch {}
   }
 
+  // tb_submat_mst: 부자재가 사용되는 Zone유형(tb_zone_type_mst)을 태그로 표시·편집.
+  // 전사 공통 카탈로그 테이블이라 zone_id가 아닌 zone_type_id를 참조한다 (서대표 확정 v1.0 원칙).
+  // ※ tb_submat_zone_link 테이블이 아직 없으면 조회가 빈 배열로 폴백되어 화면은 정상 렌더링된다.
+  let extraColumn: { header: string; cellsByPk: Record<string, ReactNode> } | undefined
+  if (tableName === "tb_submat_mst") {
+    try {
+      const [zoneOptions, links] = await Promise.all([
+        getZoneTypeOptions().catch(() => [] as SelectOption[]),
+        getSubmatZoneLinks().catch(() => [] as SubmatZoneLink[]),
+      ])
+      const linksBySubmat: Record<string, string[]> = {}
+      for (const link of links) {
+        ;(linksBySubmat[link.submat_id] ??= []).push(link.zone_type_id)
+      }
+      extraColumn = {
+        header: "존",
+        cellsByPk: Object.fromEntries(
+          rows.map((row) => {
+            const submatId = String(row["submat_id"] ?? "")
+            return [
+              submatId,
+              (
+                <SubmatZoneCell
+                  key={submatId}
+                  submatId={submatId}
+                  initialZoneIds={linksBySubmat[submatId] ?? []}
+                  zoneOptions={zoneOptions}
+                />
+              ),
+            ]
+          }),
+        ),
+      }
+    } catch {}
+  }
+
   // FK 컬럼 → 사람이 읽을 수 있는 값으로 변환 (catgegory_id → category_code)
   // tb_sku_mst는 category_code 직접 컬럼으로 변경되어 resolver 불필요
   if (CATEGORY_TABLES.has(tableName) && tableName !== "tb_sku_mst") {
@@ -289,6 +338,7 @@ export default async function TablePage({
           searchPlaceholder={searchEnabled ? TABLE_SEARCH_PLACEHOLDER[tableName] ?? `${searchColumns.join(", ")} 검색` : undefined}
           bulkDeleteEnabled={BULK_DELETE_TABLES.has(tableName)}
           rowLinks={rowLinks}
+          extraColumn={extraColumn}
         />
       )}
     </div>
