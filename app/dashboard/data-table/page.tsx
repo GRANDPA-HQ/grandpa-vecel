@@ -7,112 +7,70 @@ import { Tags, Package, PackageOpen, Factory, ClipboardList, Barcode, BookOpen, 
 // 그룹 안에서도 카드가 구분되도록 명도를 다르게 준다.
 const CATEGORY_STYLE = {
   color: "text-slate-600",
-  bg: "bg-slate-50 hover:bg-slate-100 border-slate-100 hover:border-slate-300",
+  bg: "bg-slate-50 hover:bg-slate-100 border-slate-200",
 }
 const PURCHASE_STYLE_1 = {
-  color: "text-amber-500",
-  bg: "bg-amber-50 hover:bg-amber-100 border-amber-100 hover:border-amber-300",
+  color: "text-amber-600",
+  bg: "bg-amber-50 hover:bg-amber-100 border-amber-200",
 }
 const PURCHASE_STYLE_2 = {
-  color: "text-amber-700",
-  bg: "bg-amber-50 hover:bg-amber-100 border-amber-100 hover:border-amber-300",
+  color: "text-amber-800",
+  bg: "bg-amber-50 hover:bg-amber-100 border-amber-200",
 }
 const PRODUCTION_STYLE_1 = {
-  color: "text-emerald-500",
-  bg: "bg-emerald-50 hover:bg-emerald-100 border-emerald-100 hover:border-emerald-300",
+  color: "text-emerald-600",
+  bg: "bg-emerald-50 hover:bg-emerald-100 border-emerald-200",
 }
 const PRODUCTION_STYLE_2 = {
-  color: "text-emerald-700",
-  bg: "bg-emerald-50 hover:bg-emerald-100 border-emerald-100 hover:border-emerald-300",
+  color: "text-emerald-800",
+  bg: "bg-emerald-50 hover:bg-emerald-100 border-emerald-200",
 }
 const SALES_STYLE_1 = {
-  color: "text-blue-500",
-  bg: "bg-blue-50 hover:bg-blue-100 border-blue-100 hover:border-blue-300",
+  color: "text-blue-600",
+  bg: "bg-blue-50 hover:bg-blue-100 border-blue-200",
 }
 const SALES_STYLE_2 = {
-  color: "text-blue-700",
-  bg: "bg-blue-50 hover:bg-blue-100 border-blue-100 hover:border-blue-300",
+  color: "text-blue-800",
+  bg: "bg-blue-50 hover:bg-blue-100 border-blue-200",
 }
 
 type TableCard = {
   label: string
   table: string
   icon: LucideIcon
-  description: string
   color: string
   bg: string
 }
 
 // 그룹별로 섹션을 나눠서, 화면 너비가 바뀌어도 같은 그룹의 카드끼리는 항상 같은 줄에 붙어있게 한다.
 // (하나의 큰 그리드에 다 넣으면 줄바꿈 위치가 그룹 경계와 어긋나 예: 생산품/생산품 레시피가 다른 줄로 떨어질 수 있음)
+// 나중에 존/집기 마스터 등 그룹이 추가돼도 세로 공간을 적게 차지하도록 알약(pill) 형태의 컴팩트한 카드를 쓴다.
 const GROUPS: { name: string; tables: TableCard[] }[] = [
   {
     name: "분류",
     tables: [
-      {
-        label: "카테고리 테이블",
-        table: "tb_category_mst",
-        icon: Tags,
-        description: "상품 카테고리 마스터 데이터를 조회합니다",
-        ...CATEGORY_STYLE,
-      },
+      { label: "카테고리", table: "tb_category_mst", icon: Tags, ...CATEGORY_STYLE },
     ],
   },
   {
     name: "구매",
     tables: [
-      {
-        label: "원재료 테이블",
-        table: "tb_raw_mst",
-        icon: Package,
-        description: "원재료 마스터 데이터를 조회합니다",
-        ...PURCHASE_STYLE_1,
-      },
-      {
-        label: "포장 부자재 테이블",
-        table: "tb_submat_mst",
-        icon: PackageOpen,
-        description: "포장 부자재 마스터 데이터를 조회합니다",
-        ...PURCHASE_STYLE_2,
-      },
+      { label: "원재료", table: "tb_raw_mst", icon: Package, ...PURCHASE_STYLE_1 },
+      { label: "포장 부자재", table: "tb_submat_mst", icon: PackageOpen, ...PURCHASE_STYLE_2 },
     ],
   },
   {
     name: "생산",
     tables: [
-      {
-        label: "생산품 테이블",
-        table: "tb_prod_mst",
-        icon: Factory,
-        description: "생산품 마스터 데이터를 조회합니다",
-        ...PRODUCTION_STYLE_1,
-      },
-      {
-        label: "생산품 레시피 테이블",
-        table: "tb_prod_recipe",
-        icon: ClipboardList,
-        description: "생산품별 원재료 구성 레시피를 조회합니다",
-        ...PRODUCTION_STYLE_2,
-      },
+      { label: "생산품", table: "tb_prod_mst", icon: Factory, ...PRODUCTION_STYLE_1 },
+      { label: "생산품 레시피", table: "tb_prod_recipe", icon: ClipboardList, ...PRODUCTION_STYLE_2 },
     ],
   },
   {
     name: "판매",
     tables: [
-      {
-        label: "판매품 테이블",
-        table: "tb_sku_mst",
-        icon: Barcode,
-        description: "판매품 마스터 데이터를 조회합니다",
-        ...SALES_STYLE_1,
-      },
-      {
-        label: "판매품 레시피 테이블",
-        table: "tb_sku_recipe",
-        icon: BookOpen,
-        description: "판매품별 생산품 구성 레시피를 조회합니다",
-        ...SALES_STYLE_2,
-      },
+      { label: "판매품", table: "tb_sku_mst", icon: Barcode, ...SALES_STYLE_1 },
+      { label: "판매품 레시피", table: "tb_sku_recipe", icon: BookOpen, ...SALES_STYLE_2 },
     ],
   },
 ]
@@ -132,41 +90,32 @@ export default async function DataTablePage() {
   const countMap = new Map(counts.map((c) => [c.table, c.count]))
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">데이터 테이블</h1>
         <p className="mt-1 text-sm text-muted-foreground">조회할 테이블을 선택하세요</p>
       </div>
 
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-4">
         {GROUPS.map((group) => (
-          <div key={group.name} className="flex flex-col gap-3">
-            <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+          <div key={group.name} className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+            <h2 className="w-16 shrink-0 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
               {group.name}
             </h2>
-            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-              {group.tables.map(({ label, table, icon: Icon, description, color, bg }) => {
+            <div className="flex flex-wrap gap-2">
+              {group.tables.map(({ label, table, icon: Icon, color, bg }) => {
                 const count = countMap.get(table)
                 return (
                   <Link
                     key={table}
                     href={`/dashboard/data-table/${encodeURIComponent(table)}`}
-                    className={`flex flex-col gap-4 rounded-xl border p-6 transition-colors ${bg}`}
+                    className={`flex items-center gap-2.5 rounded-full border px-4 py-2 transition-colors ${bg}`}
                   >
-                    <div className={`flex h-11 w-11 items-center justify-center rounded-lg bg-white shadow-sm ${color}`}>
-                      <Icon className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <p className="font-semibold text-gray-900">{label}</p>
-                      <p className="mt-0.5 text-sm text-gray-500">{description}</p>
-                    </div>
-                    <div className="mt-auto text-xs text-gray-400">
-                      {count !== null && count !== undefined ? (
-                        <span>{count.toLocaleString()}개의 데이터</span>
-                      ) : (
-                        <span>데이터 로드 중...</span>
-                      )}
-                    </div>
+                    <Icon className={`h-4 w-4 shrink-0 ${color}`} />
+                    <span className="text-sm font-medium text-gray-900">{label}</span>
+                    <span className="text-xs text-gray-400">
+                      {count !== null && count !== undefined ? count.toLocaleString() : "…"}
+                    </span>
                   </Link>
                 )
               })}
