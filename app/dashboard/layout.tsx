@@ -12,7 +12,7 @@ export default async function DashboardLayout({
   if (!employee) redirect("/login")
 
   return (
-    <div className="flex min-h-svh bg-background text-foreground">
+    <div className="flex h-svh bg-background text-foreground">
       <DashboardSidebar isManager={employee.isSenior} userName={employee.name} />
       <main className="flex-1 overflow-auto p-6">{children}</main>
       <DashboardChatSidebar />
