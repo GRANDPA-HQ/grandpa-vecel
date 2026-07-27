@@ -30,9 +30,11 @@ export function DashboardSidebar({
       href: DATA_TABLE_HREF,
       icon: Database,
       visible: true,
+      // 구매(카테고리·원재료·부자재) → 생산(생산품·레시피) → 판매(판매품·레시피) 흐름 순서
       submenu: [
-        { label: "원재료 테이블", table: "tb_raw_mst" },
         { label: "카테고리 테이블", table: "tb_category_mst" },
+        { label: "원재료 테이블", table: "tb_raw_mst" },
+        { label: "포장 부자재 테이블", table: "tb_submat_mst" },
         { label: "생산품 테이블", table: "tb_prod_mst" },
         { label: "생산품 레시피 테이블", table: "tb_prod_recipe" },
         { label: "판매품 테이블", table: "tb_sku_mst" },
