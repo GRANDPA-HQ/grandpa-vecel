@@ -2,7 +2,7 @@
 
 import Image from "next/image"
 import Link from "next/link"
-import { useState, useRef, useCallback, useEffect, Fragment } from "react"
+import { useState, useRef, useCallback, useEffect, Fragment, type ReactNode } from "react"
 import { useRouter, usePathname, useSearchParams } from "next/navigation"
 import { ArrowUp, ArrowDown, ArrowUpDown, ExternalLink, FileSpreadsheet, NotebookPen, Search, Trash2 } from "lucide-react"
 import {
@@ -515,6 +515,7 @@ export function DataTable({
   searchPlaceholder,
   bulkDeleteEnabled,
   rowLinks,
+  extraColumn,
 }: {
   columns: string[]
   rows: Record<string, unknown>[]
@@ -534,6 +535,8 @@ export function DataTable({
   // PK 값 → 내부 링크 href. 값이 있는 행에만 링크 컬럼(header)을 표시한다
   // insertBeforeIndex: 지정한 인덱스의 실제 컬럼 바로 앞에 링크 컬럼을 끼워 넣는다 (미지정 시 맨 뒤)
   rowLinks?: { header: string; hrefByPk: Record<string, string>; insertBeforeIndex?: number }
+  // 임의의 미리 렌더링된 셀을 맨 뒤에 추가 컬럼으로 붙인다 (예: 포장 부자재의 존 태그 편집 UI)
+  extraColumn?: { header: string; cellsByPk: Record<string, ReactNode> }
 }) {
   const [rows, setRows] = useState(initialRows)
   const [errors, setErrors] = useState<ErrorEntry[]>([])
@@ -660,6 +663,7 @@ export function DataTable({
   const editable = !!tableName && !!pkColumn
   const bulkSelectable = editable && !!bulkDeleteEnabled
   const hasLinkColumn = !!rowLinks && !!pkColumn
+  const hasExtraColumn = !!extraColumn && !!pkColumn
   // 링크 열을 끼워 넣을 위치 (지정 없으면 맨 뒤 = columns.length)
   const linkColumnIndex = rowLinks?.insertBeforeIndex ?? columns.length
 
@@ -737,6 +741,8 @@ export function DataTable({
       </TableCell>
     )
   }
+
+  const extraColCount = (editable ? 1 : 0) + (bulkSelectable ? 1 : 0) + (hasLinkColumn ? 1 : 0) + (hasExtraColumn ? 1 : 0)
 
   return (
     <div className="flex flex-col gap-3">
@@ -851,6 +857,11 @@ export function DataTable({
                   {rowLinks!.header}
                 </TableHead>
               )}
+              {hasExtraColumn && (
+                <TableHead className="sticky top-0 z-10 whitespace-nowrap bg-card text-xs">
+                  {extraColumn!.header}
+                </TableHead>
+              )}
               {editable && (
                 <TableHead className="sticky top-0 z-10 w-10 bg-card text-xs" />
               )}
@@ -859,7 +870,7 @@ export function DataTable({
           <TableBody>
             {rows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={columns.length + (editable ? 1 : 0) + (bulkSelectable ? 1 : 0) + (hasLinkColumn ? 1 : 0)} className="py-12 text-center text-sm text-muted-foreground">
+                <TableCell colSpan={columns.length + extraColCount} className="py-12 text-center text-sm text-muted-foreground">
                   데이터가 없습니다.
                 </TableCell>
               </TableRow>
@@ -911,6 +922,13 @@ export function DataTable({
                   return cell
                 })}
                 {hasLinkColumn && linkColumnIndex >= columns.length && renderLinkCell(row, "link-end")}
+                {hasExtraColumn && (
+                  <TableCell className="align-top">
+                    {extraColumn!.cellsByPk[String(row[pkColumn!] ?? "")] ?? (
+                      <span className="text-xs text-muted-foreground">-</span>
+                    )}
+                  </TableCell>
+                )}
                 {editable && (
                   <TableCell className="align-top">
                     {(() => {
@@ -935,7 +953,7 @@ export function DataTable({
             {cursor && (
               <tr>
                 <td
-                  colSpan={columns.length + (editable ? 1 : 0) + (bulkSelectable ? 1 : 0) + (hasLinkColumn ? 1 : 0)}
+                  colSpan={columns.length + extraColCount}
                   className="p-0"
                 >
                   <div ref={sentinelRef} className="flex h-10 items-center justify-center text-xs text-muted-foreground">
