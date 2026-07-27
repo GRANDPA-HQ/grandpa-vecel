@@ -11,9 +11,18 @@ export const COLUMN_LABELS: Record<string, string> = {
   carb_ea: "탄수화물(개당, g)",
   protein_ea: "단백질(개당, g)",
   fat_ea: "지방(개당, g)",
+  purchase_mode: "구매 방식",
+  purchase_section_id: "구매 담당 섹션",
   // 생산품 (tb_prod_mst)
   prod_code: "생산품 코드",
   prod_name: "생산품명",
+  avg_daily_usage: "일평균 사용량",
+  batch_qty: "배치 수량",
+  min_stock_qty: "최소 재고 수량",
+  target_stock_qty: "목표 재고 수량",
+  container_type: "용기 종류",
+  portion_weight: "포션 중량",
+  default_sp_entry_stage: "SP 투입 기본 상태",
   // SKU (tb_sku_mst)
   sku_code: "SKU 코드",
   sku_name: "SKU명",
@@ -52,6 +61,7 @@ export const COLUMN_LABELS: Record<string, string> = {
   diet_tags: "식이 유형 태그",
   nutrition_tags: "영양 태그",
   allergen_tags: "알러지 유발 성분",
+  is_active: "활성 여부",
   // 생산 공정 (tb_production_process)
   product_name: "제품명",
   reject_reason: "반려 사유",
@@ -68,6 +78,18 @@ export const COLUMN_LABELS: Record<string, string> = {
   unit: "단위",
   memo: "메모",
   sort_order: "순서",
+  // 포장 부자재 (tb_submat_mst)
+  submat_id: "부자재 ID",
+  item_name: "품목명",
+  item_name_short: "품목명 (축약)",
+  manage_part_id: "관리 파트",
+  usage_note: "사용 메모",
+  qty_per_purchase: "구매당 수량",
+  // 매출 주문 (tb_sales_order / tb_sales_order_item)
+  platform: "판매 플랫폼",
+  order_datetime: "주문 일시",
+  total_amount: "총 금액",
+  settlement_amount: "정산 금액",
   // 사용자 (users)
   email: "이메일",
   password: "비밀번호",
