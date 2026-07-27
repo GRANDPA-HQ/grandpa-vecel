@@ -2,7 +2,7 @@
 
 import Image from "next/image"
 import Link from "next/link"
-import { useState, useRef, useCallback, useEffect } from "react"
+import { useState, useRef, useCallback, useEffect, Fragment } from "react"
 import { useRouter, usePathname, useSearchParams } from "next/navigation"
 import { ArrowUp, ArrowDown, ArrowUpDown, ExternalLink, FileSpreadsheet, NotebookPen, Search, Trash2 } from "lucide-react"
 import {
@@ -532,7 +532,8 @@ export function DataTable({
   searchPlaceholder?: string
   bulkDeleteEnabled?: boolean
   // PK 값 → 내부 링크 href. 값이 있는 행에만 링크 컬럼(header)을 표시한다
-  rowLinks?: { header: string; hrefByPk: Record<string, string> }
+  // insertBeforeIndex: 지정한 인덱스의 실제 컬럼 바로 앞에 링크 컬럼을 끼워 넣는다 (미지정 시 맨 뒤)
+  rowLinks?: { header: string; hrefByPk: Record<string, string>; insertBeforeIndex?: number }
 }) {
   const [rows, setRows] = useState(initialRows)
   const [errors, setErrors] = useState<ErrorEntry[]>([])
@@ -659,6 +660,8 @@ export function DataTable({
   const editable = !!tableName && !!pkColumn
   const bulkSelectable = editable && !!bulkDeleteEnabled
   const hasLinkColumn = !!rowLinks && !!pkColumn
+  // 링크 열을 끼워 넣을 위치 (지정 없으면 맨 뒤 = columns.length)
+  const linkColumnIndex = rowLinks?.insertBeforeIndex ?? columns.length
 
   const [selectedPks, setSelectedPks] = useState<Set<string>>(new Set())
   const [bulkDeleting, setBulkDeleting] = useState(false)
@@ -713,6 +716,27 @@ export function DataTable({
     const qs = params.toString()
     return `/api/export/${encodeURIComponent(tableName)}${qs ? `?${qs}` : ""}`
   })()
+
+  // 레시피 링크 셀 (헤더 위치 계산과 무관하게 내용은 항상 동일)
+  const renderLinkCell = (row: Record<string, unknown>, key: string) => {
+    const href = rowLinks!.hrefByPk[String(row[pkColumn!] ?? "")]
+    return (
+      <TableCell key={key} className="align-top">
+        {href ? (
+          <Link
+            href={href}
+            title="레시피 작성 페이지에서 열기"
+            className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-indigo-500/10 px-2 py-0.5 text-xs font-medium text-indigo-600 hover:bg-indigo-500/20"
+          >
+            <NotebookPen className="h-3 w-3 shrink-0" />
+            레시피
+          </Link>
+        ) : (
+          <span className="text-xs text-muted-foreground">-</span>
+        )}
+      </TableCell>
+    )
+  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -785,9 +809,9 @@ export function DataTable({
                   />
                 </TableHead>
               )}
-              {columns.map((col) => {
+              {columns.map((col, colIdx) => {
                 const isSorted = activeSort === col
-                return (
+                const headCell = (
                   <TableHead
                     key={col}
                     onClick={() => handleSort(col)}
@@ -810,8 +834,19 @@ export function DataTable({
                     )}
                   </TableHead>
                 )
+                if (hasLinkColumn && colIdx === linkColumnIndex) {
+                  return (
+                    <Fragment key={`link-wrap-${col}`}>
+                      <TableHead className="sticky top-0 z-10 whitespace-nowrap bg-card text-xs">
+                        {rowLinks!.header}
+                      </TableHead>
+                      {headCell}
+                    </Fragment>
+                  )
+                }
+                return headCell
               })}
-              {hasLinkColumn && (
+              {hasLinkColumn && linkColumnIndex >= columns.length && (
                 <TableHead className="sticky top-0 z-10 whitespace-nowrap bg-card text-xs">
                   {rowLinks!.header}
                 </TableHead>
@@ -841,48 +876,41 @@ export function DataTable({
                     />
                   </TableCell>
                 )}
-                {columns.map((col) => (
-                  <TableCell
-                    key={col}
-                    className="max-w-[20ch] overflow-hidden font-mono text-xs align-top"
-                  >
-
-                    {editable ? (
-                      <EditableCell
-                        col={col}
-                        value={row[col]}
-                        row={row}
-                        tableName={tableName}
-                        pkColumn={pkColumn}
-                        columnOptions={columnOptions}
-                        columnResolvers={columnResolvers}
-                        columnMultiOptions={columnMultiOptions}
-                        onRowUpdate={handleRowUpdate}
-                        onError={handleError}
-                      />
-                    ) : (
-                      <CellContent col={col} value={row[col]} row={row} columnResolvers={columnResolvers} />
-                    )}
-                  </TableCell>
-                ))}
-                {hasLinkColumn && (
-                  <TableCell className="align-top">
-                    {(() => {
-                      const href = rowLinks!.hrefByPk[String(row[pkColumn!] ?? "")]
-                      if (!href) return <span className="text-xs text-muted-foreground">-</span>
-                      return (
-                        <Link
-                          href={href}
-                          title="레시피 작성 페이지에서 열기"
-                          className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-indigo-500/10 px-2 py-0.5 text-xs font-medium text-indigo-600 hover:bg-indigo-500/20"
-                        >
-                          <NotebookPen className="h-3 w-3 shrink-0" />
-                          레시피
-                        </Link>
-                      )
-                    })()}
-                  </TableCell>
-                )}
+                {columns.map((col, colIdx) => {
+                  const cell = (
+                    <TableCell
+                      key={col}
+                      className="max-w-[20ch] overflow-hidden font-mono text-xs align-top"
+                    >
+                      {editable ? (
+                        <EditableCell
+                          col={col}
+                          value={row[col]}
+                          row={row}
+                          tableName={tableName}
+                          pkColumn={pkColumn}
+                          columnOptions={columnOptions}
+                          columnResolvers={columnResolvers}
+                          columnMultiOptions={columnMultiOptions}
+                          onRowUpdate={handleRowUpdate}
+                          onError={handleError}
+                        />
+                      ) : (
+                        <CellContent col={col} value={row[col]} row={row} columnResolvers={columnResolvers} />
+                      )}
+                    </TableCell>
+                  )
+                  if (hasLinkColumn && colIdx === linkColumnIndex) {
+                    return (
+                      <Fragment key={`link-wrap-${col}`}>
+                        {renderLinkCell(row, `link-${col}`)}
+                        {cell}
+                      </Fragment>
+                    )
+                  }
+                  return cell
+                })}
+                {hasLinkColumn && linkColumnIndex >= columns.length && renderLinkCell(row, "link-end")}
                 {editable && (
                   <TableCell className="align-top">
                     {(() => {
