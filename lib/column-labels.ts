@@ -19,6 +19,7 @@ export const COLUMN_LABELS: Record<string, string> = {
   sku_name: "SKU명",
   sku_name_en: "SKU명 (영문)",
   description_en: "설명 (영문)",
+  photo_url: "포토 URL",
   // 공통
   category_code: "카테고리 코드",
   category_name: "카테고리명",
@@ -32,6 +33,7 @@ export const COLUMN_LABELS: Record<string, string> = {
   price: "가격",
   cost: "원가",
   stock: "재고",
+  stock_qty: "재고 수량",
   min_stock: "최소 재고",
   photo: "사진",
   status: "상태",
