@@ -4,7 +4,7 @@
 
 ## 접속 주소
 
-**https://grandpa-vecel-fork.vercel.app/**
+**https://grandpa-vecel.vercel.app/**
 
 ## 로그인 안내
 

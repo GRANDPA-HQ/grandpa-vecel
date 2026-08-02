@@ -127,6 +127,12 @@ export const TABLE_COLUMN_ORDER: Record<string, string[]> = {
   tb_sku_mst: ["category_code", "sku_code", "sku_name", "sku_name_en"],
 }
 
+// 테이블별 항상 맨 뒤로 보낼 컬럼 (예: 값이 길어 스캔에 방해되는 URL류).
+// 나중에 다시 앞으로 옮기고 싶으면 이 목록에서 빼면 된다 (예: 사진 연동 후 photo_url을 맨 앞으로).
+export const TABLE_TRAILING_COLS: Record<string, string[]> = {
+  tb_sku_mst: ["photo_url"],
+}
+
 // allergen_tags: 식약처 표시 의무 알러지 유발 성분 (ENUM 값 → 한글명)
 export const ALLERGEN_OPTIONS: { value: string; label: string }[] = [
   { value: "NONE",       label: "해당없음(확인됨)" },

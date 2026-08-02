@@ -1,8 +1,21 @@
-import { getTables, getTableRows, getCategoryIdMap, getSkuOptions, getProdOptions, getRawOptions, getIdLabelOptions } from "@/lib/supabase/db"
+import type { ReactNode } from "react"
+import {
+  getTables,
+  getTableRows,
+  getCategoryIdMap,
+  getSkuOptions,
+  getProdOptions,
+  getRawOptions,
+  getIdLabelOptions,
+  getZoneTypeOptions,
+  getSubmatZoneLinks,
+  type SubmatZoneLink,
+} from "@/lib/supabase/db"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { getCurrentEmployee } from "@/lib/permissions"
 import { DataTable } from "@/components/data-table"
 import { AddRowDialog, type ColumnDef } from "@/components/add-row-dialog"
+import { SubmatZoneCell } from "@/components/submat-zone-cell"
 import {
   PAGE_SIZE,
   TABLE_PK,
@@ -11,6 +24,7 @@ import {
   HIDDEN_COLS,
   TABLE_HIDDEN_COLS,
   TABLE_COLUMN_ORDER,
+  TABLE_TRAILING_COLS,
   ALLERGEN_OPTIONS,
   EMPLOYEE_FK_LOOKUPS,
   ZONE_FK_LOOKUPS,
@@ -219,6 +233,15 @@ export default async function TablePage({
     ]
   }
 
+  // 지정된 컬럼(예: photo_url)은 항상 맨 뒤로 보낸다
+  const trailingCols = TABLE_TRAILING_COLS[tableName]
+  if (trailingCols && trailingCols.length > 0) {
+    columns = [
+      ...columns.filter((c) => !trailingCols.includes(c)),
+      ...trailingCols.filter((c) => columns.includes(c)),
+    ]
+  }
+
   const canInsert = INSERTABLE_TABLES.has(tableName)
 
   // 드롭박스 옵션 (category_code, status, storage 등)
@@ -241,7 +264,8 @@ export default async function TablePage({
 
   // tb_sku_mst: 레시피(tb_sku_recipe)가 등록된 SKU에 레시피 작성 페이지로 가는 링크 표시
   // URL은 UUID 대신 sku_code를 사용해 짧게 유지 (/dashboard/production-write?sku=VFR_001)
-  let rowLinks: { header: string; hrefByPk: Record<string, string> } | undefined
+  // insertBeforeIndex: photo_url 컬럼 바로 앞에 표시되도록 위치 지정 (photo_url은 TABLE_TRAILING_COLS로 맨 뒤 고정됨)
+  let rowLinks: { header: string; hrefByPk: Record<string, string>; insertBeforeIndex?: number } | undefined
   if (tableName === "tb_sku_mst") {
     try {
       const admin = createAdminClient()
@@ -249,6 +273,7 @@ export default async function TablePage({
       const skuIds = Array.from(new Set((recipeRows ?? []).map((r) => r.sku_id as string).filter(Boolean)))
       if (skuIds.length > 0) {
         const { data: skus } = await admin.from("tb_sku_mst").select("id,sku_code").in("id", skuIds)
+        const photoIdx = columns.indexOf("photo_url")
         rowLinks = {
           header: "레시피",
           hrefByPk: Object.fromEntries(
@@ -259,7 +284,44 @@ export default async function TablePage({
                 `/dashboard/production-write?sku=${encodeURIComponent(s.sku_code as string)}`,
               ]),
           ),
+          insertBeforeIndex: photoIdx !== -1 ? photoIdx : undefined,
         }
+      }
+    } catch {}
+  }
+
+  // tb_submat_mst: 부자재가 사용되는 Zone유형(tb_zone_type_mst)을 태그로 표시·편집.
+  // 전사 공통 카탈로그 테이블이라 zone_id가 아닌 zone_type_id를 참조한다 (서대표 확정 v1.0 원칙).
+  // ※ tb_submat_zone_link 테이블이 아직 없으면 조회가 빈 배열로 폴백되어 화면은 정상 렌더링된다.
+  let extraColumn: { header: string; cellsByPk: Record<string, ReactNode> } | undefined
+  if (tableName === "tb_submat_mst") {
+    try {
+      const [zoneOptions, links] = await Promise.all([
+        getZoneTypeOptions().catch(() => [] as SelectOption[]),
+        getSubmatZoneLinks().catch(() => [] as SubmatZoneLink[]),
+      ])
+      const linksBySubmat: Record<string, string[]> = {}
+      for (const link of links) {
+        ;(linksBySubmat[link.submat_id] ??= []).push(link.zone_type_id)
+      }
+      extraColumn = {
+        header: "존",
+        cellsByPk: Object.fromEntries(
+          rows.map((row) => {
+            const submatId = String(row["submat_id"] ?? "")
+            return [
+              submatId,
+              (
+                <SubmatZoneCell
+                  key={submatId}
+                  submatId={submatId}
+                  initialZoneIds={linksBySubmat[submatId] ?? []}
+                  zoneOptions={zoneOptions}
+                />
+              ),
+            ]
+          }),
+        ),
       }
     } catch {}
   }
@@ -317,6 +379,7 @@ export default async function TablePage({
           searchPlaceholder={searchEnabled ? TABLE_SEARCH_PLACEHOLDER[tableName] ?? `${searchColumns.join(", ")} 검색` : undefined}
           bulkDeleteEnabled={BULK_DELETE_TABLES.has(tableName)}
           rowLinks={rowLinks}
+          extraColumn={extraColumn}
         />
       )}
     </div>

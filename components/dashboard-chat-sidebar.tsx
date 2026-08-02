@@ -1,9 +1,9 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { MessageCircle, Send, X } from "lucide-react"
+import { MessageCircle, RotateCcw, Send, X } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { withBasePath } from "@/lib/base-path"
+import { useDraggableButton } from "@/components/use-draggable-button"
 
 type ChatMessage = { role: "user" | "assistant"; content: string }
 
@@ -16,6 +16,9 @@ export function DashboardChatSidebar() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const { offset, onMouseDown, wasDragged, resetPosition } = useDraggableButton("ai-chat-button-pos")
+  // 오른쪽 가장자리에 고정하고 세로로만 옮길 수 있게 한다 (x축 이동은 무시)
+  const moved = offset.y !== 0
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
@@ -32,7 +35,7 @@ export function DashboardChatSidebar() {
     setLoading(true)
 
     try {
-      const res = await fetch(withBasePath("/api/chat"), {
+      const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: nextMessages }),
@@ -54,14 +57,39 @@ export function DashboardChatSidebar() {
 
   if (!open) {
     return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        title="AI 도우미 열기"
-        className="fixed right-0 top-1/2 z-40 flex -translate-y-1/2 items-center gap-1.5 rounded-l-full border border-r-0 border-border bg-emerald-600 py-3 pl-4 pr-3 text-sm font-medium text-white shadow-lg transition-colors hover:bg-emerald-700"
+      // 오른쪽 가장자리에 고정, 세로(y)로만 드래그해 옮긴다 (x축 이동값은 무시)
+      <div
+        style={{ transform: `translateY(${offset.y}px)` }}
+        className="fixed bottom-24 right-0 z-40"
       >
-        <MessageCircle className="h-4 w-4" />
-      </button>
+        <button
+          type="button"
+          onMouseDown={onMouseDown}
+          onClick={() => {
+            // 드래그로 옮긴 직후의 클릭은 열기 동작으로 이어지지 않게 막는다
+            if (wasDragged()) return
+            setOpen(true)
+          }}
+          title="AI 도우미 열기 (위아래로 드래그해서 위치를 옮길 수 있어요)"
+          className="flex cursor-grab items-center gap-1.5 rounded-l-full border border-r-0 border-border bg-emerald-600 py-3 pl-4 pr-3 text-sm font-medium text-white shadow-lg transition-colors hover:bg-emerald-700 active:cursor-grabbing"
+        >
+          <MessageCircle className="h-4 w-4" />
+        </button>
+
+        {moved && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              resetPosition()
+            }}
+            title="기본 위치로 되돌리기"
+            className="absolute -left-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-border bg-white text-muted-foreground shadow transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <RotateCcw className="h-3 w-3" />
+          </button>
+        )}
+      </div>
     )
   }
 

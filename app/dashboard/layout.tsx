@@ -13,7 +13,7 @@ export default async function DashboardLayout({
   if (!employee) redirect("/login")
 
   return (
-    <div className="flex min-h-svh bg-background text-foreground">
+    <div className="flex h-svh bg-background text-foreground">
       <DashboardSidebar isManager={employee.isSenior} userName={employee.name} />
       <div className="flex flex-1 flex-col overflow-hidden">
         {employee.storeName && (
