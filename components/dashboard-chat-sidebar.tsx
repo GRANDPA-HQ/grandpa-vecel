@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { MessageCircle, Send, X } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { withBasePath } from "@/lib/base-path"
 
 type ChatMessage = { role: "user" | "assistant"; content: string }
 
@@ -31,7 +32,7 @@ export function DashboardChatSidebar() {
     setLoading(true)
 
     try {
-      const res = await fetch("/api/chat", {
+      const res = await fetch(withBasePath("/api/chat"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: nextMessages }),

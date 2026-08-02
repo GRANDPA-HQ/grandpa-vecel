@@ -5,6 +5,7 @@ import { Upload, Download, Trash2, Loader2, Link, FileImage } from "lucide-react
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
+import { withBasePath } from "@/lib/base-path"
 
 const FIELDS = [
   "날짜",
@@ -91,7 +92,7 @@ export default function ProductionLogPage() {
         }
         fd.append("driveUrl", driveUrl.trim())
       }
-      const res = await fetch("/api/production-log/extract", { method: "POST", body: fd })
+      const res = await fetch(withBasePath("/api/production-log/extract"), { method: "POST", body: fd })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? "알 수 없는 오류")
       setRows(data.rows as Row[])
