@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import * as XLSX from "xlsx"
 import { createClient } from "@/lib/supabase/server"
+import { getCurrentEmployee } from "@/lib/permissions"
 import {
   getTables,
   getAllTableRows,
@@ -20,6 +21,7 @@ import {
   TABLE_COLUMN_ORDER,
   ALLERGEN_OPTIONS,
   EMPLOYEE_FK_LOOKUPS,
+  buildStoreScopeFilter,
   isPriceColumn,
 } from "@/lib/table-config"
 
@@ -104,6 +106,9 @@ export async function GET(
       })
     }
 
+    const employee = await getCurrentEmployee()
+    const storeFilters = buildStoreScopeFilter(tableName, employee?.isSenior ?? false, employee?.storeId ?? null)
+
     const rows = await getAllTableRows(tableName, {
       orderBy: sortColumn,
       orderDir: sortDir,
@@ -111,6 +116,7 @@ export async function GET(
         searchColumns.length > 0 && searchQuery
           ? { columns: searchColumns, query: searchQuery, idInColumns }
           : undefined,
+      filters: storeFilters,
     })
 
     // 화면과 동일한 컬럼 구성 (숨김 컬럼 제외, 표시 순서 적용)

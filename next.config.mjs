@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  basePath: "/os",
   typescript: {
     ignoreBuildErrors: true,
   },

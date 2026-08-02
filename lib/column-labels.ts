@@ -106,4 +106,21 @@ export const COLUMN_LABELS: Record<string, string> = {
   hired_at: "입사일",
   resigned_at: "퇴사일",
   notes: "비고",
+  // 지점 (tb_store_mst)
+  store_code: "지점 코드",
+  store_name: "지점명",
+  address: "주소",
+  opened_at: "개점일",
+  is_active: "운영 여부",
+  // 구역 (tb_zone_mst)
+  zone_type_id: "구역 유형",
+  // 방법서 (tb_sop_mst)
+  sop_code: "방법서 코드",
+  sop_category: "구분",
+  sop_title: "제목",
+  body: "내용",
+  version: "버전",
+  target_type: "대상 유형",
+  target_id: "대상 ID",
+  activated_at: "활성화일",
 }

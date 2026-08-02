@@ -18,6 +18,7 @@ import { updateRow, deleteRow, deleteRows } from "@/app/actions/table-edit"
 import { loadMoreRows } from "@/app/actions/table-rows"
 import { COLUMN_LABELS } from "@/lib/column-labels"
 import { isPriceColumn, type RowCursor } from "@/lib/table-config"
+import { withBasePath } from "@/lib/base-path"
 
 const IMAGE_EXTS = ["jpg", "jpeg", "png", "gif", "webp"]
 
@@ -718,7 +719,7 @@ export function DataTable({
     if (activeDir) params.set("dir", activeDir)
     if (searchQuery) params.set("q", searchQuery)
     const qs = params.toString()
-    return `/api/export/${encodeURIComponent(tableName)}${qs ? `?${qs}` : ""}`
+    return withBasePath(`/api/export/${encodeURIComponent(tableName)}${qs ? `?${qs}` : ""}`)
   })()
 
   // 레시피 링크 셀 (헤더 위치 계산과 무관하게 내용은 항상 동일)
