@@ -1,6 +1,8 @@
 import Link from "next/link"
 import { getTableCount } from "@/lib/supabase/db"
-import { Package, Factory, ClipboardList, Barcode, BookOpen, PackageOpen } from "lucide-react"
+import { getCurrentEmployee } from "@/lib/permissions"
+import { buildStoreScopeFilter } from "@/lib/table-config"
+import { Package, Factory, ClipboardList, Barcode, BookOpen, PackageOpen, Store, Map as MapIcon, ScrollText } from "lucide-react"
 
 const TABLES = [
   {
@@ -51,13 +53,39 @@ const TABLES = [
     color: "text-amber-500",
     bg: "bg-amber-50 hover:bg-amber-100 border-amber-100 hover:border-amber-300",
   },
+  {
+    label: "지점 테이블",
+    table: "tb_store_mst",
+    icon: Store,
+    description: "지점 마스터 데이터를 조회합니다",
+    color: "text-sky-500",
+    bg: "bg-sky-50 hover:bg-sky-100 border-sky-100 hover:border-sky-300",
+  },
+  {
+    label: "구역 테이블",
+    table: "tb_zone_mst",
+    icon: MapIcon,
+    description: "지점별 구역 마스터 데이터를 조회합니다",
+    color: "text-violet-500",
+    bg: "bg-violet-50 hover:bg-violet-100 border-violet-100 hover:border-violet-300",
+  },
+  {
+    label: "방법서 테이블",
+    table: "tb_sop_mst",
+    icon: ScrollText,
+    description: "방법서(SOP) 마스터 데이터를 조회합니다",
+    color: "text-cyan-500",
+    bg: "bg-cyan-50 hover:bg-cyan-100 border-cyan-100 hover:border-cyan-300",
+  },
 ] as const
 
 export default async function DataTablePage() {
+  const employee = await getCurrentEmployee()
   const counts = await Promise.all(
     TABLES.map(async ({ table }) => {
       try {
-        const count = await getTableCount(table)
+        const filters = buildStoreScopeFilter(table, employee?.isSenior ?? false, employee?.storeId ?? null)
+        const count = await getTableCount(table, filters)
         return { table, count }
       } catch {
         return { table, count: null }

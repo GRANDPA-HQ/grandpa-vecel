@@ -11,6 +11,9 @@ export type CurrentEmployee = {
   email: string
   // 관리 권한 (직원 관리, 생산 공정 승인/반려 등) — 직급이 시니어 이상
   isSenior: boolean
+  // 소속 매장 (tb_store_mst) — 과거 계정(employees 미등록)은 null
+  storeId: string | null
+  storeName: string | null
 }
 
 /**
@@ -26,16 +29,21 @@ export async function getCurrentEmployee(): Promise<CurrentEmployee | null> {
   const admin = createAdminClient()
   const { data } = await admin
     .from("employees")
-    .select("name, email, ranks(name_ko, level)")
+    .select("name, email, store_id, ranks(name_ko, level), tb_store_mst(store_name)")
     .eq("id", user.id)
     .maybeSingle()
 
   let name = (data?.name as string | undefined) ?? ""
   let isSenior = false
+  let storeId: string | null = null
+  let storeName: string | null = null
 
   if (data) {
     const rank = data.ranks as unknown as { name_ko: string; level: number } | null
     isSenior = (rank?.level ?? 0) >= SENIOR_LEVEL
+    storeId = (data.store_id as string | null | undefined) ?? null
+    storeName =
+      (data.tb_store_mst as unknown as { store_name: string } | null)?.store_name ?? null
   } else {
     // 아직 employees로 이전되지 않은 계정 호환 (users + 점장 직책)
     const { data: legacy } = await admin
@@ -53,5 +61,7 @@ export async function getCurrentEmployee(): Promise<CurrentEmployee | null> {
     name: name || user.email?.split("@")[0] || "사용자",
     email: user.email ?? "",
     isSenior,
+    storeId,
+    storeName,
   }
 }

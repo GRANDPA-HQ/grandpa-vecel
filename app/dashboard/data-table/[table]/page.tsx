@@ -1,5 +1,6 @@
 import { getTables, getTableRows, getCategoryIdMap, getSkuOptions, getProdOptions, getRawOptions, getIdLabelOptions } from "@/lib/supabase/db"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { getCurrentEmployee } from "@/lib/permissions"
 import { DataTable } from "@/components/data-table"
 import { AddRowDialog, type ColumnDef } from "@/components/add-row-dialog"
 import {
@@ -12,6 +13,7 @@ import {
   TABLE_COLUMN_ORDER,
   ALLERGEN_OPTIONS,
   EMPLOYEE_FK_LOOKUPS,
+  ZONE_FK_LOOKUPS,
   sortOptionsByLabelOrder,
   CATEGORY_OPTIONS,
   STORAGE_OPTIONS,
@@ -19,6 +21,10 @@ import {
   UNIT_OPTIONS,
   SKU_MULTI_OPTIONS,
   TABLE_FIELD_ORDER,
+  SOP_CATEGORY_OPTIONS,
+  SOP_STATUS_OPTIONS,
+  SOP_TARGET_TYPE_OPTIONS,
+  buildStoreScopeFilter,
   type SelectOption,
 } from "@/lib/table-config"
 
@@ -50,6 +56,9 @@ export default async function TablePage({
   const { table } = await params
   const tableName = decodeURIComponent(table)
   const { sort, dir, q } = await searchParams
+
+  const employee = await getCurrentEmployee()
+  const storeFilters = buildStoreScopeFilter(tableName, employee?.isSenior ?? false, employee?.storeId ?? null)
 
   const defaultSort = TABLE_DEFAULT_SORT[tableName]
   const sortColumn = sort || defaultSort?.column
@@ -144,6 +153,37 @@ export default async function TablePage({
     })
   }
 
+  // tb_zone_mst: 지점/구역유형 FK를 이름으로 표시
+  if (tableName === "tb_zone_mst") {
+    const lookups = await Promise.all(
+      ZONE_FK_LOOKUPS.map((l) =>
+        getIdLabelOptions(l.table, l.labelColumn, l.idColumn).catch(() => [] as SelectOption[]),
+      ),
+    )
+    ZONE_FK_LOOKUPS.forEach((l, i) => {
+      columnOptions[l.column] = lookups[i]
+      columnResolvers[l.column] = Object.fromEntries(lookups[i].map((o) => [o.value, o.label]))
+    })
+  }
+
+  // tb_sop_mst: ENUM 드롭박스 + 구역 유형 FK를 이름으로 표시
+  if (tableName === "tb_sop_mst") {
+    columnOptions["sop_category"] = SOP_CATEGORY_OPTIONS
+    columnOptions["status"] = SOP_STATUS_OPTIONS
+    columnOptions["target_type"] = SOP_TARGET_TYPE_OPTIONS
+
+    const zoneTypeLookup = ZONE_FK_LOOKUPS.find((l) => l.column === "zone_type_id")
+    if (zoneTypeLookup) {
+      const opts = await getIdLabelOptions(
+        zoneTypeLookup.table,
+        zoneTypeLookup.labelColumn,
+        zoneTypeLookup.idColumn,
+      ).catch(() => [] as SelectOption[])
+      columnOptions["zone_type_id"] = opts
+      columnResolvers["zone_type_id"] = Object.fromEntries(opts.map((o) => [o.value, o.label]))
+    }
+  }
+
   let rows: Record<string, unknown>[] = []
   let total: number | null = null
   let nextCursor = null as Awaited<ReturnType<typeof getTableRows>>["nextCursor"]
@@ -156,6 +196,7 @@ export default async function TablePage({
       search: searchEnabled && searchQuery
         ? { columns: searchColumns, query: searchQuery, idInColumns: recipeIdFilter }
         : undefined,
+      filters: storeFilters,
     })
     rows = result.rows
     total = result.total

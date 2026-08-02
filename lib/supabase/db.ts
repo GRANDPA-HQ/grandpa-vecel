@@ -74,6 +74,8 @@ export type TableRows = {
   nextCursor: RowCursor | null
 }
 
+export type EqFilter = { column: string; value: string }
+
 export type TableRowsOptions = {
   orderBy?: string
   orderDir?: "asc" | "desc"
@@ -87,6 +89,8 @@ export type TableRowsOptions = {
     // FK 컬럼을 사람이 읽을 수 있는 값(예: sku_code)으로 검색할 때, 미리 매칭해 둔 id 목록으로 필터링
     idInColumns?: { column: string; ids: string[] }[]
   }
+  // 검색어와 무관하게 항상 적용해야 하는 강제 필터 (예: 매장 스코핑)
+  filters?: EqFilter[]
 }
 
 // PostgREST 필터 값 인용: 백슬래시/따옴표 이스케이프 후 큰따옴표로 감싼다
@@ -106,6 +110,10 @@ export async function getTableRows(
 ): Promise<TableRows> {
   let url = `${SUPABASE_URL}/rest/v1/${encodeURIComponent(table)}?select=*&limit=${limit}`
   if (offset > 0) url += `&offset=${offset}`
+
+  for (const f of options?.filters ?? []) {
+    url += `&${encodeURIComponent(f.column)}=eq.${encodeURIComponent(f.value)}`
+  }
 
   const orderDir: "asc" | "desc" = options?.orderDir === "desc" ? "desc" : "asc"
   const pkColumn = options?.pkColumn
@@ -367,6 +375,11 @@ export async function getNextProdCode(categoryCode: string): Promise<string> {
   return getNextSequentialCode("tb_prod_mst", "prod_code", categoryCode, "-", "PROD-")
 }
 
+// 방법서 코드는 카테고리 구분 없이 SOP-001, SOP-002 ... 순으로 채번한다.
+export async function getNextSopCode(): Promise<string> {
+  return getNextSequentialCode("tb_sop_mst", "sop_code", "SOP", "-")
+}
+
 /**
  * Fetch id → display label mapping for tb_sku_mst (used in tb_sku_recipe dropdown).
  */
@@ -421,16 +434,17 @@ export async function getRawOptions(): Promise<{ value: string; label: string }[
 export async function getIdLabelOptions(
   table: string,
   labelColumn: string,
+  idColumn = "id",
 ): Promise<{ value: string; label: string }[]> {
   const res = await fetch(
-    `${SUPABASE_URL}/rest/v1/${encodeURIComponent(table)}?select=id,${encodeURIComponent(labelColumn)}&order=${encodeURIComponent(labelColumn)}`,
+    `${SUPABASE_URL}/rest/v1/${encodeURIComponent(table)}?select=${encodeURIComponent(idColumn)},${encodeURIComponent(labelColumn)}&order=${encodeURIComponent(labelColumn)}`,
     { headers: authHeaders(), cache: "no-store" },
   )
   if (!res.ok) return []
   const rows = (await res.json()) as Record<string, unknown>[]
   return rows.map((r) => ({
-    value: String(r.id),
-    label: String(r[labelColumn] ?? r.id),
+    value: String(r[idColumn]),
+    label: String(r[labelColumn] ?? r[idColumn]),
   }))
 }
 
@@ -600,8 +614,12 @@ export async function getRecentSkuRecipes(limit = 3): Promise<RecentSkuRecipe[]>
 /**
  * Fetch just the exact row count for a table (cheap HEAD-style request).
  */
-export async function getTableCount(table: string): Promise<number | null> {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${encodeURIComponent(table)}?select=*&limit=1`, {
+export async function getTableCount(table: string, filters?: EqFilter[]): Promise<number | null> {
+  let url = `${SUPABASE_URL}/rest/v1/${encodeURIComponent(table)}?select=*&limit=1`
+  for (const f of filters ?? []) {
+    url += `&${encodeURIComponent(f.column)}=eq.${encodeURIComponent(f.value)}`
+  }
+  const res = await fetch(url, {
     headers: {
       ...authHeaders(),
       Prefer: "count=exact",

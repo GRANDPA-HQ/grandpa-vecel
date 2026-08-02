@@ -1,10 +1,12 @@
 "use server"
 
 import { getTableRows, getSkuOptions, getProdOptions, getRawOptions } from "@/lib/supabase/db"
+import { getCurrentEmployee } from "@/lib/permissions"
 import {
   PAGE_SIZE,
   TABLE_DEFAULT_SORT,
   TABLE_SEARCH_COLUMNS,
+  buildStoreScopeFilter,
   type RowCursor,
 } from "@/lib/table-config"
 
@@ -62,6 +64,9 @@ export async function loadMoreRows(
       ]
     }
 
+    const employee = await getCurrentEmployee()
+    const storeFilters = buildStoreScopeFilter(tableName, employee?.isSenior ?? false, employee?.storeId ?? null)
+
     const result = await getTableRows(tableName, PAGE_SIZE, 0, {
       orderBy: sortColumn,
       orderDir: sortDir,
@@ -71,6 +76,7 @@ export async function loadMoreRows(
         searchColumns.length > 0 && searchQuery
           ? { columns: searchColumns, query: searchQuery, idInColumns }
           : undefined,
+      filters: storeFilters,
     })
 
     return { rows: result.rows, nextCursor: result.nextCursor, error: null }

@@ -14,6 +14,30 @@ export const TABLE_PK: Record<string, string> = {
   tb_sku_recipe:  "input_id",
   tb_prod_recipe: "input_id",
   tb_submat_mst:  "submat_id",
+  tb_zone_mst:    "zone_id",
+  tb_sop_mst:     "sop_id",
+}
+
+// 매장(지점) 스코핑 대상 테이블 → 필터에 쓸 컬럼.
+// 시니어가 아닌 직원은 본인 소속 매장(employees.store_id) 값과 이 컬럼이 일치하는 행만 볼 수 있다.
+// tb_store_mst는 자기 자신이 매장이라 store_id가 아니라 PK("id")로 스코핑한다.
+export const STORE_SCOPED_TABLES: Record<string, string> = {
+  employees:    "store_id",
+  tb_zone_mst:  "store_id",
+  tb_store_mst: "id",
+}
+
+// 매장 스코핑 강제 필터 생성. 시니어면 필터 없음(전체 조회).
+// 매장이 배정되지 않은 비시니어 계정은 존재할 수 없는 값으로 필터링해 아무 데이터도 새지 않게 한다.
+export function buildStoreScopeFilter(
+  tableName: string,
+  isSenior: boolean,
+  storeId: string | null,
+): { column: string; value: string }[] | undefined {
+  if (isSenior) return undefined
+  const column = STORE_SCOPED_TABLES[tableName]
+  if (!column) return undefined
+  return [{ column, value: storeId ?? "00000000-0000-0000-0000-000000000000" }]
 }
 
 // 테이블 한글 이름 (엑셀 파일명/시트명 등 표시에 사용)
@@ -31,6 +55,9 @@ export const TABLE_LABELS: Record<string, string> = {
   tb_sales_order_item:   "매출 주문 품목",
   tb_sku_platform_alias: "판매품 플랫폼 별칭",
   tb_submat_mst:         "포장 부자재",
+  tb_store_mst:          "지점",
+  tb_zone_mst:           "구역",
+  tb_sop_mst:            "방법서",
 }
 
 // employees 테이블의 FK 컬럼 → 이름 표시용 조회 설정 (화면·엑셀 추출 공용)
@@ -41,10 +68,21 @@ export const EMPLOYEE_FK_LOOKUPS: {
   labelColumn: string
   labelOrder?: string[]
 }[] = [
-  { column: "store_id",    table: "stores",    labelColumn: "store_name" },
+  { column: "store_id",    table: "tb_store_mst", labelColumn: "store_name" },
   { column: "part_id",     table: "parts",     labelColumn: "name_ko" },
   { column: "position_id", table: "positions", labelColumn: "name_ko", labelOrder: ["스태프", "리드", "매니저", "점장"] },
   { column: "rank_id",     table: "ranks",     labelColumn: "name_ko", labelOrder: ["수습", "정규", "시니어"] },
+]
+
+// tb_zone_mst 테이블의 FK 컬럼 → 이름 표시용 조회 설정 (PK 컬럼명이 "id"가 아닌 테이블 포함)
+export const ZONE_FK_LOOKUPS: {
+  column: string
+  table: string
+  labelColumn: string
+  idColumn?: string
+}[] = [
+  { column: "store_id",     table: "tb_store_mst",     labelColumn: "store_name" },
+  { column: "zone_type_id", table: "tb_zone_type_mst", labelColumn: "zone_type_name", idColumn: "zone_type_id" },
 ]
 
 // 지정한 라벨 순서대로 옵션 정렬 (순서 목록에 없는 라벨은 기존 순서 그대로 뒤에 붙음)
@@ -78,6 +116,10 @@ export const TABLE_HIDDEN_COLS: Record<string, Set<string>> = {
   tb_prod_recipe: new Set(["input_id", "sort_order"]),
   // raw: 원본 플랫폼 JSON 전체 — 목록 화면에서는 숨기고 필요 시 상세 조회로만 확인
   tb_sales_order: new Set(["raw"]),
+  // zone_id: gen_random_uuid() PK — 사람이 읽을 수 있는 코드가 없어 목록 화면에서는 숨김
+  tb_zone_mst:    new Set(["zone_id"]),
+  // sop_id: gen_random_uuid() PK — sop_code가 사람이 읽는 코드 역할을 하므로 숨김
+  tb_sop_mst:     new Set(["sop_id"]),
 }
 
 // 테이블별 데이터 테이블 컬럼 표시 순서 (지정 안 한 나머지 컬럼은 기존 순서 그대로 뒤에 붙음)
@@ -154,6 +196,8 @@ export const TABLE_DEFAULT_SORT: Record<string, { column: string; dir: "asc" | "
   employees:       { column: "name", dir: "asc" },
   tb_sales_order:  { column: "order_datetime", dir: "desc" },
   tb_submat_mst:   { column: "submat_id", dir: "asc" },
+  tb_store_mst:    { column: "store_code", dir: "asc" },
+  tb_sop_mst:      { column: "sop_code", dir: "asc" },
 }
 
 // 테이블별 검색 대상 컬럼 (코드/이름 등)
@@ -169,4 +213,29 @@ export const TABLE_SEARCH_COLUMNS: Record<string, string[]> = {
   tb_prod_recipe:  ["memo"],
   employees:       ["name", "phone", "email"],
   tb_submat_mst:   ["submat_id", "item_name", "item_name_short"],
+  tb_store_mst:    ["store_code", "store_name", "address"],
+  tb_zone_mst:     ["memo"],
+  tb_sop_mst:      ["sop_code", "sop_title"],
 }
+
+// tb_sop_mst 드롭박스 옵션 (DB ENUM과 동일한 값)
+export const SOP_CATEGORY_OPTIONS: SelectOption[] = [
+  { value: "COM", label: "공통" },
+  { value: "SP",  label: "매장" },
+  { value: "KP",  label: "주방" },
+  { value: "OPS", label: "운영" },
+  { value: "MGR", label: "관리자" },
+]
+
+export const SOP_STATUS_OPTIONS: SelectOption[] = [
+  { value: "DRAFT",    label: "초안" },
+  { value: "ACTIVE",   label: "사용중" },
+  { value: "ARCHIVED", label: "보관됨" },
+]
+
+export const SOP_TARGET_TYPE_OPTIONS: SelectOption[] = [
+  { value: "PROD",  label: "생산품" },
+  { value: "SKU",   label: "판매품" },
+  { value: "ASSET", label: "자산" },
+  { value: "NONE",  label: "없음" },
+]

@@ -80,6 +80,9 @@ export function DashboardSidebar({
               { label: "카테고리 테이블", table: "tb_category_mst" },
               { label: "생산품 테이블", table: "tb_prod_mst" },
               { label: "생산품 레시피 테이블", table: "tb_prod_recipe" },
+              { label: "지점 테이블", table: "tb_store_mst" },
+              { label: "구역 테이블", table: "tb_zone_mst" },
+              { label: "방법서 테이블", table: "tb_sop_mst" },
             ].map(({ label, table }) => {
               const isActive =
                 pathname === `/dashboard/data-table/${encodeURIComponent(table)}`

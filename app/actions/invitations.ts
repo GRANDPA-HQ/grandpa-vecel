@@ -26,7 +26,7 @@ type Row = Record<string, unknown>
 // 신규 직원 기본값: 매장(첫 매장), 파트(정렬 첫 파트), 직책(스태프), 직급(최하위 레벨)
 async function getInviteDefaults(admin: ReturnType<typeof createAdmin>) {
   const [stores, parts, positions, ranks] = await Promise.all([
-    admin.from("stores").select("id").order("created_at").limit(1),
+    admin.from("tb_store_mst").select("id").order("created_at").limit(1),
     admin.from("parts").select("id").order("sort_order").limit(1),
     admin.from("positions").select("id, name_ko"),
     admin.from("ranks").select("id, level").order("level").limit(1),
