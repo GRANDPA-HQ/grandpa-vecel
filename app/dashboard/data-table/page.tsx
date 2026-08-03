@@ -1,6 +1,7 @@
 import Link from "next/link"
-import { getTableCount } from "@/lib/supabase/db"
-import { Tags, Package, PackageOpen, Factory, ClipboardList, Barcode, BookOpen, type LucideIcon } from "lucide-react"
+import { getTableCount, getStoreScopeOptions } from "@/lib/supabase/db"
+import { getCurrentEmployee } from "@/lib/permissions"
+import { Tags, Package, PackageOpen, Factory, ClipboardList, Barcode, BookOpen, Wrench, ScrollText, type LucideIcon } from "lucide-react"
 
 // 카테고리는 전체 마스터의 분류 기준이 되는 독립적인 테이블이라 별도 톤(슬레이트)을 쓴다.
 // 나머지는 구매 → 생산 → 판매 3단계 그룹별로 같은 계열 색을 쓰되,
@@ -32,6 +33,16 @@ const SALES_STYLE_1 = {
 const SALES_STYLE_2 = {
   color: "text-blue-800",
   bg: "bg-blue-50 hover:bg-blue-100 border-blue-200",
+}
+// 시설은 구매→생산→판매 흐름과 별개인 매장 설비 정보라 독립된 톤(시안)을 쓴다.
+const FACILITY_STYLE = {
+  color: "text-cyan-600",
+  bg: "bg-cyan-50 hover:bg-cyan-100 border-cyan-200",
+}
+// 방법서(SOP)도 상품 흐름과 별개인 운영 문서라 독립된 톤(인디고)을 쓴다.
+const SOP_STYLE = {
+  color: "text-indigo-600",
+  bg: "bg-indigo-50 hover:bg-indigo-100 border-indigo-200",
 }
 
 type TableCard = {
@@ -115,14 +126,40 @@ const GROUPS: { name: string; tables: TableCard[] }[] = [
       },
     ],
   },
+  {
+    name: "시설",
+    tables: [
+      {
+        label: "시설",
+        table: "tb_asset_mst",
+        icon: Wrench,
+        description: "매장 시설/설비 마스터 데이터를 조회합니다",
+        ...FACILITY_STYLE,
+      },
+    ],
+  },
+  {
+    name: "방법서",
+    tables: [
+      {
+        label: "방법서",
+        table: "tb_sop_mst",
+        icon: ScrollText,
+        description: "매장 운영 방법서(SOP) 마스터 데이터를 조회합니다",
+        ...SOP_STYLE,
+      },
+    ],
+  },
 ]
 
 export default async function DataTablePage() {
+  const employee = await getCurrentEmployee()
   const allTables = GROUPS.flatMap((g) => g.tables)
   const counts = await Promise.all(
     allTables.map(async ({ table }) => {
       try {
-        const count = await getTableCount(table)
+        const storeScope = await getStoreScopeOptions(table, employee?.isSenior ?? false, employee?.storeId ?? null)
+        const count = await getTableCount(table, storeScope.filters, storeScope.inFilters)
         return { table, count }
       } catch {
         return { table, count: null }

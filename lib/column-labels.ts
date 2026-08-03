@@ -111,7 +111,6 @@ export const COLUMN_LABELS: Record<string, string> = {
   store_name: "지점명",
   address: "주소",
   opened_at: "개점일",
-  is_active: "운영 여부",
   // 구역 (tb_zone_mst)
   zone_type_id: "구역 유형",
   // 방법서 (tb_sop_mst)
@@ -123,4 +122,15 @@ export const COLUMN_LABELS: Record<string, string> = {
   target_type: "대상 유형",
   target_id: "대상 ID",
   activated_at: "활성화일",
+  // 시설 (tb_asset_mst)
+  asset_code: "시설 코드",
+  asset_name: "시설명",
+  asset_type_id: "시설 유형",
+  zone_id: "구역",
+  installed_at: "설치일",
+  purchase_vendor: "구매처",
+  serial_no: "일련번호",
+  warranty_until: "보증 만료일",
+  as_contact: "A/S 연락처",
+  service_vendor: "관리 업체",
 }

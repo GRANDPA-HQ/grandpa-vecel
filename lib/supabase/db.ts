@@ -1,6 +1,6 @@
 import "server-only"
 import { SUPABASE_URL } from "./config"
-import type { RowCursor } from "@/lib/table-config"
+import { buildStoreScopeFilter, STORE_SCOPED_VIA_ZONE_TABLES, type RowCursor } from "@/lib/table-config"
 
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
@@ -75,6 +75,7 @@ export type TableRows = {
 }
 
 export type EqFilter = { column: string; value: string }
+export type InFilter = { column: string; values: string[] }
 
 export type TableRowsOptions = {
   orderBy?: string
@@ -91,6 +92,8 @@ export type TableRowsOptions = {
   }
   // 검색어와 무관하게 항상 적용해야 하는 강제 필터 (예: 매장 스코핑)
   filters?: EqFilter[]
+  // filters와 동일하되 "이 컬럼 값이 목록 중 하나" 조건 (예: 매장 소속 zone_id 목록)
+  inFilters?: InFilter[]
 }
 
 // PostgREST 필터 값 인용: 백슬래시/따옴표 이스케이프 후 큰따옴표로 감싼다
@@ -113,6 +116,11 @@ export async function getTableRows(
 
   for (const f of options?.filters ?? []) {
     url += `&${encodeURIComponent(f.column)}=eq.${encodeURIComponent(f.value)}`
+  }
+  for (const f of options?.inFilters ?? []) {
+    // 빈 목록이면(예: 매장에 속한 zone이 하나도 없음) 절대 매칭되지 않는 값으로 안전하게 처리
+    const value = f.values.length > 0 ? `in.(${f.values.join(",")})` : "eq.00000000-0000-0000-0000-000000000000"
+    url += `&${encodeURIComponent(f.column)}=${encodeURIComponent(value)}`
   }
 
   const orderDir: "asc" | "desc" = options?.orderDir === "desc" ? "desc" : "asc"
@@ -470,6 +478,30 @@ export async function getZoneTypeOptions(): Promise<{ value: string; label: stri
   }))
 }
 
+/**
+ * Fetch id → display label mapping for tb_zone_mst (지점명 · 구역유형 조합).
+ * tb_zone_mst 자체엔 사람이 읽는 코드/이름 컬럼이 없어 지점·구역유형을 조인해 라벨을 만든다.
+ * (물리 실체를 참조하는 tb_asset_mst 등에서 구역을 표시할 때 사용)
+ */
+export async function getZoneOptions(): Promise<{ value: string; label: string }[]> {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/tb_zone_mst?select=zone_id,tb_store_mst(store_name),tb_zone_type_mst(zone_type_name)`,
+    { headers: authHeaders(), cache: "no-store" },
+  )
+  if (!res.ok) return []
+  const rows = (await res.json()) as {
+    zone_id: string
+    tb_store_mst: { store_name?: string } | null
+    tb_zone_type_mst: { zone_type_name?: string } | null
+  }[]
+  return rows.map((r) => ({
+    value: r.zone_id,
+    label:
+      [r.tb_store_mst?.store_name, r.tb_zone_type_mst?.zone_type_name].filter(Boolean).join(" · ") ||
+      r.zone_id,
+  }))
+}
+
 export type SubmatZoneLink = { submat_id: string; zone_type_id: string }
 
 /**
@@ -648,13 +680,51 @@ export async function getRecentSkuRecipes(limit = 3): Promise<RecentSkuRecipe[]>
   }))
 }
 
+export type StoreScopeOptions = { filters?: EqFilter[]; inFilters?: InFilter[] }
+
+/**
+ * 매장 스코핑 조회 옵션 계산 (시니어가 아닌 직원은 본인 매장 데이터만 보이도록).
+ * - store_id를 직접 가진 테이블(STORE_SCOPED_TABLES): eq 필터.
+ * - zone_id로만 간접 연결된 테이블(STORE_SCOPED_VIA_ZONE_TABLES, 예: tb_asset_mst):
+ *   tb_zone_mst에서 해당 매장 소속 zone_id 목록을 먼저 구해 in 필터로 돌려준다.
+ * 시니어이거나 스코핑 대상 테이블이 아니면 빈 옵션(전체 조회)을 반환한다.
+ */
+export async function getStoreScopeOptions(
+  tableName: string,
+  isSenior: boolean,
+  storeId: string | null,
+): Promise<StoreScopeOptions> {
+  const directFilters = buildStoreScopeFilter(tableName, isSenior, storeId)
+  if (directFilters) return { filters: directFilters }
+  if (isSenior) return {}
+
+  const zoneColumn = STORE_SCOPED_VIA_ZONE_TABLES[tableName]
+  if (!zoneColumn) return {}
+  if (!storeId) return { inFilters: [{ column: zoneColumn, values: [] }] }
+
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/tb_zone_mst?select=zone_id&store_id=eq.${encodeURIComponent(storeId)}`,
+    { headers: authHeaders(), cache: "no-store" },
+  )
+  const zones = res.ok ? ((await res.json()) as { zone_id: string }[]) : []
+  return { inFilters: [{ column: zoneColumn, values: zones.map((z) => z.zone_id) }] }
+}
+
 /**
  * Fetch just the exact row count for a table (cheap HEAD-style request).
  */
-export async function getTableCount(table: string, filters?: EqFilter[]): Promise<number | null> {
+export async function getTableCount(
+  table: string,
+  filters?: EqFilter[],
+  inFilters?: InFilter[],
+): Promise<number | null> {
   let url = `${SUPABASE_URL}/rest/v1/${encodeURIComponent(table)}?select=*&limit=1`
   for (const f of filters ?? []) {
     url += `&${encodeURIComponent(f.column)}=eq.${encodeURIComponent(f.value)}`
+  }
+  for (const f of inFilters ?? []) {
+    const value = f.values.length > 0 ? `in.(${f.values.join(",")})` : "eq.00000000-0000-0000-0000-000000000000"
+    url += `&${encodeURIComponent(f.column)}=${encodeURIComponent(value)}`
   }
   const res = await fetch(url, {
     headers: {

@@ -39,6 +39,8 @@ export function DashboardSidebar({
         { label: "생산품 레시피 테이블", table: "tb_prod_recipe" },
         { label: "판매품 테이블", table: "tb_sku_mst" },
         { label: "판매품 레시피 테이블", table: "tb_sku_recipe" },
+        { label: "시설 테이블", table: "tb_asset_mst" },
+        { label: "방법서 테이블", table: "tb_sop_mst" },
       ].map(({ label, table }) => ({
         label,
         href: `${DATA_TABLE_HREF}/${encodeURIComponent(table)}`,
