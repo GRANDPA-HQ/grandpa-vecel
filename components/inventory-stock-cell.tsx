@@ -39,7 +39,11 @@ export function InventoryStockCell({ skuId, initialQty }: { skuId: string; initi
         type="number"
         value={value}
         onChange={(e) => handleChange(e.target.value)}
-        onKeyDown={(e) => e.key === "Enter" && handleSave()}
+        onWheel={(e) => e.currentTarget.blur()}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowUp" || e.key === "ArrowDown") e.preventDefault()
+          if (e.key === "Enter") handleSave()
+        }}
         className="w-20 rounded-md border border-input bg-background px-2 py-1 text-right text-sm tabular-nums"
       />
       <button
