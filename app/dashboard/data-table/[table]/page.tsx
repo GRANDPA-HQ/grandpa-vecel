@@ -8,7 +8,9 @@ import {
   getRawOptions,
   getIdLabelOptions,
   getZoneTypeOptions,
+  getZoneOptions,
   getSubmatZoneLinks,
+  getStoreScopeOptions,
   type SubmatZoneLink,
 } from "@/lib/supabase/db"
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -28,6 +30,7 @@ import {
   ALLERGEN_OPTIONS,
   EMPLOYEE_FK_LOOKUPS,
   ZONE_FK_LOOKUPS,
+  ASSET_FK_LOOKUPS,
   sortOptionsByLabelOrder,
   CATEGORY_OPTIONS,
   STORAGE_OPTIONS,
@@ -38,7 +41,6 @@ import {
   SOP_CATEGORY_OPTIONS,
   SOP_STATUS_OPTIONS,
   SOP_TARGET_TYPE_OPTIONS,
-  buildStoreScopeFilter,
   type SelectOption,
 } from "@/lib/table-config"
 
@@ -72,7 +74,7 @@ export default async function TablePage({
   const { sort, dir, q } = await searchParams
 
   const employee = await getCurrentEmployee()
-  const storeFilters = buildStoreScopeFilter(tableName, employee?.isSenior ?? false, employee?.storeId ?? null)
+  const storeScope = await getStoreScopeOptions(tableName, employee?.isSenior ?? false, employee?.storeId ?? null)
 
   const defaultSort = TABLE_DEFAULT_SORT[tableName]
   const sortColumn = sort || defaultSort?.column
@@ -198,6 +200,23 @@ export default async function TablePage({
     }
   }
 
+  // tb_asset_mst: 시설 유형/구역 FK를 이름으로 표시
+  if (tableName === "tb_asset_mst") {
+    const assetTypeLookup = ASSET_FK_LOOKUPS.find((l) => l.column === "asset_type_id")
+    const [assetTypeOpts, zoneOpts] = await Promise.all([
+      assetTypeLookup
+        ? getIdLabelOptions(assetTypeLookup.table, assetTypeLookup.labelColumn, assetTypeLookup.idColumn).catch(
+            () => [] as SelectOption[],
+          )
+        : Promise.resolve([] as SelectOption[]),
+      getZoneOptions().catch(() => [] as SelectOption[]),
+    ])
+    columnOptions["asset_type_id"] = assetTypeOpts
+    columnResolvers["asset_type_id"] = Object.fromEntries(assetTypeOpts.map((o) => [o.value, o.label]))
+    columnOptions["zone_id"] = zoneOpts
+    columnResolvers["zone_id"] = Object.fromEntries(zoneOpts.map((o) => [o.value, o.label]))
+  }
+
   let rows: Record<string, unknown>[] = []
   let total: number | null = null
   let nextCursor = null as Awaited<ReturnType<typeof getTableRows>>["nextCursor"]
@@ -210,7 +229,7 @@ export default async function TablePage({
       search: searchEnabled && searchQuery
         ? { columns: searchColumns, query: searchQuery, idInColumns: recipeIdFilter }
         : undefined,
-      filters: storeFilters,
+      ...storeScope,
     })
     rows = result.rows
     total = result.total

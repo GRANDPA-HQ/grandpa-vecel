@@ -16,6 +16,7 @@ export const TABLE_PK: Record<string, string> = {
   tb_submat_mst:  "submat_id",
   tb_zone_mst:    "zone_id",
   tb_sop_mst:     "sop_id",
+  tb_asset_mst:   "asset_id",
 }
 
 // 매장(지점) 스코핑 대상 테이블 → 필터에 쓸 컬럼.
@@ -40,6 +41,13 @@ export function buildStoreScopeFilter(
   return [{ column, value: storeId ?? "00000000-0000-0000-0000-000000000000" }]
 }
 
+// store_id가 직접 없고 zone_id로만 간접적으로 매장에 연결된 테이블 → zone_id 컬럼명.
+// 해당 매장 소속 zone_id 목록을 먼저 구한 뒤 이 컬럼에 in 필터로 적용해야 한다.
+// (실제 조회는 db.ts의 getStoreScopeOptions()에서 tb_zone_mst를 조인해 처리)
+export const STORE_SCOPED_VIA_ZONE_TABLES: Record<string, string> = {
+  tb_asset_mst: "zone_id",
+}
+
 // 테이블 한글 이름 (엑셀 파일명/시트명 등 표시에 사용)
 export const TABLE_LABELS: Record<string, string> = {
   tb_raw_mst:            "원재료",
@@ -58,6 +66,7 @@ export const TABLE_LABELS: Record<string, string> = {
   tb_store_mst:          "지점",
   tb_zone_mst:           "구역",
   tb_sop_mst:            "방법서",
+  tb_asset_mst:          "시설",
 }
 
 // employees 테이블의 FK 컬럼 → 이름 표시용 조회 설정 (화면·엑셀 추출 공용)
@@ -83,6 +92,17 @@ export const ZONE_FK_LOOKUPS: {
 }[] = [
   { column: "store_id",     table: "tb_store_mst",     labelColumn: "store_name" },
   { column: "zone_type_id", table: "tb_zone_type_mst", labelColumn: "zone_type_name", idColumn: "zone_type_id" },
+]
+
+// tb_asset_mst 테이블의 FK 컬럼 → 이름 표시용 조회 설정.
+// zone_id는 tb_zone_mst 자체에 읽을 수 있는 라벨 컬럼이 없어 getZoneOptions()(지점·구역유형 조인)로 별도 처리한다.
+export const ASSET_FK_LOOKUPS: {
+  column: string
+  table: string
+  labelColumn: string
+  idColumn?: string
+}[] = [
+  { column: "asset_type_id", table: "tb_asset_type_mst", labelColumn: "asset_type_name", idColumn: "asset_type_id" },
 ]
 
 // 지정한 라벨 순서대로 옵션 정렬 (순서 목록에 없는 라벨은 기존 순서 그대로 뒤에 붙음)
@@ -120,6 +140,8 @@ export const TABLE_HIDDEN_COLS: Record<string, Set<string>> = {
   tb_zone_mst:    new Set(["zone_id"]),
   // sop_id: gen_random_uuid() PK — sop_code가 사람이 읽는 코드 역할을 하므로 숨김
   tb_sop_mst:     new Set(["sop_id"]),
+  // asset_id: gen_random_uuid() PK — asset_code가 사람이 읽는 코드 역할을 하므로 숨김
+  tb_asset_mst:   new Set(["asset_id"]),
 }
 
 // 테이블별 데이터 테이블 컬럼 표시 순서 (지정 안 한 나머지 컬럼은 기존 순서 그대로 뒤에 붙음)
@@ -204,6 +226,7 @@ export const TABLE_DEFAULT_SORT: Record<string, { column: string; dir: "asc" | "
   tb_submat_mst:   { column: "submat_id", dir: "asc" },
   tb_store_mst:    { column: "store_code", dir: "asc" },
   tb_sop_mst:      { column: "sop_code", dir: "asc" },
+  tb_asset_mst:    { column: "asset_code", dir: "asc" },
 }
 
 // 테이블별 검색 대상 컬럼 (코드/이름 등)
@@ -222,6 +245,7 @@ export const TABLE_SEARCH_COLUMNS: Record<string, string[]> = {
   tb_store_mst:    ["store_code", "store_name", "address"],
   tb_zone_mst:     ["memo"],
   tb_sop_mst:      ["sop_code", "sop_title"],
+  tb_asset_mst:    ["asset_code", "asset_name", "serial_no"],
 }
 
 // tb_sop_mst 드롭박스 옵션 (DB ENUM과 동일한 값)
