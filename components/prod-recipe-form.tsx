@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useTransition, useEffect, useMemo } from "react"
-import { Plus, Trash2, Save, X, Search, GripVertical, Flame } from "lucide-react"
+import { Plus, Trash2, Save, X, Search, GripVertical, Flame, Check, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
@@ -114,6 +114,8 @@ export function ProdRecipeForm({
   const [tabs, setTabs] = useState<ProdTab[]>([createTab()])
   const [activeId, setActiveId] = useState<string>(() => tabs[0].localId)
   const [msg, setMsg] = useState<{ type: "success" | "error"; text: string } | null>(null)
+  // 저장 결과 토스트 — 살짝 위에서 내려오며 표시되도록 마운트 다음 틱에 켠다
+  const [toastVisible, setToastVisible] = useState(false)
   const [tabQuery, setTabQuery] = useState("")
   const [dragId, setDragId] = useState<string | null>(null)
   // 행 드래그 순서 변경: armed = 핸들을 누른 행만 draggable로 만들어 입력 필드 조작과 충돌 방지
@@ -125,6 +127,18 @@ export function ProdRecipeForm({
     setMsg({ type, text })
     setTimeout(() => setMsg(null), 3500)
   }
+
+  // msg가 뜰 때 토스트를 살짝 내려오며 보이게, 사라질 때는 즉시 숨김
+  // (기존엔 화면 하단 구석에 작은 글씨로만 떠서 저장됐는지 확인하기 어렵다는
+  // 피드백이 있었음 — 화면 중앙 상단에 눈에 띄는 배지로 표시)
+  useEffect(() => {
+    if (!msg) {
+      setToastVisible(false)
+      return
+    }
+    const t = setTimeout(() => setToastVisible(true), 10)
+    return () => clearTimeout(t)
+  }, [msg])
 
   // 마운트 시 임시저장된 초안이 있으면 복원 (SSR 하이드레이션 이후에 실행)
   useEffect(() => {
@@ -378,6 +392,27 @@ export function ProdRecipeForm({
 
   return (
     <div className="flex flex-col gap-5">
+      {/* 저장 결과 토스트 — 화면 상단 중앙에 눈에 띄게 표시 */}
+      {msg && (
+        <div className="pointer-events-none fixed inset-x-0 top-6 z-50 flex justify-center">
+          <div
+            className={cn(
+              "pointer-events-auto flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-white shadow-xl transition-all duration-300",
+              msg.type === "success" ? "bg-emerald-600" : "bg-red-600",
+              toastVisible ? "translate-y-0 opacity-100" : "-translate-y-3 opacity-0",
+            )}
+            role="status"
+          >
+            {msg.type === "success" ? (
+              <Check className="h-4 w-4" />
+            ) : (
+              <AlertCircle className="h-4 w-4" />
+            )}
+            {msg.text}
+          </div>
+        </div>
+      )}
+
       {/* ── 탭 바 ── */}
       <div className="flex flex-col gap-2">
         {tabs.length > 3 && (
@@ -674,16 +709,6 @@ export function ProdRecipeForm({
             <span className="font-semibold text-foreground">{active?.rows.length ?? 0}</span>
             개 원재료 · 작성 내용은 이 기기에 자동 임시저장됩니다
           </p>
-          {msg && (
-            <span
-              className={cn(
-                "text-xs font-medium",
-                msg.type === "success" ? "text-emerald-600" : "text-red-600",
-              )}
-            >
-              {msg.text}
-            </span>
-          )}
         </div>
         <Button onClick={handleSaveAll} disabled={isPending} size="sm" className="gap-2">
           <Save className="h-3.5 w-3.5" />
