@@ -4,8 +4,12 @@ import { useId, useMemo, useState } from "react"
 
 type DailyPoint = {
   date: string // "YYYY-MM-DD"
-  total: number
+  hall: number
+  delivery: number
 }
+
+const HALL_COLOR = "var(--chart-hall, #2a78d6)"
+const DELIVERY_COLOR = "var(--chart-delivery, #eb6834)"
 
 const WIDTH = 960
 const HEIGHT = 260
@@ -35,12 +39,13 @@ function formatDateLabel(dateStr: string): string {
 }
 
 export function SalesDailyChart({ data }: { data: DailyPoint[] }) {
-  const gradientId = useId()
+  const hallGradientId = useId()
+  const deliveryGradientId = useId()
   const [hoverIdx, setHoverIdx] = useState<number | null>(null)
 
   const plotWidth = WIDTH - PAD_LEFT - PAD_RIGHT
   const plotHeight = HEIGHT - PAD_TOP - PAD_BOTTOM
-  const max = useMemo(() => niceMax(Math.max(...data.map((d) => d.total), 0)), [data])
+  const max = useMemo(() => niceMax(Math.max(...data.map((d) => d.hall + d.delivery), 0)), [data])
   const n = data.length
   const bandWidth = n > 0 ? plotWidth / n : plotWidth
   const barWidth = Math.min(BAR_MAX_THICKNESS, bandWidth * 0.6)
@@ -55,16 +60,30 @@ export function SalesDailyChart({ data }: { data: DailyPoint[] }) {
 
   return (
     <div className="relative">
+      <div className="mb-2 flex items-center gap-4 text-xs text-muted-foreground">
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: HALL_COLOR }} />
+          홀(POS)
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: DELIVERY_COLOR }} />
+          배달채널
+        </span>
+      </div>
       <svg
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
         className="w-full"
         role="img"
-        aria-label="일별 매출 막대 그래프"
+        aria-label="일별 매출 막대 그래프 (홀 vs 배달)"
       >
         <defs>
-          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--chart-bar, #10b981)" stopOpacity="1" />
-            <stop offset="100%" stopColor="var(--chart-bar, #10b981)" stopOpacity="0.75" />
+          <linearGradient id={hallGradientId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={HALL_COLOR} stopOpacity="1" />
+            <stop offset="100%" stopColor={HALL_COLOR} stopOpacity="0.85" />
+          </linearGradient>
+          <linearGradient id={deliveryGradientId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={DELIVERY_COLOR} stopOpacity="1" />
+            <stop offset="100%" stopColor={DELIVERY_COLOR} stopOpacity="0.85" />
           </linearGradient>
         </defs>
 
@@ -95,24 +114,40 @@ export function SalesDailyChart({ data }: { data: DailyPoint[] }) {
           )
         })}
 
-        {/* 막대 + hover 히트 영역 */}
+        {/* 막대(홀 아래 + 배달 위 스택) + hover 히트 영역 */}
         {data.map((d, i) => {
           const x = PAD_LEFT + i * bandWidth + (bandWidth - barWidth) / 2
-          const h = max > 0 ? (d.total / max) * plotHeight : 0
-          const y = PAD_TOP + plotHeight - h
+          const hHall = max > 0 ? (d.hall / max) * plotHeight : 0
+          const hDelivery = max > 0 ? (d.delivery / max) * plotHeight : 0
+          const total = hHall + hDelivery
+          const yHall = PAD_TOP + plotHeight - hHall
+          const yDelivery = yHall - hDelivery
           const isHovered = hoverIdx === i
           return (
             <g key={d.date}>
-              {/* 실제 막대 */}
-              <rect
-                x={x}
-                y={h > 0 ? y : PAD_TOP + plotHeight - 1}
-                width={barWidth}
-                height={Math.max(h, h > 0 ? 1 : 0)}
-                rx={4}
-                fill={`url(#${gradientId})`}
-                opacity={isHovered ? 1 : 0.9}
-              />
+              {hHall > 0 && (
+                <rect
+                  x={x}
+                  y={yHall}
+                  width={barWidth}
+                  height={hHall}
+                  fill={`url(#${hallGradientId})`}
+                  opacity={isHovered ? 1 : 0.9}
+                />
+              )}
+              {hDelivery > 0 && (
+                <rect
+                  x={x}
+                  y={yDelivery}
+                  width={barWidth}
+                  height={hDelivery}
+                  fill={`url(#${deliveryGradientId})`}
+                  opacity={isHovered ? 1 : 0.9}
+                />
+              )}
+              {total === 0 && (
+                <rect x={x} y={PAD_TOP + plotHeight - 1} width={barWidth} height={1} fill="currentColor" className="text-border" />
+              )}
               {/* 밴드 전체를 덮는 히트 영역 (막대보다 넓게, 키보드 포커스도 지원) */}
               <rect
                 x={PAD_LEFT + i * bandWidth}
@@ -168,7 +203,10 @@ export function SalesDailyChart({ data }: { data: DailyPoint[] }) {
         >
           <p className="font-medium text-foreground">{hovered.date}</p>
           <p className="mt-0.5 text-muted-foreground">
-            매출 <span className="font-semibold text-foreground">{formatWon(hovered.total)}</span>
+            홀 <span className="font-semibold text-foreground">{formatWon(hovered.hall)}</span>
+          </p>
+          <p className="text-muted-foreground">
+            배달 <span className="font-semibold text-foreground">{formatWon(hovered.delivery)}</span>
           </p>
         </div>
       )}

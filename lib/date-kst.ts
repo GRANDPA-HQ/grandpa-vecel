@@ -47,3 +47,10 @@ export function isoToKstHour(iso: string): number {
   const hourPart = KST_HOUR_FORMATTER.formatToParts(new Date(iso)).find((p) => p.type === "hour")
   return hourPart ? Number(hourPart.value) : 0
 }
+
+/** ISO timestamptz 값을 KST 기준 요일(0=월 ~ 6=일)로 변환 (요일별 집계용) */
+export function isoToKstWeekday(iso: string): number {
+  const dateStr = isoToKstDate(iso)
+  const jsDay = new Date(`${dateStr}T00:00:00Z`).getUTCDay() // 0=일 ... 6=토
+  return (jsDay + 6) % 7 // 0=월 ... 6=일
+}

@@ -87,7 +87,10 @@ export function SearchableSelect({
         onClick={() => setOpen((v) => !v)}
         className="flex w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
       >
-        <span className={cn("truncate text-left", !selected && "text-muted-foreground")}>
+        <span
+          title={selected?.label}
+          className={cn("truncate text-left", !selected && "text-muted-foreground")}
+        >
           {selected ? selected.label : placeholder}
         </span>
         <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -97,7 +100,7 @@ export function SearchableSelect({
         createPortal(
           <div
             ref={panelRef}
-            style={{ position: "fixed", top: rect.top, left: rect.left, width: Math.max(rect.width, 220) }}
+            style={{ position: "fixed", top: rect.top, left: rect.left, width: Math.max(rect.width, 280) }}
             className="z-50 rounded-md border border-border bg-popover shadow-md"
           >
             <div className="relative border-b border-border p-1.5">
@@ -134,7 +137,7 @@ export function SearchableSelect({
                       setOpen(false)
                     }}
                     className={cn(
-                      "block w-full truncate px-3 py-1.5 text-left text-sm hover:bg-accent",
+                      "block w-full break-words px-3 py-1.5 text-left text-sm hover:bg-accent",
                       opt.value === value && "bg-accent/60 font-medium",
                       opt.disabled && "cursor-not-allowed text-muted-foreground opacity-60 hover:bg-transparent",
                     )}
