@@ -94,7 +94,9 @@ function deriveImageSrc(code: string, extIdx: number): string | null {
   if (!match) return null
   const category = match[1].toUpperCase()
   const num = match[2]
-  return `/api/images/${category}/${category}-${num}.${IMAGE_EXTS[extIdx]}`
+  // next/image는 unoptimized 문자열 src에 basePath("/os")를 자동으로 붙여주지 않아 직접 붙여야 한다
+  // (add-base-path가 next/link 등에만 적용되고 image-component에는 없음 — 확인됨).
+  return withBasePath(`/api/images/${category}/${category}-${num}.${IMAGE_EXTS[extIdx]}`)
 }
 
 function PhotoCell({ row }: { row: Record<string, unknown> }) {
@@ -156,8 +158,9 @@ function CodeImageCell({ code }: { code: string }) {
   )
 }
 
-// 이미지를 표시하지 않을 컬럼 목록
-const NO_IMAGE_COLS = new Set(["raw_code", "prod_code", "sku_code"])
+// 이미지를 표시하지 않을 컬럼 목록 — raw_code는 tb_raw_mst의 실제 "photo" 컬럼(PhotoCell)이
+// 이미 같은 사진을 보여주므로 중복 렌더링을 막는다. prod_code는 그런 별도 컬럼이 없어 제외 안 함.
+const NO_IMAGE_COLS = new Set(["raw_code", "sku_code"])
 
 // 길어져도 잘라내지 않고 행이 커지면서 전체 내용을 보여줄 컬럼 (설명/메모류)
 const LONG_TEXT_COLS = new Set(["description", "description_en", "memo", "note"])
