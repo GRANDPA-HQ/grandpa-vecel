@@ -29,7 +29,7 @@ export default async function ProductionWritePage({
     admin.from("tb_raw_mst").select("id,kcal_100g,carb_100g,protein_100g,fat_100g"),
   ])
 
-  // 드래그로 정한 행 순서(sort_order)대로 조회 — 컴럼이 아직 없는 DB에서는 기존 방식 폴백
+  // 드래그로 정한 행 순서(sort_order)대로 조회 — 컬럼이 아직 없는 DB에서는 기존 방식 폴백
   let recipeRes = await admin
     .from("tb_sku_recipe")
     .select("sku_id,prod_id,amount,unit,memo")
@@ -122,7 +122,7 @@ export default async function ProductionWritePage({
     ? ((skuRes.data ?? []).find((r) => r.sku_code === sku)?.id as string | undefined)
     : undefined
 
-  // 판매품/생산품 등록 다이얼로그용 컴럼 정의 (데이터 테이블의 등록 폼과 동일 구성)
+  // 판매품/생산품 등록 다이얼로그용 컬럼 정의 (데이터 테이블의 등록 폼과 동일 구성)
   let skuInsertColumns: ColumnDef[] = []
   let prodInsertColumns: ColumnDef[] = []
   try {
