@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Users, Database, Bug, BookText, ClipboardList, LayoutDashboard, FileText, NotebookPen, TrendingUp, PackageSearch } from "lucide-react"
+import { Users, Database, Bug, BookText, ClipboardList, LayoutDashboard, FileText, NotebookPen, TrendingUp, PackageSearch, Link2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { SignOutButton } from "@/components/sign-out-button"
 import { ChangePasswordButton } from "@/components/change-password-button"
@@ -47,6 +47,7 @@ export function DashboardSidebar({
       })),
     },
     { label: "매출 분석", href: "/dashboard/sales-analytics", icon: TrendingUp, visible: true, exact: true },
+    { label: "메뉴 SKU 매핑", href: "/dashboard/sku-platform-mapping", icon: Link2, visible: true, exact: true },
     { label: "재고 관리", href: "/dashboard/inventory", icon: PackageSearch, visible: true, exact: true },
     { label: "생산품 레시피 작성", href: "/dashboard/prod-recipe-write", icon: NotebookPen, visible: true, exact: true },
     { label: "판매품 레시피 작성", href: "/dashboard/production-write", icon: ClipboardList, visible: true, exact: true },

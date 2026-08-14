@@ -544,6 +544,7 @@ export async function insertTableRow(
 }
 
 export type SalesOrderRecord = {
+  id: string
   platform: string
   order_datetime: string
   status: string
@@ -552,7 +553,7 @@ export type SalesOrderRecord = {
 }
 
 /**
- * Fetch 쿠팡이츠/배민 매출 주문 (tb_sales_order) — [startIso, endIsoExclusive) 구간.
+ * Fetch 홀(POS)/쿠팡이츠/배민 매출 주문 (tb_sales_order) — [startIso, endIsoExclusive) 구간.
  * 테이블이 아직 생성되지 않은 경우(마이그레이션 미실행) null을 반환해 페이지에서 안내 문구를 보여줄 수 있게 한다.
  */
 export async function getSalesOrdersInRange(
@@ -561,7 +562,7 @@ export async function getSalesOrdersInRange(
 ): Promise<SalesOrderRecord[] | null> {
   const url =
     `${SUPABASE_URL}/rest/v1/tb_sales_order` +
-    `?select=platform,order_datetime,status,total_amount,settlement_amount` +
+    `?select=id,platform,order_datetime,status,total_amount,settlement_amount` +
     `&order_datetime=gte.${encodeURIComponent(startIso)}` +
     `&order_datetime=lt.${encodeURIComponent(endIsoExclusive)}` +
     `&order=order_datetime.asc`
@@ -574,6 +575,62 @@ export async function getSalesOrdersInRange(
   }
 
   return (await res.json()) as SalesOrderRecord[]
+}
+
+export type SalesOrderItemRecord = {
+  order_id: string
+  sku_id: string | null
+  quantity: number
+  subtotal: number | null
+  is_canceled: boolean
+}
+
+/**
+ * Fetch 전체 주문 품목(tb_sales_order_item) — 메뉴 분석(카테고리 드릴다운)용.
+ * 현재 데이터 규모(수백 건)에서는 기간 필터 없이 전체를 가져와 호출 측에서
+ * order_id 기준으로 기간 내 주문에 매칭시키는 편이 PostgREST 임베드 조인보다 단순하고 안전하다.
+ */
+export async function getAllSalesOrderItems(): Promise<SalesOrderItemRecord[] | null> {
+  const url = `${SUPABASE_URL}/rest/v1/tb_sales_order_item?select=order_id,sku_id,quantity,subtotal,is_canceled`
+  const res = await fetch(url, { headers: authHeaders(), cache: "no-store" })
+  if (!res.ok) {
+    if (res.status === 404 || res.status === 400) return null
+    throw new Error(`Failed to read sales order items (${res.status})`)
+  }
+  return (await res.json()) as SalesOrderItemRecord[]
+}
+
+export type SkuMenuRecord = {
+  id: string
+  sku_code: string
+  sku_name: string
+  category_code: string | null
+  sell_price: number | null
+}
+
+/** 판매품(tb_sku_mst) — 메뉴 분석 카테고리/매출 집계용. */
+export async function getSkuMenuRecords(): Promise<SkuMenuRecord[]> {
+  const url = `${SUPABASE_URL}/rest/v1/tb_sku_mst?select=id,sku_code,sku_name,category_code,sell_price&order=sku_code`
+  const res = await fetch(url, { headers: authHeaders(), cache: "no-store" })
+  if (!res.ok) return []
+  return (await res.json()) as SkuMenuRecord[]
+}
+
+export type SkuCategoryRecord = {
+  category_code: string
+  category_name_kr: string
+  emoji: string | null
+  sort_order: number
+}
+
+/** 판매 카테고리(tb_category_mst, category_type=SKU) — sort_order 순. */
+export async function getSkuCategories(): Promise<SkuCategoryRecord[]> {
+  const url =
+    `${SUPABASE_URL}/rest/v1/tb_category_mst` +
+    `?select=category_code,category_name_kr,emoji,sort_order&category_type=eq.SKU&order=sort_order.asc`
+  const res = await fetch(url, { headers: authHeaders(), cache: "no-store" })
+  if (!res.ok) return []
+  return (await res.json()) as SkuCategoryRecord[]
 }
 
 /**
