@@ -81,6 +81,8 @@ function Sep() {
 // 외부(부모 컴포넌트)에서 에디터 본문에 콘텐츠를 삽입할 수 있게 노출하는 API
 export type RichTextEditorApi = {
   insertHtml: (html: string) => void
+  getHtml: () => string
+  setHtml: (html: string) => void
 }
 
 export function RichTextEditor({
@@ -127,6 +129,12 @@ export function RichTextEditor({
       insertHtml: (html: string) => {
         if (!editor) return
         editor.chain().focus("end").insertContent(html).run()
+        if (hiddenRef.current) hiddenRef.current.value = editor.getHTML()
+      },
+      getHtml: () => editor?.getHTML() ?? "",
+      setHtml: (html: string) => {
+        if (!editor) return
+        editor.commands.setContent(html)
         if (hiddenRef.current) hiddenRef.current.value = editor.getHTML()
       },
     }

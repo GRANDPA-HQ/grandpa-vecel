@@ -32,6 +32,9 @@ export const COLUMN_LABELS: Record<string, string> = {
   // 공통
   category_code: "카테고리 코드",
   category_name: "카테고리명",
+  category_name_kr: "카테고리명 (국문)",
+  category_name_en: "카테고리명 (영문)",
+  category_type: "카테고리 유형",
   catgegory_id: "카테고리 코드",
   storage: "보관 방식",
   purchase_unit: "구매 단위",
@@ -74,6 +77,7 @@ export const COLUMN_LABELS: Record<string, string> = {
   sku_id: "SKU",
   prod_id: "생산품",
   raw_id: "원재료",
+  ingredient_prod_id: "구성 생산품",
   amount: "수량",
   unit: "단위",
   memo: "메모",

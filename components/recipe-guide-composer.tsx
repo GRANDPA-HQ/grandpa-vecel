@@ -6,9 +6,13 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { RichTextEditor, type RichTextEditorApi } from "@/components/rich-text-editor"
 import { SearchableSelect } from "@/components/searchable-select"
-import { X, Send, Sparkles, Eye, EyeOff, Check } from "lucide-react"
+import { X, Send, Sparkles, Save, Check } from "lucide-react"
 import { useDraggableModal } from "@/components/use-draggable-modal"
+import { saveDraft, loadDraft, clearDraft } from "@/lib/local-draft"
 import { cn } from "@/lib/utils"
+
+// 작성 중 내용을 담는 임시저장 구조 — 서버로는 전송되지 않고 localStorage에만 보관된다.
+type GuideDraft = { title: string; category: string; content: string }
 
 // 판매 레시피(SKU별 생산품 구성) 요약 — 드롭다운 선택 시 본문에 삽입됨
 export type SkuRecipeSummary = {
@@ -47,9 +51,15 @@ export function RecipeGuideComposer({
 }) {
   const [state, formAction, pending] = useActionState(createRecipeGuide, undefined)
   const editorApi = useRef<RichTextEditorApi | null>(null)
-  // 뒤의 내용을 보며 작성할 수 있도록 창 드래그 이동 + 임시 숨기기 지원
-  // (숨김은 CSS로만 처리해 에디터 작성 내용이 유지된다)
-  const { offset, hidden, setHidden, startDrag } = useDraggableModal()
+  // 뒤의 내용을 보며 작성할 수 있도록 창 드래그 이동 지원
+  const { offset, startDrag } = useDraggableModal()
+
+  // 작성자별로 구분해 저장 — 같은 브라우저를 여러 직원이 쓰더라도 서로의
+  // 임시저장 내용이 섞이지 않도록 함. localStorage에만 남아 서버로는 전송되지
+  // 않으므로 다른 사람에게는 애초에 노출되지 않는다.
+  const draftKey = `recipe-guide-draft:${authorName}`
+  const [draft] = useState<GuideDraft | null>(() => loadDraft<GuideDraft>(draftKey))
+  const [draftNoticeVisible, setDraftNoticeVisible] = useState(!!draft)
 
   // 저장 요청이 서버에 전송된 후(pending)에는 실수로 배경을 클릭하거나 X를
   // 눌러 창이 닫히지 않도록 막는다 — 저장이 끝났는지 모른 채 창이 사라지는
@@ -59,11 +69,32 @@ export function RecipeGuideComposer({
     onClose()
   }
 
+  // 지금까지 작성한 내용을 임시저장하고 창을 닫는다 — 다른 페이지로 이동해도
+  // 다시 열면 이어서 작성할 수 있다. localStorage에만 저장되므로 다른 사람에게는
+  // 보이지 않는다.
+  function handleSaveDraft() {
+    if (pending) return
+    saveDraft<GuideDraft>(draftKey, {
+      title,
+      category,
+      content: editorApi.current?.getHtml() ?? "",
+    })
+    onClose()
+  }
+
+  function handleDiscardDraft() {
+    clearDraft(draftKey)
+    setDraftNoticeVisible(false)
+    setTitle("")
+    setCategory("")
+    editorApi.current?.setHtml("")
+  }
+
   // ── 제목 자동 생성 ──────────────────────────────────
   // 분류·선택한 레시피로 "[분류] SKU명 레시피 가이드"를 만든다.
   // 직접 입력한 제목은 덮어쓰지 않고, 비어있거나 자동 생성된 상태일 때만 갱신한다.
-  const [title, setTitle] = useState("")
-  const [category, setCategory] = useState("")
+  const [title, setTitle] = useState(draft?.title ?? "")
+  const [category, setCategory] = useState(draft?.category ?? "")
   const lastAutoTitle = useRef<string | null>(null)
   const lastRecipe = useRef<SkuRecipeSummary | null>(null)
 
@@ -102,6 +133,8 @@ export function RecipeGuideComposer({
 
   useEffect(() => {
     if (!state?.success) return
+    // 정식 등록이 끝났으니 임시저장 내용은 더 이상 필요 없다
+    clearDraft(draftKey)
     // 저장 완료 토스트를 띄우고, 확인할 시간을 준 뒤 창을 닫는다
     // (기존엔 300ms 만에 조용히 닫혀서 저장됐는지 확인하기 전에 사라진다는 피드백이 있었음)
     const showTimer = setTimeout(() => setToastVisible(true), 10)
@@ -110,7 +143,7 @@ export function RecipeGuideComposer({
       clearTimeout(showTimer)
       clearTimeout(closeTimer)
     }
-  }, [state?.success, onClose])
+  }, [state?.success, onClose, draftKey])
 
   const today = new Date().toLocaleDateString("ko-KR", {
     year: "numeric",
@@ -120,19 +153,7 @@ export function RecipeGuideComposer({
   })
 
   return (
-    <>
-      {hidden && (
-        <button
-          type="button"
-          onClick={() => setHidden(false)}
-          className="fixed bottom-4 right-4 z-50 inline-flex items-center gap-2 rounded-full border border-border bg-background px-4 py-2 text-sm font-medium shadow-lg transition-colors hover:bg-accent"
-        >
-          <Eye className="h-4 w-4" />
-          작성 중인 가이드 열기
-        </button>
-      )}
-
-    <div className={cn("fixed inset-0 z-50 flex items-center justify-center p-4", hidden && "hidden")}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40" onClick={handleRequestClose} />
 
       <div
@@ -170,12 +191,13 @@ export function RecipeGuideComposer({
           <div className="flex items-center gap-1.5">
             <button
               type="button"
-              onClick={() => setHidden(true)}
-              title="창을 잠시 숨기고 뒤 내용 보기 (작성 내용 유지)"
-              className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              onClick={handleSaveDraft}
+              disabled={pending}
+              title="지금까지 작성한 내용을 임시저장하고 창을 닫습니다 (다른 사람에게는 보이지 않음)"
+              className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
             >
-              <EyeOff className="h-3 w-3" />
-              임시 숨기기
+              <Save className="h-3 w-3" />
+              임시저장
             </button>
             <button
               type="button"
@@ -188,6 +210,20 @@ export function RecipeGuideComposer({
             </button>
           </div>
         </div>
+
+        {/* 임시저장된 내용을 불러왔을 때 안내 */}
+        {draft && draftNoticeVisible && (
+          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-amber-500/10 px-5 py-2 text-xs text-amber-700">
+            <span>임시저장된 내용을 이어서 작성하고 있어요.</span>
+            <button
+              type="button"
+              onClick={handleDiscardDraft}
+              className="shrink-0 font-medium underline underline-offset-2 hover:text-amber-800"
+            >
+              지우고 새로 작성
+            </button>
+          </div>
+        )}
 
         <form action={formAction} className="flex flex-1 flex-col overflow-hidden">
           {/* 이메일 메타 필드 */}
@@ -272,6 +308,7 @@ export function RecipeGuideComposer({
             <RichTextEditor
               name="content"
               placeholder="레시피 가이드 내용을 작성하세요..."
+              defaultContent={draft?.content ?? ""}
               apiRef={editorApi}
             />
           </div>
@@ -296,6 +333,5 @@ export function RecipeGuideComposer({
         </form>
       </div>
     </div>
-    </>
   )
 }

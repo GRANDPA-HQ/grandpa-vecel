@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
-import { Plus, Eye, EyeOff } from "lucide-react"
+import { Plus, Save } from "lucide-react"
 import { useDraggableModal } from "@/components/use-draggable-modal"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { insertRow, fetchNextSkuCode, fetchNextRawCode, fetchNextProdCode } from "@/app/actions/table-edit"
 import { COLUMN_LABELS } from "@/lib/column-labels"
 import { isPriceColumn } from "@/lib/table-config"
+import { saveDraft, loadDraft, clearDraft } from "@/lib/local-draft"
 
 // 테이블별 카테고리 선택 시 코드를 자동 채워주는 설정
 const AUTO_CODE_CONFIG: Record<string, { column: string; fetchCode: (categoryCode: string) => Promise<string> }> = {
@@ -25,7 +26,8 @@ export type ColumnDef = {
   required: boolean
 }
 
-type SelectOption = { value: string; label: string }
+// description은 select 옵션에 hover 툴팁으로 표시 (예: 카테고리 코드 옆 설명)
+type SelectOption = { value: string; label: string; description?: string }
 type MultiOption = string | SelectOption
 
 function toSelectOption(opt: MultiOption): SelectOption {
@@ -74,8 +76,13 @@ export function AddRowDialog({
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
   const lastAutoCode = useRef<string | null>(null)
-  // 뒤의 내용을 보며 작성할 수 있도록 창 드래그 이동 + 임시 숨기기 지원
-  const { offset, hidden, setHidden, startDrag, resetModal } = useDraggableModal()
+  // 뒤의 내용을 보며 작성할 수 있도록 창 드래그 이동 지원
+  const { offset, startDrag, resetModal } = useDraggableModal()
+
+  // 테이블별로 구분해 저장 — localStorage에만 남아 서버로 전송되지 않으므로
+  // 다른 사람에게는 애초에 노출되지 않는다.
+  const draftKey = `add-row-draft:${tableName}`
+  const [draftNoticeVisible, setDraftNoticeVisible] = useState(false)
 
   const orderedColumns = fieldOrder
     ? [
@@ -107,8 +114,7 @@ export function AddRowDialog({
   }, [tableName, categoryValue])
 
   useEffect(() => {
-    // 임시 숨김 중에는 뒤 내용을 스크롤할 수 있도록 잠금 해제
-    if (!open || hidden) return
+    if (!open) return
     document.body.style.overflow = "hidden"
     const handleEsc = (e: KeyboardEvent) => {
       if (e.key === "Escape") handleClose()
@@ -119,13 +125,20 @@ export function AddRowDialog({
       document.removeEventListener("keydown", handleEsc)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, hidden])
+  }, [open])
 
   function handleOpen() {
-    setValues({})
     setError(null)
     lastAutoCode.current = null
     resetModal()
+    const draft = loadDraft<Record<string, string>>(draftKey)
+    if (draft) {
+      setValues(draft)
+      setDraftNoticeVisible(true)
+    } else {
+      setValues({})
+      setDraftNoticeVisible(false)
+    }
     setOpen(true)
   }
 
@@ -133,6 +146,22 @@ export function AddRowDialog({
     if (isPending) return
     setOpen(false)
     setError(null)
+  }
+
+  // 지금까지 입력한 내용을 임시저장하고 창을 닫는다 — 다른 페이지로 이동해도
+  // 다시 열면 이어서 입력할 수 있다. localStorage에만 저장되므로 다른 사람에게는
+  // 보이지 않는다.
+  function handleSaveDraft() {
+    if (isPending) return
+    saveDraft(draftKey, values)
+    setOpen(false)
+    setError(null)
+  }
+
+  function handleDiscardDraft() {
+    clearDraft(draftKey)
+    setDraftNoticeVisible(false)
+    setValues({})
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -147,6 +176,7 @@ export function AddRowDialog({
       if (result.error) {
         setError(result.error)
       } else {
+        clearDraft(draftKey)
         setOpen(false)
         router.refresh()
       }
@@ -160,18 +190,7 @@ export function AddRowDialog({
         {buttonLabel}
       </Button>
 
-      {open && hidden && (
-        <button
-          type="button"
-          onClick={() => setHidden(false)}
-          className="fixed bottom-4 right-4 z-50 inline-flex items-center gap-2 rounded-full border border-border bg-background px-4 py-2 text-sm font-medium shadow-lg transition-colors hover:bg-accent"
-        >
-          <Eye className="h-4 w-4" />
-          작성 중인 입력창 열기
-        </button>
-      )}
-
-      {open && !hidden && (
+      {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50" onClick={handleClose} />
           <div
@@ -191,14 +210,28 @@ export function AddRowDialog({
               </div>
               <button
                 type="button"
-                onClick={() => setHidden(true)}
-                title="창을 잠시 숨기고 뒤 내용 보기 (입력 내용 유지)"
-                className="inline-flex shrink-0 items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                onClick={handleSaveDraft}
+                disabled={isPending}
+                title="지금까지 입력한 내용을 임시저장하고 창을 닫습니다 (다른 사람에게는 보이지 않음)"
+                className="inline-flex shrink-0 items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
               >
-                <EyeOff className="h-3 w-3" />
-                임시 숨기기
+                <Save className="h-3 w-3" />
+                임시저장
               </button>
             </div>
+
+            {draftNoticeVisible && (
+              <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-amber-500/10 px-6 py-2 text-xs text-amber-700">
+                <span>임시저장된 내용을 이어서 입력하고 있어요.</span>
+                <button
+                  type="button"
+                  onClick={handleDiscardDraft}
+                  className="shrink-0 font-medium underline underline-offset-2 hover:text-amber-800"
+                >
+                  지우고 새로 입력
+                </button>
+              </div>
+            )}
 
             <form onSubmit={handleSubmit} className="flex flex-col overflow-hidden">
               <div className="flex flex-col gap-4 overflow-y-auto px-6 py-4">
@@ -276,7 +309,7 @@ export function AddRowDialog({
                           >
                             <option value="">— 선택 —</option>
                             {singleOpts.map((opt) => (
-                              <option key={opt.value} value={opt.value}>
+                              <option key={opt.value} value={opt.value} title={opt.description}>
                                 {opt.label}
                               </option>
                             ))}

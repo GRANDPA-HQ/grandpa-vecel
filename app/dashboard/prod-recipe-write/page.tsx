@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin"
-import { getTables } from "@/lib/supabase/db"
+import { getTables, getCategoryOptions } from "@/lib/supabase/db"
 import {
   ProdRecipeForm,
   type InitialProdRecipe,
@@ -9,18 +9,20 @@ import { AddRowDialog, type ColumnDef } from "@/components/add-row-dialog"
 import {
   HIDDEN_COLS,
   TABLE_HIDDEN_COLS,
-  CATEGORY_OPTIONS,
   STORAGE_OPTIONS,
   STATUS_OPTIONS,
   UNIT_OPTIONS,
+  ACTIVE_OPTIONS,
   TABLE_FIELD_ORDER,
 } from "@/lib/table-config"
 
 export default async function ProdRecipeWritePage() {
   const admin = createAdminClient()
+  // 원재료·생산품은 둘 다 카테고리 유형 "RAW"를 쓴다 (판매품은 "SKU"로 별도)
+  const categoryOptions = await getCategoryOptions("RAW").catch(() => [])
 
   const [prodRes, rawRes] = await Promise.all([
-    admin.from("tb_prod_mst").select("id,prod_code,prod_name").order("prod_code"),
+    admin.from("tb_prod_mst").select("id,prod_code,prod_name,unit").order("prod_code"),
     admin
       .from("tb_raw_mst")
       .select(
@@ -29,11 +31,24 @@ export default async function ProdRecipeWritePage() {
       .order("raw_code"),
   ])
 
-  // 드래그로 정한 행 순서(sort_order)대로 조회 — 컬럼이 아직 없는 DB에서는 기존 방식 폴백
-  let recipeRes = await admin
+  // 드래그로 정한 행 순서(sort_order)·구성 재료가 생산품인 경우(ingredient_prod_id)까지
+  // 함께 조회 — 아직 마이그레이션 전인 DB에서도 저장은 되도록 단계적으로 폴백한다
+  // (폴백마다 select 컬럼 구성이 달라 엄격한 응답 타입 추론과 충돌하므로 any로 둔다)
+  let recipeRes: any = await admin
     .from("tb_prod_recipe")
-    .select("prod_id,raw_id,amount,unit,memo")
+    .select("prod_id,raw_id,ingredient_prod_id,amount,unit,memo")
     .order("sort_order")
+  if (recipeRes.error) {
+    recipeRes = await admin
+      .from("tb_prod_recipe")
+      .select("prod_id,raw_id,ingredient_prod_id,amount,unit,memo")
+  }
+  if (recipeRes.error) {
+    recipeRes = await admin
+      .from("tb_prod_recipe")
+      .select("prod_id,raw_id,amount,unit,memo")
+      .order("sort_order")
+  }
   if (recipeRes.error) {
     recipeRes = await admin.from("tb_prod_recipe").select("prod_id,raw_id,amount,unit,memo")
   }
@@ -51,6 +66,11 @@ export default async function ProdRecipeWritePage() {
   // 원자재에 등록된 사용 단위 — 레시피 행에서 원자재 선택 시 단위 자동 입력용
   const rawUnitById = Object.fromEntries(
     (rawRes.data ?? []).filter((r) => r.usage_unit).map((r) => [r.id as string, String(r.usage_unit)]),
+  ) as Record<string, string>
+
+  // 생산품에 등록된 단위 — 레시피 행에서 다른 생산품을 재료로 선택할 때 단위 자동 입력용
+  const prodUnitById = Object.fromEntries(
+    (prodRes.data ?? []).filter((r) => r.unit).map((r) => [r.id as string, String(r.unit)]),
   ) as Record<string, string>
 
   // 원자재 영양성분 — 폼에서 투입량 기준 합계 자동 계산에 사용
@@ -72,7 +92,11 @@ export default async function ProdRecipeWritePage() {
   ) as Record<string, RawNutrition>
 
   // 테이블이 아직 없으면(recipeRes.error) 빈 목록으로 시작 — 저장 시점에 에러가 표시된다
-  const initialRecipes = (recipeRes.data ?? []) as InitialProdRecipe[]
+  // ingredient_prod_id 폴백 조회분은 해당 필드가 없으므로 null로 채워 형태를 맞춘다
+  const initialRecipes = ((recipeRes.data ?? []) as Record<string, unknown>[]).map((r) => ({
+    ...r,
+    ingredient_prod_id: (r.ingredient_prod_id as string | null | undefined) ?? null,
+  })) as InitialProdRecipe[]
 
   // 생산품/원재료 등록 다이얼로그용 컬럼 정의 (데이터 테이블의 등록 폼과 동일 구성)
   let prodInsertColumns: ColumnDef[] = []
@@ -104,8 +128,9 @@ export default async function ProdRecipeWritePage() {
               tableName="tb_raw_mst"
               columns={rawInsertColumns}
               columnOptions={{
-                category_code: CATEGORY_OPTIONS,
+                category_code: categoryOptions,
                 storage: STORAGE_OPTIONS,
+                active: ACTIVE_OPTIONS,
               }}
               fieldOrder={TABLE_FIELD_ORDER["tb_raw_mst"]}
               buttonLabel="원재료 등록"
@@ -117,10 +142,11 @@ export default async function ProdRecipeWritePage() {
               tableName="tb_prod_mst"
               columns={prodInsertColumns}
               columnOptions={{
-                category_code: CATEGORY_OPTIONS,
+                category_code: categoryOptions,
                 storage: STORAGE_OPTIONS,
                 status: STATUS_OPTIONS,
                 unit: UNIT_OPTIONS,
+                active: ACTIVE_OPTIONS,
               }}
               fieldOrder={TABLE_FIELD_ORDER["tb_prod_mst"]}
               buttonLabel="생산품 등록"
@@ -134,6 +160,7 @@ export default async function ProdRecipeWritePage() {
         prodOptions={prodOptions}
         rawOptions={rawOptions}
         rawUnitById={rawUnitById}
+        prodUnitById={prodUnitById}
         rawNutritionById={rawNutritionById}
         initialRecipes={initialRecipes}
       />

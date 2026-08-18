@@ -5,7 +5,8 @@ import { createPortal } from "react-dom"
 import { ChevronDown, Search } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-export type SearchableOption = { value: string; label: string; disabled?: boolean }
+// description은 옵션 목록에 라벨 아래 작은 보조 설명으로 표시된다 (예: 카테고리 설명)
+export type SearchableOption = { value: string; label: string; description?: string; disabled?: boolean }
 
 export function SearchableSelect({
   options,
@@ -35,7 +36,9 @@ export function SearchableSelect({
   const normalize = (s: string) => s.replace(/\s+/g, "").toLowerCase()
   const normalizedQuery = normalize(query)
   const filtered = normalizedQuery
-    ? options.filter((o) => normalize(o.label).includes(normalizedQuery))
+    ? options.filter(
+        (o) => normalize(o.label).includes(normalizedQuery) || normalize(o.description ?? "").includes(normalizedQuery),
+      )
     : options
 
   useEffect(() => {
@@ -142,7 +145,12 @@ export function SearchableSelect({
                       opt.disabled && "cursor-not-allowed text-muted-foreground opacity-60 hover:bg-transparent",
                     )}
                   >
-                    {opt.label}
+                    <span className="block">{opt.label}</span>
+                    {opt.description && (
+                      <span className="block truncate text-xs font-normal text-muted-foreground">
+                        {opt.description}
+                      </span>
+                    )}
                   </button>
                 ))
               )}
