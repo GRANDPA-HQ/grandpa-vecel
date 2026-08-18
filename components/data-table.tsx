@@ -19,10 +19,13 @@ import { loadMoreRows } from "@/app/actions/table-rows"
 import { COLUMN_LABELS } from "@/lib/column-labels"
 import { isPriceColumn, type RowCursor } from "@/lib/table-config"
 import { withBasePath } from "@/lib/base-path"
+import { ColumnSettingsMenu } from "@/components/column-settings-menu"
+import { SearchableSelect } from "@/components/searchable-select"
 
 const IMAGE_EXTS = ["jpg", "jpeg", "png", "gif", "webp"]
 
-type SelectOption = { value: string; label: string }
+// description은 select 옵션에 hover 툴팁으로 표시 (예: 카테고리 코드 옆 설명)
+type SelectOption = { value: string; label: string; description?: string }
 type MultiOption = string | SelectOption
 
 function toSelectOption(opt: MultiOption): SelectOption {
@@ -438,7 +441,7 @@ function EditableCell({
       >
         <option value="">— 선택 —</option>
         {colOpts.map((opt) => (
-          <option key={opt.value} value={opt.value}>
+          <option key={opt.value} value={opt.value} title={opt.description}>
             {opt.label}
           </option>
         ))}
@@ -520,6 +523,9 @@ export function DataTable({
   bulkDeleteEnabled,
   rowLinks,
   extraColumn,
+  allColumns,
+  hiddenColumns,
+  categoryFilter,
 }: {
   columns: string[]
   rows: Record<string, unknown>[]
@@ -536,11 +542,16 @@ export function DataTable({
   searchEnabled?: boolean
   searchPlaceholder?: string
   bulkDeleteEnabled?: boolean
+  // 열 표시/숨김 설정용 — 숨김 처리되지 않은 전체 토글 대상 컬럼 목록과 그중 현재 숨겨진 컬럼
+  allColumns?: string[]
+  hiddenColumns?: string[]
   // PK 값 → 내부 링크 href. 값이 있는 행에만 링크 컬럼(header)을 표시한다
   // insertBeforeIndex: 지정한 인덱스의 실제 컬럼 바로 앞에 링크 컬럼을 끼워 넣는다 (미지정 시 맨 뒤)
   rowLinks?: { header: string; hrefByPk: Record<string, string>; insertBeforeIndex?: number }
   // 임의의 미리 렌더링된 셀을 맨 뒤에 추가 컬럼으로 붙인다 (예: 포장 부자재의 존 태그 편집 UI)
   extraColumn?: { header: string; cellsByPk: Record<string, ReactNode> }
+  // 카테고리 선택 필터 — 검색창 옆에 표시되며 선택한 카테고리에 해당하는 행만 서버에서 조회한다
+  categoryFilter?: { column: string; options: SelectOption[]; placeholder?: string }
 }) {
   const [rows, setRows] = useState(initialRows)
   const [errors, setErrors] = useState<ErrorEntry[]>([])
@@ -573,6 +584,17 @@ export function DataTable({
       router.push(`${pathname}?${params.toString()}`)
     },
     [pathname, router, searchParams, searchInput],
+  )
+
+  const activeCategory = searchParams.get("category") ?? ""
+  const handleCategoryChange = useCallback(
+    (value: string) => {
+      const params = new URLSearchParams(searchParams.toString())
+      if (value) params.set("category", value)
+      else params.delete("category")
+      router.push(`${pathname}?${params.toString()}`)
+    },
+    [pathname, router, searchParams],
   )
 
   const handleRowUpdate = useCallback(
@@ -748,41 +770,69 @@ export function DataTable({
 
   const extraColCount = (editable ? 1 : 0) + (bulkSelectable ? 1 : 0) + (hasLinkColumn ? 1 : 0) + (hasExtraColumn ? 1 : 0)
 
+  const hasColumnVisibilityMenu = !!tableName && !!allColumns && allColumns.length > 0
+
   return (
     <div className="flex flex-col gap-3">
-      {(searchEnabled || exportHref) && (
+      {(searchEnabled || exportHref || hasColumnVisibilityMenu || categoryFilter) && (
         <div className="flex flex-wrap items-center justify-between gap-2">
-          {searchEnabled ? (
-            <form onSubmit={handleSearchSubmit} className="flex max-w-sm flex-1 items-center gap-2">
-              <div className="relative flex-1">
-                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={searchInput}
-                  onChange={(e) => setSearchInput(e.target.value)}
-                  placeholder={searchPlaceholder ?? "검색"}
-                  className="h-8 pl-8 text-sm"
+          {searchEnabled || categoryFilter ? (
+            <div className="flex flex-1 flex-wrap items-center gap-2">
+              {searchEnabled && (
+                <form onSubmit={handleSearchSubmit} className="flex max-w-sm flex-1 items-center gap-2">
+                  <div className="relative flex-1">
+                    <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      value={searchInput}
+                      onChange={(e) => setSearchInput(e.target.value)}
+                      placeholder={searchPlaceholder ?? "검색"}
+                      className="h-8 pl-8 text-sm"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium hover:bg-accent"
+                  >
+                    검색
+                  </button>
+                </form>
+              )}
+              {categoryFilter && (
+                <SearchableSelect
+                  className="w-56 shrink-0"
+                  value={activeCategory}
+                  onChange={handleCategoryChange}
+                  placeholder="전체 카테고리"
+                  searchPlaceholder="카테고리 검색..."
+                  options={[
+                    { value: "", label: "전체 카테고리" },
+                    ...categoryFilter.options,
+                  ]}
                 />
-              </div>
-              <button
-                type="submit"
-                className="rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium hover:bg-accent"
-              >
-                검색
-              </button>
-            </form>
+              )}
+            </div>
           ) : (
             <span />
           )}
-          {exportHref && (
-            <a
-              href={exportHref}
-              title={searchQuery ? "현재 검색 결과 전체를 엑셀로 저장" : "전체 데이터를 엑셀로 저장"}
-              className="inline-flex items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-100"
-            >
-              <FileSpreadsheet className="h-3.5 w-3.5" />
-              엑셀 다운로드{searchQuery ? " (검색 결과)" : ""}
-            </a>
-          )}
+          <div className="flex items-center gap-2">
+            {hasColumnVisibilityMenu && (
+              <ColumnSettingsMenu
+                tableName={tableName!}
+                allColumns={allColumns!}
+                hiddenColumns={hiddenColumns ?? []}
+              />
+            )}
+            {exportHref && (
+              <a
+                href={exportHref}
+                title={searchQuery ? "현재 검색 결과 전체를 엑셀로 저장" : "전체 데이터를 엑셀로 저장"}
+                className="inline-flex items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-100"
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5" />
+                엑셀 다운로드{searchQuery ? " (검색 결과)" : ""}
+              </a>
+            )}
+          </div>
         </div>
       )}
 

@@ -10,9 +10,14 @@ import { SearchableSelect } from "@/components/searchable-select"
 
 type SelectOption = { value: string; label: string }
 
+// 구성 재료가 원재료(tb_raw_mst)인지 다른 생산품(tb_prod_mst)인지 — 예: 요거트랜치믹스를
+// 만들어두고 그걸 재료로 요거트랜치드레싱을 만드는 경우 "prod"를 사용한다
+type IngredientType = "raw" | "prod"
+
 type RecipeRow = {
   localId: string
-  rawId: string
+  ingredientType: IngredientType
+  ingredientId: string
   amount: string
   unit: "g" | "ml" | "ea"
   memo: string
@@ -20,7 +25,8 @@ type RecipeRow = {
 
 export type InitialProdRecipe = {
   prod_id: string
-  raw_id: string
+  raw_id: string | null
+  ingredient_prod_id: string | null
   amount: number
   unit: string
   memo: string | null
@@ -51,7 +57,7 @@ type Draft = { tabs: ProdTab[]; activeId: string }
 
 function hasDraftContent(tabs: ProdTab[]): boolean {
   return tabs.some(
-    (t) => t.prodId || t.rows.some((r) => r.rawId || r.amount !== "" || r.memo !== ""),
+    (t) => t.prodId || t.rows.some((r) => r.ingredientId || r.amount !== "" || r.memo !== ""),
   )
 }
 
@@ -74,7 +80,7 @@ function loadDraft(): Draft | null {
 }
 
 function createRow(): RecipeRow {
-  return { localId: crypto.randomUUID(), rawId: "", amount: "", unit: "g", memo: "" }
+  return { localId: crypto.randomUUID(), ingredientType: "raw", ingredientId: "", amount: "", unit: "g", memo: "" }
 }
 
 function createTab(): ProdTab {
@@ -84,7 +90,8 @@ function createTab(): ProdTab {
 function toRows(recipes: InitialProdRecipe[]): RecipeRow[] {
   return recipes.map((r) => ({
     localId: crypto.randomUUID(),
-    rawId: r.raw_id,
+    ingredientType: r.ingredient_prod_id ? "prod" : "raw",
+    ingredientId: r.ingredient_prod_id ?? r.raw_id ?? "",
     amount: String(r.amount),
     unit: r.unit as "g" | "ml" | "ea",
     memo: r.memo ?? "",
@@ -100,6 +107,7 @@ export function ProdRecipeForm({
   prodOptions,
   rawOptions,
   rawUnitById,
+  prodUnitById,
   rawNutritionById,
   initialRecipes,
 }: {
@@ -107,6 +115,8 @@ export function ProdRecipeForm({
   rawOptions: SelectOption[]
   // 원자재에 등록된 사용 단위 — 원자재 선택 시 행의 단위를 자동으로 맞춘다
   rawUnitById?: Record<string, string>
+  // 생산품에 등록된 단위 — 다른 생산품을 재료로 선택했을 때 행의 단위를 자동으로 맞춘다
+  prodUnitById?: Record<string, string>
   rawNutritionById: Record<string, RawNutrition>
   initialRecipes: InitialProdRecipe[]
 }) {
@@ -165,10 +175,19 @@ export function ProdRecipeForm({
   const active = tabs.find((t) => t.localId === activeId)
   const usedProdIds = new Set(tabs.map((t) => t.prodId).filter(Boolean))
 
+  // 생산품을 재료로 선택할 때 목록에서 제외할 값 (자기 자신을 재료로 쓸 수는 없음)
+  const ingredientProdOptions = active
+    ? prodOptions.filter((o) => o.value !== active.prodId)
+    : prodOptions
+  const ingredientOptions = [
+    ...rawOptions.map((o) => ({ value: `raw:${o.value}`, label: `[원재료] ${o.label}` })),
+    ...ingredientProdOptions.map((o) => ({ value: `prod:${o.value}`, label: `[생산품] ${o.label}` })),
+  ]
+
   // ── 영양성분 합계 (활성 탭) ──────────────────────────
   // g/ml 단위: 100g 기준 영양정보 × 투입량 (ml은 1g≈1ml로 근사)
   // ea 단위: 개당 영양정보 × 개수
-  // 영양정보 미등록 원자재는 제외하고 건수만 표시.
+  // 영양정보 미등록 원자재·재료로 쓰인 다른 생산품은 제외하고 건수만 표시.
   const nutrition = useMemo(() => {
     let grams = 0
     let kcal = 0
@@ -181,8 +200,9 @@ export function ProdRecipeForm({
 
     for (const row of active?.rows ?? []) {
       const amount = parseFloat(row.amount)
-      if (!row.rawId || !Number.isFinite(amount) || amount <= 0) continue
-      const n = rawNutritionById[row.rawId]
+      if (!row.ingredientId || !Number.isFinite(amount) || amount <= 0) continue
+      // 다른 생산품을 재료로 쓴 행은 영양정보를 알 수 없어 항상 "미등록"으로 취급
+      const n = row.ingredientType === "raw" ? rawNutritionById[row.ingredientId] : undefined
 
       if (row.unit === "ea") {
         const hasEaData =
@@ -272,9 +292,14 @@ export function ProdRecipeForm({
     )
   }
 
-  // 원자재 선택 시 해당 원자재에 등록된 사용 단위(g/ml/ea)를 자동 적용
-  function handleRawSelect(rowId: string, rawId: string) {
-    const unit = rawUnitById?.[rawId]?.toLowerCase()
+  // 재료 선택 시 원자재/생산품에 등록된 사용 단위(g/ml/ea)를 자동 적용
+  // composite는 "raw:<id>" 또는 "prod:<id>" 형태
+  function handleIngredientSelect(rowId: string, composite: string) {
+    const sep = composite.indexOf(":")
+    const type = composite.slice(0, sep) as IngredientType
+    const ingredientId = composite.slice(sep + 1)
+    const registeredUnit = type === "raw" ? rawUnitById?.[ingredientId] : prodUnitById?.[ingredientId]
+    const unit = registeredUnit?.toLowerCase()
     const autoUnit = unit === "g" || unit === "ml" || unit === "ea" ? unit : null
     setTabs((prev) =>
       prev.map((t) =>
@@ -283,7 +308,9 @@ export function ProdRecipeForm({
           : {
               ...t,
               rows: t.rows.map((r) =>
-                r.localId === rowId ? { ...r, rawId, unit: autoUnit ?? r.unit } : r,
+                r.localId === rowId
+                  ? { ...r, ingredientType: type, ingredientId, unit: autoUnit ?? r.unit }
+                  : r,
               ),
             },
       ),
@@ -332,11 +359,12 @@ export function ProdRecipeForm({
     return () => window.removeEventListener("mouseup", clear)
   }, [rowDragArmed])
 
-  // 행별 열량 미리보기 (영양정보 있는 원자재만)
+  // 행별 열량 미리보기 (영양정보 있는 원자재만 — 생산품을 재료로 쓴 행은 계산 불가)
   function rowKcal(row: RecipeRow): number | null {
+    if (row.ingredientType !== "raw") return null
     const amount = parseFloat(row.amount)
-    if (!row.rawId || !Number.isFinite(amount) || amount <= 0) return null
-    const n = rawNutritionById[row.rawId]
+    if (!row.ingredientId || !Number.isFinite(amount) || amount <= 0) return null
+    const n = rawNutritionById[row.ingredientId]
     if (!n) return null
     if (row.unit === "ea") {
       if (n.kcalEa === null) return null
@@ -356,11 +384,12 @@ export function ProdRecipeForm({
     startTransition(async () => {
       const results = await Promise.all(
         toSave.map((t) => {
-          const valid = t.rows.filter((r) => r.rawId && r.amount !== "")
+          const valid = t.rows.filter((r) => r.ingredientId && r.amount !== "")
           return saveProdRecipe(
             t.prodId,
             valid.map((r) => ({
-              rawId: r.rawId,
+              ingredientType: r.ingredientType,
+              ingredientId: r.ingredientId,
               amount: parseFloat(r.amount),
               unit: r.unit,
               memo: r.memo,
@@ -523,7 +552,7 @@ export function ProdRecipeForm({
               <thead>
                 <tr className="bg-muted/50 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   <th className="w-16 px-4 py-3 text-center">#</th>
-                  <th className="px-4 py-3">원재료</th>
+                  <th className="px-4 py-3">원재료 / 생산품</th>
                   <th className="w-32 px-4 py-3">수량</th>
                   <th className="w-24 px-4 py-3">단위</th>
                   <th className="w-24 px-4 py-3 text-right">열량</th>
@@ -578,11 +607,11 @@ export function ProdRecipeForm({
 
                       <td className="px-4 py-2">
                         <SearchableSelect
-                          value={row.rawId}
-                          onChange={(v) => handleRawSelect(row.localId, v)}
+                          value={row.ingredientId ? `${row.ingredientType}:${row.ingredientId}` : ""}
+                          onChange={(v) => handleIngredientSelect(row.localId, v)}
                           placeholder="— 선택 —"
-                          searchPlaceholder="원재료 검색..."
-                          options={rawOptions.map((opt) => ({ value: opt.value, label: opt.label }))}
+                          searchPlaceholder="원재료/생산품 검색..."
+                          options={ingredientOptions}
                         />
                       </td>
 
@@ -646,7 +675,7 @@ export function ProdRecipeForm({
                 className="flex w-full items-center justify-center gap-1.5 py-3 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
               >
                 <Plus className="h-4 w-4" />
-                원재료 추가
+                재료 추가
               </button>
             </div>
           </div>
@@ -693,7 +722,7 @@ export function ProdRecipeForm({
               <p className="mt-2 text-xs text-amber-600">
                 {nutrition.eaExcluded > 0 && `ea 단위 ${nutrition.eaExcluded}건은 개당 영양정보가 미등록되어 합계에서 제외됐습니다.`}
                 {nutrition.eaExcluded > 0 && nutrition.noDataExcluded > 0 && " "}
-                {nutrition.noDataExcluded > 0 && `영양정보 미등록 원재료 ${nutrition.noDataExcluded}건은 중량만 합산됐습니다.`}
+                {nutrition.noDataExcluded > 0 && `영양정보 미등록 원재료·생산품 재료 ${nutrition.noDataExcluded}건은 중량만 합산됐습니다.`}
               </p>
             )}
           </div>
@@ -707,7 +736,7 @@ export function ProdRecipeForm({
             <span className="font-semibold text-foreground">{tabs.filter((t) => t.prodId).length}</span>
             개 생산품 편집 중 ·{" "}
             <span className="font-semibold text-foreground">{active?.rows.length ?? 0}</span>
-            개 원재료 · 작성 내용은 이 기기에 자동 임시저장됩니다
+            개 재료 · 작성 내용은 이 기기에 자동 임시저장됩니다
           </p>
         </div>
         <Button onClick={handleSaveAll} disabled={isPending} size="sm" className="gap-2">

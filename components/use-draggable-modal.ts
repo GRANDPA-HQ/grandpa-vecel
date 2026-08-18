@@ -3,13 +3,11 @@
 import { useCallback, useRef, useState } from "react"
 
 /**
- * 모달 창 드래그 이동 + 임시 숨기기 공용 훅.
- * - 헤더의 onMouseDown에 startDrag를 연결하면 창을 끌어서 옮길 수 있다.
- * - hidden 동안에도 컴포넌트는 마운트 상태를 유지하므로 입력 내용이 보존된다.
+ * 모달 창 드래그 이동 공용 훅.
+ * 헤더의 onMouseDown에 startDrag를 연결하면 창을 끌어서 옮길 수 있다.
  */
 export function useDraggableModal() {
   const [offset, setOffset] = useState({ x: 0, y: 0 })
-  const [hidden, setHidden] = useState(false)
   const dragState = useRef<{ startX: number; startY: number; baseX: number; baseY: number } | null>(null)
 
   const startDrag = useCallback((e: React.MouseEvent) => {
@@ -39,11 +37,10 @@ export function useDraggableModal() {
     window.addEventListener("mouseup", onUp)
   }, [])
 
-  // 창을 다시 열 때 위치·숨김 상태 초기화
+  // 창을 다시 열 때 위치 초기화
   const resetModal = useCallback(() => {
     setOffset({ x: 0, y: 0 })
-    setHidden(false)
   }, [])
 
-  return { offset, hidden, setHidden, startDrag, resetModal }
+  return { offset, startDrag, resetModal }
 }

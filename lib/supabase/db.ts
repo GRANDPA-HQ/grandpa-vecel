@@ -324,6 +324,24 @@ export async function deleteTableRows(
   }
 }
 
+// 테이블별 "열 숨김 / 열 순서" 설정 — 계정별이 아니라 전체 공통 설정이며,
+// table_column_prefs 테이블에 저장돼 새로고침·재로그인 후에도 유지된다.
+// 테이블이 아직 없으면(배포 초기) 조용히 빈 값으로 폴백한다.
+export async function getColumnPrefs(
+  tableName: string,
+): Promise<{ hiddenColumns: string[]; columnOrder: string[] }> {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/table_column_prefs?select=hidden_columns,column_order&table_name=eq.${encodeURIComponent(tableName)}`,
+    { headers: authHeaders(), cache: "no-store" },
+  )
+  if (!res.ok) return { hiddenColumns: [], columnOrder: [] }
+  const rows = (await res.json()) as { hidden_columns: string[] | null; column_order: string[] | null }[]
+  return {
+    hiddenColumns: rows[0]?.hidden_columns ?? [],
+    columnOrder: rows[0]?.column_order ?? [],
+  }
+}
+
 /**
  * Fetch id → category_code mapping from tb_category_mst.
  * Used to resolve FK columns (e.g. catgegory_id) to human-readable codes.
@@ -336,6 +354,53 @@ export async function getCategoryIdMap(): Promise<Record<string, string>> {
   if (!res.ok) return {}
   const rows = (await res.json()) as { id: string; category_code: string }[]
   return Object.fromEntries(rows.map((r) => [String(r.id), r.category_code]))
+}
+
+// category_code는 카테고리 유형(RAW/SKU)별로 중복될 수 있다 (예: SDS가 원재료·생산품
+// 분류와 판매품 분류에 각각 다른 이름으로 존재) — 반드시 유형으로 구분해서 조회해야 한다.
+// tb_raw_mst·tb_prod_mst는 "RAW" 유형을, tb_sku_mst는 "SKU" 유형을 쓴다.
+// 옵션 라벨에 "코드 : 명칭"을 함께 보여주고, 원문 설명은 description으로 함께 내려준다.
+export async function getCategoryOptions(
+  categoryType: "RAW" | "SKU",
+): Promise<{ value: string; label: string; description?: string }[]> {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/tb_category_mst?select=category_code,category_name_kr,description&category_type=eq.${categoryType}&order=sort_order`,
+    { headers: authHeaders(), next: { revalidate: 60 } },
+  )
+  if (!res.ok) return []
+  const rows = (await res.json()) as {
+    category_code: string
+    category_name_kr: string | null
+    description: string | null
+  }[]
+  return rows.map((r) => ({
+    value: r.category_code,
+    label: r.category_name_kr ? `${r.category_code} : ${r.category_name_kr}` : r.category_code,
+    description: r.description ?? undefined,
+  }))
+}
+
+// 포장 부자재(tb_submat_mst)용 별도 카테고리 테이블 — tb_category_mst와는 독립적이며
+// 코드 중복이 없어 유형 구분 없이 그대로 조회한다. category_type(포장재/소모품)을
+// 대분류 설명으로 함께 보여준다.
+export async function getSubmatCategoryOptions(): Promise<
+  { value: string; label: string; description?: string }[]
+> {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/tb_submat_category_mst?select=category_code,category_name,category_type&order=sort_order`,
+    { headers: authHeaders(), next: { revalidate: 60 } },
+  )
+  if (!res.ok) return []
+  const rows = (await res.json()) as {
+    category_code: string
+    category_name: string | null
+    category_type: string | null
+  }[]
+  return rows.map((r) => ({
+    value: r.category_code,
+    label: r.category_name ? `${r.category_code} : ${r.category_name}` : r.category_code,
+    description: r.category_type ?? undefined,
+  }))
 }
 
 /**

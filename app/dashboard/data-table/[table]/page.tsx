@@ -11,6 +11,9 @@ import {
   getZoneOptions,
   getSubmatZoneLinks,
   getStoreScopeOptions,
+  getColumnPrefs,
+  getCategoryOptions,
+  getSubmatCategoryOptions,
   type SubmatZoneLink,
 } from "@/lib/supabase/db"
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -32,10 +35,10 @@ import {
   ZONE_FK_LOOKUPS,
   ASSET_FK_LOOKUPS,
   sortOptionsByLabelOrder,
-  CATEGORY_OPTIONS,
   STORAGE_OPTIONS,
   STATUS_OPTIONS,
   UNIT_OPTIONS,
+  ACTIVE_OPTIONS,
   SKU_MULTI_OPTIONS,
   TABLE_FIELD_ORDER,
   SOP_CATEGORY_OPTIONS,
@@ -61,17 +64,32 @@ const TABLE_SEARCH_PLACEHOLDER: Record<string, string> = {
 const STORAGE_TABLES = new Set(["tb_prod_mst", "tb_raw_mst"])
 const STATUS_TABLES = new Set(["tb_prod_mst"])
 const UNIT_TABLES = new Set(["tb_prod_mst"])
+// active 컬럼(DB에서는 'active'/'inactive' ENUM)이 있는 테이블 — 자유 입력 대신 select로 제한
+const ACTIVE_TABLES = new Set(["tb_prod_mst", "tb_raw_mst", "tb_category_mst"])
+
+// 검색창 옆 카테고리 선택 필터 — 원재료/생산품/판매품/포장 부자재/시설 공통.
+// 필터링에 쓸 컬럼명만 정의하고, 옵션 목록은 테이블별로 다른 소스에서 조회한다
+// (원재료·생산품은 tb_category_mst "RAW" 유형, 판매품은 "SKU" 유형, 포장 부자재는
+// tb_submat_category_mst, 시설은 tb_asset_type_mst를 FK로 참조).
+const CATEGORY_FILTER_COLUMN: Record<string, string> = {
+  tb_raw_mst: "category_code",
+  tb_prod_mst: "category_code",
+  tb_sku_mst: "category_code",
+  tb_submat_mst: "category_code",
+  tb_asset_mst: "asset_type_id",
+}
 
 export default async function TablePage({
   params,
   searchParams,
 }: {
   params: Promise<{ table: string }>
-  searchParams: Promise<{ sort?: string; dir?: string; q?: string }>
+  searchParams: Promise<{ sort?: string; dir?: string; q?: string; category?: string }>
 }) {
   const { table } = await params
   const tableName = decodeURIComponent(table)
-  const { sort, dir, q } = await searchParams
+  const { sort, dir, q, category } = await searchParams
+  const categoryValue = category?.trim() ?? ""
 
   const employee = await getCurrentEmployee()
   const storeScope = await getStoreScopeOptions(tableName, employee?.isSenior ?? false, employee?.storeId ?? null)
@@ -82,6 +100,8 @@ export default async function TablePage({
   const searchColumns = TABLE_SEARCH_COLUMNS[tableName] ?? []
   const searchQuery = q?.trim() ?? ""
   const searchEnabled = searchColumns.length > 0
+  const categoryFilterColumn = CATEGORY_FILTER_COLUMN[tableName]
+  let categoryFilterOptions: SelectOption[] = []
 
   let columns: string[] = []
   let pkColumn: string | null = null
@@ -130,7 +150,9 @@ export default async function TablePage({
     }
   }
 
-  // tb_prod_recipe: prod_id / raw_id 드롭박스 + UUID → 이름 resolver
+  // tb_prod_recipe: prod_id / raw_id / ingredient_prod_id 드롭박스 + UUID → 이름 resolver
+  // (생산품 레시피의 구성 재료는 원재료뿐 아니라 다른 생산품일 수도 있다 — 예: 요거트랜치믹스를
+  // 만들어두고 그걸 재료로 요거트랜치드레싱을 만드는 경우)
   if (tableName === "tb_prod_recipe") {
     const [prodOpts, rawOpts] = await Promise.all([
       getProdOptions().catch(() => [] as SelectOption[]),
@@ -138,6 +160,7 @@ export default async function TablePage({
     ])
     columnOptions["prod_id"] = prodOpts
     columnOptions["raw_id"]  = rawOpts
+    columnOptions["ingredient_prod_id"] = prodOpts
     columnOptions["unit"]    = [
       { value: "g",  label: "g"  },
       { value: "ml", label: "ml" },
@@ -145,6 +168,7 @@ export default async function TablePage({
     ]
     columnResolvers["prod_id"] = Object.fromEntries(prodOpts.map((o) => [o.value, o.label]))
     columnResolvers["raw_id"]  = Object.fromEntries(rawOpts.map((o) => [o.value, o.label]))
+    columnResolvers["ingredient_prod_id"] = Object.fromEntries(prodOpts.map((o) => [o.value, o.label]))
 
     if (searchQuery) {
       const norm = (s: string) => s.replace(/\s+/g, "").toLowerCase()
@@ -152,6 +176,7 @@ export default async function TablePage({
       recipeIdFilter = [
         { column: "prod_id", ids: prodOpts.filter((o) => norm(o.label).includes(q)).map((o) => o.value) },
         { column: "raw_id",  ids: rawOpts.filter((o) => norm(o.label).includes(q)).map((o) => o.value) },
+        { column: "ingredient_prod_id", ids: prodOpts.filter((o) => norm(o.label).includes(q)).map((o) => o.value) },
       ]
     }
   }
@@ -215,6 +240,8 @@ export default async function TablePage({
     columnResolvers["asset_type_id"] = Object.fromEntries(assetTypeOpts.map((o) => [o.value, o.label]))
     columnOptions["zone_id"] = zoneOpts
     columnResolvers["zone_id"] = Object.fromEntries(zoneOpts.map((o) => [o.value, o.label]))
+    // 시설 유형(asset_type_id)이 곧 이 테이블의 "카테고리" 역할
+    categoryFilterOptions = assetTypeOpts
   }
 
   let rows: Record<string, unknown>[] = []
@@ -230,6 +257,10 @@ export default async function TablePage({
         ? { columns: searchColumns, query: searchQuery, idInColumns: recipeIdFilter }
         : undefined,
       ...storeScope,
+      filters: [
+        ...(storeScope.filters ?? []),
+        ...(categoryFilterColumn && categoryValue ? [{ column: categoryFilterColumn, value: categoryValue }] : []),
+      ],
     })
     rows = result.rows
     total = result.total
@@ -252,20 +283,47 @@ export default async function TablePage({
     ]
   }
 
-  // 지정된 컬럼(예: photo_url)은 항상 맨 뒤로 보낸다
-  const trailingCols = TABLE_TRAILING_COLS[tableName]
-  if (trailingCols && trailingCols.length > 0) {
-    columns = [
-      ...columns.filter((c) => !trailingCols.includes(c)),
-      ...trailingCols.filter((c) => columns.includes(c)),
-    ]
+  // 열 순서/숨김(계정별이 아닌 전체 공통 설정) — table_column_prefs가 아직 없으면(배포 초기)
+  // 조용히 빈 값으로 폴백한다.
+  const { hiddenColumns: savedHidden, columnOrder: savedOrder } = await getColumnPrefs(tableName).catch(
+    () => ({ hiddenColumns: [] as string[], columnOrder: [] as string[] }),
+  )
+
+  if (savedOrder.length > 0) {
+    // 사용자가 드래그로 저장한 순서가 있으면 개발자 기본 순서·고정 열(trailing) 배치보다 우선한다
+    const savedValid = savedOrder.filter((c) => columns.includes(c))
+    columns = [...savedValid, ...columns.filter((c) => !savedValid.includes(c))]
+  } else {
+    // 지정된 컬럼(예: photo_url)은 항상 맨 뒤로 보낸다
+    const trailingCols = TABLE_TRAILING_COLS[tableName]
+    if (trailingCols && trailingCols.length > 0) {
+      columns = [
+        ...columns.filter((c) => !trailingCols.includes(c)),
+        ...trailingCols.filter((c) => columns.includes(c)),
+      ]
+    }
   }
+
+  // 열 표시/숨김 — 토글 UI에는 숨긴 컬럼도 계속 보여줘야 하므로 필터링 전
+  // 전체 목록을 toggleableColumns로 따로 보관해 둔다.
+  const toggleableColumns = columns
+  const hiddenColumns = savedHidden.filter((c) => toggleableColumns.includes(c))
+  columns = columns.filter((c) => !hiddenColumns.includes(c))
 
   const canInsert = INSERTABLE_TABLES.has(tableName)
 
   // 드롭박스 옵션 (category_code, status, storage 등)
+  // category_code는 카테고리 유형별로 중복될 수 있어(예: SDS가 원재료·생산품 분류와
+  // 판매품 분류에 각각 존재) tb_sku_mst는 "SKU" 유형을, 나머지는 "RAW" 유형을 조회한다.
   if (CATEGORY_TABLES.has(tableName)) {
-    columnOptions["category_code"] = CATEGORY_OPTIONS
+    const categoryType = tableName === "tb_sku_mst" ? "SKU" : "RAW"
+    columnOptions["category_code"] = await getCategoryOptions(categoryType).catch(() => [] as SelectOption[])
+    categoryFilterOptions = columnOptions["category_code"]
+  }
+  // tb_submat_mst: tb_category_mst와는 독립된 전용 카테고리 테이블을 쓴다
+  if (tableName === "tb_submat_mst") {
+    columnOptions["category_code"] = await getSubmatCategoryOptions().catch(() => [] as SelectOption[])
+    categoryFilterOptions = columnOptions["category_code"]
   }
   if (STORAGE_TABLES.has(tableName)) {
     columnOptions["storage"] = STORAGE_OPTIONS
@@ -275,6 +333,9 @@ export default async function TablePage({
   }
   if (UNIT_TABLES.has(tableName)) {
     columnOptions["unit"] = UNIT_OPTIONS
+  }
+  if (ACTIVE_TABLES.has(tableName)) {
+    columnOptions["active"] = ACTIVE_OPTIONS
   }
   if (tableName === "tb_sku_mst") {
     // allergen_tags는 ENUM 값(MILK 등)으로 저장되므로 표시 시 한글명으로 변환
@@ -381,7 +442,7 @@ export default async function TablePage({
         </div>
       ) : (
         <DataTable
-          key={`${sortColumn ?? ""}-${sortDir}-${searchQuery}`}
+          key={`${sortColumn ?? ""}-${sortDir}-${searchQuery}-${categoryValue}`}
           columns={columns}
           rows={rows}
           total={total}
@@ -397,8 +458,15 @@ export default async function TablePage({
           searchEnabled={searchEnabled}
           searchPlaceholder={searchEnabled ? TABLE_SEARCH_PLACEHOLDER[tableName] ?? `${searchColumns.join(", ")} 검색` : undefined}
           bulkDeleteEnabled={BULK_DELETE_TABLES.has(tableName)}
+          allColumns={toggleableColumns}
+          hiddenColumns={hiddenColumns}
           rowLinks={rowLinks}
           extraColumn={extraColumn}
+          categoryFilter={
+            categoryFilterColumn && categoryFilterOptions.length > 0
+              ? { column: categoryFilterColumn, options: categoryFilterOptions }
+              : undefined
+          }
         />
       )}
     </div>

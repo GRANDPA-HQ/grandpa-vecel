@@ -1,14 +1,14 @@
 import { createAdminClient } from "@/lib/supabase/admin"
-import { getTables } from "@/lib/supabase/db"
+import { getTables, getCategoryOptions } from "@/lib/supabase/db"
 import { SkuRecipeForm, type InitialRecipe, type ProdNutrition } from "@/components/sku-recipe-form"
 import { AddRowDialog, type ColumnDef } from "@/components/add-row-dialog"
 import {
   HIDDEN_COLS,
   TABLE_HIDDEN_COLS,
-  CATEGORY_OPTIONS,
   STORAGE_OPTIONS,
   STATUS_OPTIONS,
   UNIT_OPTIONS,
+  ACTIVE_OPTIONS,
   SKU_MULTI_OPTIONS,
   TABLE_FIELD_ORDER,
 } from "@/lib/table-config"
@@ -21,13 +21,22 @@ export default async function ProductionWritePage({
   const { sku } = await searchParams
   const admin = createAdminClient()
 
-  const [skuRes, prodRes, prodRecipeRes, rawRes] = await Promise.all([
+  const [skuRes, prodRes, rawRes, prodCategoryOptions, skuCategoryOptions] = await Promise.all([
     admin.from("tb_sku_mst").select("id,sku_code,sku_name").order("sku_code"),
     admin.from("tb_prod_mst").select("id,prod_code,prod_name,status,unit").order("prod_code"),
-    // 생산품별 원재료 구성 — 생산품 100g당 영양성분 계산용
-    admin.from("tb_prod_recipe").select("prod_id,raw_id,amount,unit"),
     admin.from("tb_raw_mst").select("id,kcal_100g,carb_100g,protein_100g,fat_100g"),
+    // 생산품은 카테고리 유형 "RAW", 판매품은 "SKU" — category_code가 유형별로 중복될 수 있어 구분 필요
+    getCategoryOptions("RAW").catch(() => []),
+    getCategoryOptions("SKU").catch(() => []),
   ])
+
+  // 생산품별 재료 구성 — 생산품 100g당 영양성분 계산용. 재료는 원재료뿐 아니라 다른
+  // 생산품일 수도 있다(예: 요거트랜치믹스를 만들어두고 그걸 재료로 요거트랜치드레싱을 만드는 경우)
+  // ingredient_prod_id 컬럼이 아직 없는 DB에서는 원재료 구성만으로 폴백한다
+  let prodRecipeRes = await admin.from("tb_prod_recipe").select("prod_id,raw_id,ingredient_prod_id,amount,unit")
+  if (prodRecipeRes.error) {
+    prodRecipeRes = await admin.from("tb_prod_recipe").select("prod_id,raw_id,amount,unit")
+  }
 
   // 드래그로 정한 행 순서(sort_order)대로 조회 — 컬럼이 아직 없는 DB에서는 기존 방식 폴백
   let recipeRes = await admin
@@ -70,8 +79,8 @@ export default async function ProductionWritePage({
 
   const initialRecipes = (recipeRes.data ?? []) as InitialRecipe[]
 
-  // 생산품 100g당 영양성분 — 생산품 레시피의 원재료 영양정보(100g 기준) × 투입량으로 계산.
-  // ea 단위 원재료는 중량을 알 수 없어 제외하며, 프로덕트 레시피 합계 방식과 동일한 근사(ml≈1g)를 쓴다.
+  // 생산품 100g당 영양성분 — 생산품 레시피의 재료 영양정보(100g 기준) × 투입량으로 계산.
+  // ea 단위 재료는 중량을 알 수 없어 제외하며, 프로덕트 레시피 합계 방식과 동일한 근사(ml≈1g)를 쓴다.
   const rawNutritionMap = new Map(
     (rawRes.data ?? []).map((r) => [
       r.id as string,
@@ -83,39 +92,69 @@ export default async function ProductionWritePage({
       },
     ]),
   )
-  const acc: Record<
-    string,
-    { grams: number; kcal: number; carb: number; protein: number; fat: number; hasData: boolean }
-  > = {}
+
+  type RecipeRow = { rawId: string | null; ingredientProdId: string | null; amount: number; unit: string }
+  const recipeRowsByProd = new Map<string, RecipeRow[]>()
   for (const r of prodRecipeRes.data ?? []) {
     const prodId = r.prod_id as string | null
-    const amount = Number(r.amount)
-    const unit = String(r.unit ?? "").toLowerCase()
-    if (!prodId || !r.raw_id || !Number.isFinite(amount) || amount <= 0 || unit === "ea") continue
-    const a = (acc[prodId] ??= { grams: 0, kcal: 0, carb: 0, protein: 0, fat: 0, hasData: false })
-    a.grams += amount
-    const n = rawNutritionMap.get(r.raw_id as string)
-    if (!n || (n.kcal === null && n.carb === null && n.protein === null && n.fat === null)) continue
-    const factor = amount / 100
-    a.kcal += (n.kcal ?? 0) * factor
-    a.carb += (n.carb ?? 0) * factor
-    a.protein += (n.protein ?? 0) * factor
-    a.fat += (n.fat ?? 0) * factor
-    a.hasData = true
+    if (!prodId) continue
+    const rows = recipeRowsByProd.get(prodId) ?? []
+    rows.push({
+      rawId: (r.raw_id as string | null) ?? null,
+      ingredientProdId: (r as { ingredient_prod_id?: string | null }).ingredient_prod_id ?? null,
+      amount: Number(r.amount),
+      unit: String(r.unit ?? "").toLowerCase(),
+    })
+    recipeRowsByProd.set(prodId, rows)
   }
-  const prodNutritionById = Object.fromEntries(
-    Object.entries(acc)
-      .filter(([, a]) => a.hasData && a.grams > 0)
-      .map(([id, a]) => [
-        id,
-        {
-          kcal: (a.kcal / a.grams) * 100,
-          carb: (a.carb / a.grams) * 100,
-          protein: (a.protein / a.grams) * 100,
-          fat: (a.fat / a.grams) * 100,
-        },
-      ]),
-  ) as Record<string, ProdNutrition>
+
+  // 재료로 다른 생산품을 쓰는 다단계 레시피(예: 요거트랜치믹스를 만들어두고 그걸 재료로
+  // 요거트랜치드레싱을 만드는 경우)도 재귀적으로 풀어서 계산한다.
+  // visiting으로 순환 참조를 방지하며(순환이 있으면 해당 가지는 데이터 없음으로 처리),
+  // nutritionMemo로 같은 생산품을 중복 계산하지 않는다.
+  const nutritionMemo = new Map<string, ProdNutrition | null>()
+  function resolveProdNutrition(prodId: string, visiting: Set<string>): ProdNutrition | null {
+    if (nutritionMemo.has(prodId)) return nutritionMemo.get(prodId) ?? null
+    if (visiting.has(prodId)) return null
+    visiting.add(prodId)
+
+    let grams = 0
+    let kcal = 0
+    let carb = 0
+    let protein = 0
+    let fat = 0
+    let hasData = false
+    for (const row of recipeRowsByProd.get(prodId) ?? []) {
+      if (!Number.isFinite(row.amount) || row.amount <= 0 || row.unit === "ea") continue
+      const n = row.rawId
+        ? rawNutritionMap.get(row.rawId)
+        : row.ingredientProdId
+          ? resolveProdNutrition(row.ingredientProdId, visiting)
+          : null
+      grams += row.amount
+      if (!n || (n.kcal === null && n.carb === null && n.protein === null && n.fat === null)) continue
+      const factor = row.amount / 100
+      kcal += (n.kcal ?? 0) * factor
+      carb += (n.carb ?? 0) * factor
+      protein += (n.protein ?? 0) * factor
+      fat += (n.fat ?? 0) * factor
+      hasData = true
+    }
+
+    visiting.delete(prodId)
+    const result =
+      hasData && grams > 0
+        ? { kcal: (kcal / grams) * 100, carb: (carb / grams) * 100, protein: (protein / grams) * 100, fat: (fat / grams) * 100 }
+        : null
+    nutritionMemo.set(prodId, result)
+    return result
+  }
+
+  const prodNutritionById: Record<string, ProdNutrition> = {}
+  for (const prodId of recipeRowsByProd.keys()) {
+    const n = resolveProdNutrition(prodId, new Set())
+    if (n) prodNutritionById[prodId] = n
+  }
 
   // ?sku=<sku_code> 짧은 URL로 진입하면 해당 SKU 탭이 선택된 상태로 시작
   const initialSkuId = sku
@@ -152,10 +191,11 @@ export default async function ProductionWritePage({
               tableName="tb_prod_mst"
               columns={prodInsertColumns}
               columnOptions={{
-                category_code: CATEGORY_OPTIONS,
+                category_code: prodCategoryOptions,
                 storage: STORAGE_OPTIONS,
                 status: STATUS_OPTIONS,
                 unit: UNIT_OPTIONS,
+                active: ACTIVE_OPTIONS,
               }}
               fieldOrder={TABLE_FIELD_ORDER["tb_prod_mst"]}
               buttonLabel="생산품 등록"
@@ -166,7 +206,7 @@ export default async function ProductionWritePage({
             <AddRowDialog
               tableName="tb_sku_mst"
               columns={skuInsertColumns}
-              columnOptions={{ category_code: CATEGORY_OPTIONS }}
+              columnOptions={{ category_code: skuCategoryOptions }}
               columnMultiOptions={SKU_MULTI_OPTIONS}
               fieldOrder={TABLE_FIELD_ORDER["tb_sku_mst"]}
               buttonLabel="판매품 등록"

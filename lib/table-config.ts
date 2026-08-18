@@ -183,18 +183,23 @@ export const ALLERGEN_OPTIONS: { value: string; label: string }[] = [
 ]
 
 // ── 등록 폼/데이터 테이블 공용 드롭박스 옵션 ──────────────────────
-export type SelectOption = { value: string; label: string }
+// description은 옵션 title(hover 툴팁)로 표시하는 용도 — 선택지가 없는 경우 생략 가능
+export type SelectOption = { value: string; label: string; description?: string }
 export type MultiOption = string | SelectOption
-
-export const CATEGORY_OPTIONS: SelectOption[] = [
-  "VFR","COND","BWL","BEV","MTS","HRS","FLR","SDW","ETC","SDS","NUT","DAI","YGF","SOUP","GC",
-].map((c) => ({ value: c, label: c }))
 
 export const STORAGE_OPTIONS: SelectOption[] = ["냉장", "냉동", "상온"].map((v) => ({ value: v, label: v }))
 
 export const STATUS_OPTIONS: SelectOption[] = ["SEMI", "PREP", "COOK", "UNPROC"].map((v) => ({ value: v, label: v }))
 
 export const UNIT_OPTIONS: SelectOption[] = ["g", "ml", "ea"].map((v) => ({ value: v, label: v }))
+
+// active 컬럼은 DB에서 'active'/'inactive' ENUM(public.active_status)이지만, 다른 boolean
+// 컬럼(is_active 등)과 화면 표기를 통일하기 위해 true/false로 라벨만 바꿔서 보여준다.
+// 자유 입력이던 필드를 select로 제한해 잘못된 값이 저장되는 것을 막는다.
+export const ACTIVE_OPTIONS: SelectOption[] = [
+  { value: "active", label: "true" },
+  { value: "inactive", label: "false" },
+]
 
 export const SKU_MULTI_OPTIONS: Record<string, MultiOption[]> = {
   concept_tags:   ["Daily Balance", "Light & Clean", "Protein Care", "Digestive Comfort", "Recovery Food"],
@@ -234,7 +239,7 @@ export const TABLE_SEARCH_COLUMNS: Record<string, string[]> = {
   tb_sku_mst:      ["sku_code", "sku_name"],
   tb_raw_mst:      ["raw_code", "raw_name"],
   tb_prod_mst:     ["prod_code", "prod_name"],
-  tb_category_mst: ["category_code", "category_name"],
+  tb_category_mst: ["category_code", "category_name_kr", "category_name_en"],
   users:           ["email"],
   // sku_id/prod_id는 UUID라 직접 검색이 안 되므로, SKU/생산품 코드·이름은
   // id 목록으로 변환해 별도로 검색한다 (memo만 텍스트로 직접 검색)
