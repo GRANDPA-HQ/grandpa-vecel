@@ -31,13 +31,25 @@ export default async function ProdRecipeWritePage() {
       .order("raw_code"),
   ])
 
-  // 드래그로 정한 행 순서(sort_order)·구성 재료가 생산품인 경우(ingredient_prod_id)까지
-  // 함께 조회 — 아직 마이그레이션 전인 DB에서도 저장은 되도록 단계적으로 폴백한다
+  // 드래그로 정한 행 순서(sort_order)·구성 재료가 생산품인 경우(ingredient_prod_id)·
+  // ea 단위 평균 무게(avg_weight)까지 함께 조회 — 아직 마이그레이션 전인 DB에서도
+  // 저장은 되도록 단계적으로 폴백한다
   // (폴백마다 select 컬럼 구성이 달라 엄격한 응답 타입 추론과 충돌하므로 any로 둔다)
   let recipeRes: any = await admin
     .from("tb_prod_recipe")
-    .select("prod_id,raw_id,ingredient_prod_id,amount,unit,memo")
+    .select("prod_id,raw_id,ingredient_prod_id,amount,unit,avg_weight,memo")
     .order("sort_order")
+  if (recipeRes.error) {
+    recipeRes = await admin
+      .from("tb_prod_recipe")
+      .select("prod_id,raw_id,ingredient_prod_id,amount,unit,avg_weight,memo")
+  }
+  if (recipeRes.error) {
+    recipeRes = await admin
+      .from("tb_prod_recipe")
+      .select("prod_id,raw_id,ingredient_prod_id,amount,unit,memo")
+      .order("sort_order")
+  }
   if (recipeRes.error) {
     recipeRes = await admin
       .from("tb_prod_recipe")
@@ -96,6 +108,7 @@ export default async function ProdRecipeWritePage() {
   const initialRecipes = ((recipeRes.data ?? []) as Record<string, unknown>[]).map((r) => ({
     ...r,
     ingredient_prod_id: (r.ingredient_prod_id as string | null | undefined) ?? null,
+    avg_weight: (r.avg_weight as number | null | undefined) ?? null,
   })) as InitialProdRecipe[]
 
   // 생산품/원재료 등록 다이얼로그용 컬럼 정의 (데이터 테이블의 등록 폼과 동일 구성)

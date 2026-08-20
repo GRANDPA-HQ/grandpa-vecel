@@ -2,12 +2,44 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Users, Database, Bug, BookText, ClipboardList, LayoutDashboard, FileText, NotebookPen, TrendingUp, PackageSearch, Link2 } from "lucide-react"
+import {
+  Users,
+  Database,
+  Bug,
+  BookText,
+  ClipboardList,
+  LayoutDashboard,
+  NotebookPen,
+  TrendingUp,
+  Link2,
+  Store,
+  ChefHat,
+  Wheat,
+  Archive,
+  Factory,
+  ShoppingBag,
+  BookOpen,
+  type LucideIcon,
+} from "lucide-react"
 import { cn } from "@/lib/utils"
 import { SignOutButton } from "@/components/sign-out-button"
 import { ChangePasswordButton } from "@/components/change-password-button"
 
 const DATA_TABLE_HREF = "/dashboard/data-table"
+
+type NavGroup = { kind: "group"; label: string }
+type NavLeaf = {
+  kind: "leaf"
+  label: string
+  href: string
+  icon: LucideIcon
+  visible?: boolean
+  exact?: boolean
+  submenu?: { label: string; href: string }[]
+}
+// 아직 화면/기능이 준비되지 않은 메뉴 — 클릭 불가능한 상태로 "준비중" 표시만 한다
+type NavPlaceholder = { kind: "placeholder"; label: string; icon: LucideIcon; visible?: boolean }
+type NavEntry = NavGroup | NavLeaf | NavPlaceholder
 
 export function DashboardSidebar({
   isManager,
@@ -18,42 +50,58 @@ export function DashboardSidebar({
 }) {
   const pathname = usePathname()
 
-  // 각 메뉴 항목에 submenu(하위 메뉴)를 선택적으로 붙일 수 있는 구조.
+  // 각 leaf 항목에 submenu(하위 메뉴)를 선택적으로 붙일 수 있는 구조.
   // submenu가 있고 현재 경로가 그 항목 하위이면, 해당 항목 바로 아래에 자동으로 펼쳐짐.
-  // 나중에 다른 메뉴(예: 재고 관리)에 서브메뉴가 필요해지면,
-  // 그 항목에도 동일하게 submenu 배열만 추가하면 됨 — 렌더링 위치는 자동 처리됨.
-  const navItems = [
-    { label: "홈", href: "/dashboard", icon: LayoutDashboard, visible: true, exact: true },
-    { label: "직원 관리", href: "/dashboard/employees", icon: Users, visible: isManager },
+  // group 항목은 클릭 불가능한 섹션 구분 라벨이며, 그 뒤로 이어지는 leaf/placeholder들을 묶어 보여준다.
+  const navItems: NavEntry[] = [
+    { kind: "leaf", label: "홈", href: "/dashboard", icon: LayoutDashboard, visible: true, exact: true },
+
+    { kind: "group", label: "운영/생산 일지" },
+    { kind: "placeholder", label: "SP 운영일지", icon: Store },
+    { kind: "leaf", label: "KP 생산일지", href: "/dashboard/production-log", icon: ChefHat, visible: true },
+
+    { kind: "group", label: "재고관리" },
+    { kind: "placeholder", label: "원재료", icon: Wheat },
+    { kind: "placeholder", label: "포장부자재", icon: Archive },
+    { kind: "placeholder", label: "생산품", icon: Factory },
+    { kind: "leaf", label: "판매품", href: "/dashboard/inventory", icon: ShoppingBag, visible: true, exact: true },
+
+    { kind: "leaf", label: "SOP(방법서) 관리", href: `${DATA_TABLE_HREF}/tb_sop_mst`, icon: BookOpen, visible: true, exact: true },
+
+    { kind: "group", label: "매출관리" },
+    { kind: "leaf", label: "매출 대시보드", href: "/dashboard/sales-analytics", icon: TrendingUp, visible: true, exact: true },
+    { kind: "leaf", label: "판매품명 맵핑", href: "/dashboard/sku-platform-mapping", icon: Link2, visible: true, exact: true },
+
     {
-      label: "데이터 테이블",
+      kind: "leaf",
+      label: "마스터 DB 관리",
       href: DATA_TABLE_HREF,
       icon: Database,
       visible: true,
-      // 구매(카테고리·원재료·부자재) → 생산(생산품·레시피) → 판매(판매품·레시피) 흐름 순서
+      // 판매(판매품·레시피) → 생산(생산품·레시피) → 구매(원재료·부자재·카테고리) → 자산/지점 흐름 순서
       submenu: [
-        { label: "카테고리 테이블", table: "tb_category_mst" },
-        { label: "원재료 테이블", table: "tb_raw_mst" },
-        { label: "포장 부자재 테이블", table: "tb_submat_mst" },
-        { label: "생산품 테이블", table: "tb_prod_mst" },
-        { label: "생산품 레시피 테이블", table: "tb_prod_recipe" },
         { label: "판매품 테이블", table: "tb_sku_mst" },
         { label: "판매품 레시피 테이블", table: "tb_sku_recipe" },
-        { label: "시설 테이블", table: "tb_asset_mst" },
-        { label: "방법서 테이블", table: "tb_sop_mst" },
+        { label: "생산품 테이블", table: "tb_prod_mst" },
+        { label: "생산품 레시피 테이블", table: "tb_prod_recipe" },
+        { label: "원재료 테이블", table: "tb_raw_mst" },
+        { label: "포장 부자재 테이블", table: "tb_submat_mst" },
+        { label: "카테고리 테이블", table: "tb_category_mst" },
+        { label: "장비/집기/시설 테이블", table: "tb_asset_mst" },
+        { label: "존(ZONE) 관리", table: "tb_zone_mst" },
+        { label: "지점관리", table: "tb_store_mst" },
       ].map(({ label, table }) => ({
         label,
         href: `${DATA_TABLE_HREF}/${encodeURIComponent(table)}`,
       })),
     },
-    { label: "매출 분석", href: "/dashboard/sales-analytics", icon: TrendingUp, visible: true, exact: true },
-    { label: "메뉴 SKU 매핑", href: "/dashboard/sku-platform-mapping", icon: Link2, visible: true, exact: true },
-    { label: "재고 관리", href: "/dashboard/inventory", icon: PackageSearch, visible: true, exact: true },
-    { label: "생산품 레시피 작성", href: "/dashboard/prod-recipe-write", icon: NotebookPen, visible: true, exact: true },
-    { label: "판매품 레시피 작성", href: "/dashboard/production-write", icon: ClipboardList, visible: true, exact: true },
-    { label: "생산일지", href: "/dashboard/production-log", icon: FileText, visible: true },
-    { label: "레시피 가이드", href: "/dashboard/recipe-guide", icon: BookText, visible: true },
-    { label: "버그 리포트", href: "/dashboard/bug-report", icon: Bug, visible: true },
+
+    { kind: "leaf", label: "생산품 레시피 작성", href: "/dashboard/prod-recipe-write", icon: NotebookPen, visible: true, exact: true },
+    { kind: "leaf", label: "판매품 레시피 작성", href: "/dashboard/production-write", icon: ClipboardList, visible: true, exact: true },
+    { kind: "leaf", label: "레시피 가이드", href: "/dashboard/recipe-guide", icon: BookText, visible: true },
+
+    { kind: "leaf", label: "직원 관리", href: "/dashboard/employees", icon: Users, visible: isManager },
+    { kind: "leaf", label: "버그 리포트", href: "/dashboard/bug-report", icon: Bug, visible: true },
   ]
 
   return (
@@ -73,11 +121,41 @@ export function DashboardSidebar({
         </p>
 
         {navItems
-          .filter((item) => item.visible)
-          .map(({ label, href, icon: Icon, exact, submenu }) => {
-            const isActive = exact
-              ? pathname === href
-              : pathname.startsWith(href)
+          .filter((entry) => entry.kind === "group" || entry.visible)
+          .map((entry, i) => {
+            // 섹션 구분 라벨 — 클릭 불가, 이후 항목들을 그룹으로 묶어 보여주는 용도
+            if (entry.kind === "group") {
+              return (
+                <p
+                  key={`group-${entry.label}-${i}`}
+                  className="px-5 pb-1.5 pt-4 text-[10px] font-semibold uppercase tracking-widest text-gray-600"
+                >
+                  {entry.label}
+                </p>
+              )
+            }
+
+            const Icon = entry.icon
+
+            // 아직 준비되지 않은 메뉴 — 클릭 불가능한 상태로 "준비중" 배지만 표시
+            if (entry.kind === "placeholder") {
+              return (
+                <div
+                  key={`placeholder-${entry.label}`}
+                  title="아직 준비되지 않았습니다"
+                  className="flex cursor-not-allowed items-center gap-3 border-l-2 border-transparent px-5 py-2.5 text-sm text-gray-600"
+                >
+                  <Icon className="h-4 w-4 shrink-0" />
+                  <span className="flex-1">{entry.label}</span>
+                  <span className="rounded-full bg-gray-800 px-1.5 py-0.5 text-[10px] font-medium text-gray-500">
+                    준비중
+                  </span>
+                </div>
+              )
+            }
+
+            const { label, href, exact, submenu } = entry
+            const isActive = exact ? pathname === href : pathname.startsWith(href)
             const isWithinSection = pathname.startsWith(href)
 
             return (

@@ -9,3 +9,6 @@ node_modules
 .env*.local
 .DS_Store
 .env
+
+# 구글 드라이브에서 내려받은 사진 캐시 (app/api/images 라우트가 생성)
+.image-cache/

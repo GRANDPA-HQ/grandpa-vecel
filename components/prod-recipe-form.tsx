@@ -20,6 +20,9 @@ type RecipeRow = {
   ingredientId: string
   amount: string
   unit: "g" | "ml" | "ea"
+  // "개(ea)" 단위일 때 개당 평균 무게(g) — 개당 영양정보(kcal_ea 등)가 미등록된 원재료도
+  // 100g 기준 영양정보 × 환산 중량으로 합계에 반영할 수 있게 한다
+  avgWeight: string
   memo: string
 }
 
@@ -29,6 +32,7 @@ export type InitialProdRecipe = {
   ingredient_prod_id: string | null
   amount: number
   unit: string
+  avg_weight: number | null
   memo: string | null
 }
 
@@ -80,7 +84,15 @@ function loadDraft(): Draft | null {
 }
 
 function createRow(): RecipeRow {
-  return { localId: crypto.randomUUID(), ingredientType: "raw", ingredientId: "", amount: "", unit: "g", memo: "" }
+  return {
+    localId: crypto.randomUUID(),
+    ingredientType: "raw",
+    ingredientId: "",
+    amount: "",
+    unit: "g",
+    avgWeight: "",
+    memo: "",
+  }
 }
 
 function createTab(): ProdTab {
@@ -94,6 +106,7 @@ function toRows(recipes: InitialProdRecipe[]): RecipeRow[] {
     ingredientId: r.ingredient_prod_id ?? r.raw_id ?? "",
     amount: String(r.amount),
     unit: r.unit as "g" | "ml" | "ea",
+    avgWeight: r.avg_weight !== null && r.avg_weight !== undefined ? String(r.avg_weight) : "",
     memo: r.memo ?? "",
   }))
 }
@@ -207,15 +220,29 @@ export function ProdRecipeForm({
       if (row.unit === "ea") {
         const hasEaData =
           n && (n.kcalEa !== null || n.carbEa !== null || n.proteinEa !== null || n.fatEa !== null)
-        if (!hasEaData) {
-          eaExcluded++
+        if (hasEaData) {
+          kcal += (n.kcalEa ?? 0) * amount
+          carb += (n.carbEa ?? 0) * amount
+          protein += (n.proteinEa ?? 0) * amount
+          fat += (n.fatEa ?? 0) * amount
+          counted++
           continue
         }
-        kcal += (n.kcalEa ?? 0) * amount
-        carb += (n.carbEa ?? 0) * amount
-        protein += (n.proteinEa ?? 0) * amount
-        fat += (n.fatEa ?? 0) * amount
-        counted++
+        // 개당 영양정보가 없으면 개당 평균 무게(g) 입력값으로 중량 환산해 100g 기준 영양정보를 사용
+        const avgWeight = parseFloat(row.avgWeight)
+        const hasGramData = n && (n.kcal !== null || n.carb !== null || n.protein !== null || n.fat !== null)
+        if (Number.isFinite(avgWeight) && avgWeight > 0 && hasGramData) {
+          const effectiveGrams = amount * avgWeight
+          grams += effectiveGrams
+          const factor = effectiveGrams / 100
+          kcal += (n.kcal ?? 0) * factor
+          carb += (n.carb ?? 0) * factor
+          protein += (n.protein ?? 0) * factor
+          fat += (n.fat ?? 0) * factor
+          counted++
+          continue
+        }
+        eaExcluded++
         continue
       }
 
@@ -367,8 +394,12 @@ export function ProdRecipeForm({
     const n = rawNutritionById[row.ingredientId]
     if (!n) return null
     if (row.unit === "ea") {
-      if (n.kcalEa === null) return null
-      return n.kcalEa * amount
+      if (n.kcalEa !== null) return n.kcalEa * amount
+      const avgWeight = parseFloat(row.avgWeight)
+      if (n.kcal !== null && Number.isFinite(avgWeight) && avgWeight > 0) {
+        return (n.kcal * amount * avgWeight) / 100
+      }
+      return null
     }
     if (n.kcal === null) return null
     return (n.kcal * amount) / 100
@@ -387,13 +418,17 @@ export function ProdRecipeForm({
           const valid = t.rows.filter((r) => r.ingredientId && r.amount !== "")
           return saveProdRecipe(
             t.prodId,
-            valid.map((r) => ({
-              ingredientType: r.ingredientType,
-              ingredientId: r.ingredientId,
-              amount: parseFloat(r.amount),
-              unit: r.unit,
-              memo: r.memo,
-            })),
+            valid.map((r) => {
+              const avgWeight = parseFloat(r.avgWeight)
+              return {
+                ingredientType: r.ingredientType,
+                ingredientId: r.ingredientId,
+                amount: parseFloat(r.amount),
+                unit: r.unit,
+                avgWeight: Number.isFinite(avgWeight) && avgWeight > 0 ? avgWeight : null,
+                memo: r.memo,
+              }
+            }),
           )
         }),
       )
@@ -555,6 +590,7 @@ export function ProdRecipeForm({
                   <th className="px-4 py-3">원재료 / 생산품</th>
                   <th className="w-32 px-4 py-3">수량</th>
                   <th className="w-24 px-4 py-3">단위</th>
+                  <th className="w-28 px-4 py-3">평균 무게(g)</th>
                   <th className="w-24 px-4 py-3 text-right">열량</th>
                   <th className="px-4 py-3">메모</th>
                   <th className="w-10 px-2 py-3" />
@@ -639,6 +675,23 @@ export function ProdRecipeForm({
                         </select>
                       </td>
 
+                      <td className="px-4 py-2">
+                        {row.unit === "ea" ? (
+                          <Input
+                            type="number"
+                            min="0"
+                            step="any"
+                            value={row.avgWeight}
+                            onChange={(e) => updateRow(row.localId, "avgWeight", e.target.value)}
+                            placeholder="개당 g"
+                            title="개당 평균 무게(g) — 영양성분 합계 계산에 사용됩니다"
+                            className="h-8 border-none bg-transparent shadow-none focus-visible:ring-1 focus-visible:ring-indigo-500/40"
+                          />
+                        ) : (
+                          <span className="block px-1 text-xs text-muted-foreground/40">-</span>
+                        )}
+                      </td>
+
                       <td className="px-4 py-2 text-right font-mono text-xs text-muted-foreground">
                         {kcal !== null ? `${fmt(kcal)} kcal` : "-"}
                       </td>
@@ -686,7 +739,7 @@ export function ProdRecipeForm({
               <Flame className="h-4 w-4 text-orange-500" />
               <h2 className="text-sm font-semibold">영양성분 합계</h2>
               <span className="text-xs text-muted-foreground">
-                g/ml은 100g 기준, ea는 개당 기준 영양정보 × 투입량 자동 계산 (ml은 1g으로 근사)
+                g/ml은 100g 기준, ea는 개당 영양정보(또는 평균 무게 환산) × 투입량 자동 계산 (ml은 1g으로 근사)
               </span>
             </div>
 
@@ -720,7 +773,7 @@ export function ProdRecipeForm({
 
             {(nutrition.eaExcluded > 0 || nutrition.noDataExcluded > 0) && (
               <p className="mt-2 text-xs text-amber-600">
-                {nutrition.eaExcluded > 0 && `ea 단위 ${nutrition.eaExcluded}건은 개당 영양정보가 미등록되어 합계에서 제외됐습니다.`}
+                {nutrition.eaExcluded > 0 && `ea 단위 ${nutrition.eaExcluded}건은 개당 영양정보와 평균 무게가 모두 미입력되어 합계에서 제외됐습니다. 평균 무게(g)를 입력하면 합계에 반영됩니다.`}
                 {nutrition.eaExcluded > 0 && nutrition.noDataExcluded > 0 && " "}
                 {nutrition.noDataExcluded > 0 && `영양정보 미등록 원재료·생산품 재료 ${nutrition.noDataExcluded}건은 중량만 합산됐습니다.`}
               </p>

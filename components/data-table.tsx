@@ -265,6 +265,32 @@ type ErrorEntry = {
   message: string
 }
 
+const MIN_COL_WIDTH = 60
+const MAX_COL_WIDTH = 800
+const DEFAULT_COL_WIDTH = 160
+
+// 열 헤더 오른쪽 경계의 드래그 핸들 — 마우스 다운 시 컬럼 리사이즈를 시작한다.
+// onClick에서 stopPropagation을 걸어 핸들 클릭이 헤더의 정렬 클릭으로 전파되지 않게 한다.
+function ResizeHandle({
+  onMouseDown,
+  onDoubleClick,
+}: {
+  onMouseDown: (e: React.MouseEvent) => void
+  onDoubleClick: (e: React.MouseEvent) => void
+}) {
+  return (
+    <div
+      onMouseDown={onMouseDown}
+      onDoubleClick={onDoubleClick}
+      onClick={(e) => e.stopPropagation()}
+      title="드래그하여 너비 조절 (더블클릭으로 초기화)"
+      className="absolute -right-1.5 top-0 z-20 h-full w-3 cursor-col-resize touch-none select-none"
+    >
+      <div className="mx-auto h-full w-px bg-transparent hover:bg-primary/50 active:bg-primary/60" />
+    </div>
+  )
+}
+
 function EditableCell({
   col,
   value,
@@ -693,6 +719,77 @@ export function DataTable({
   // 링크 열을 끼워 넣을 위치 (지정 없으면 맨 뒤 = columns.length)
   const linkColumnIndex = rowLinks?.insertBeforeIndex ?? columns.length
 
+  // ── 열 너비 드래그 조절: 테이블별로 localStorage에 저장해 새로고침/재방문 시에도 유지 ──
+  const [colWidths, setColWidths] = useState<Record<string, number>>({})
+  const resizeState = useRef<{ key: string; startX: number; startWidth: number } | null>(null)
+  const widthsLoadedRef = useRef(false)
+
+  useEffect(() => {
+    if (!tableName || widthsLoadedRef.current) return
+    widthsLoadedRef.current = true
+    try {
+      const raw = localStorage.getItem(`col-widths:${tableName}`)
+      if (raw) setColWidths(JSON.parse(raw))
+    } catch {}
+  }, [tableName])
+
+  useEffect(() => {
+    if (!tableName || Object.keys(colWidths).length === 0) return
+    try {
+      localStorage.setItem(`col-widths:${tableName}`, JSON.stringify(colWidths))
+    } catch {}
+  }, [colWidths, tableName])
+
+  const handleResizeStart = useCallback(
+    (key: string, defaultWidth: number, e: React.MouseEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      const startWidth = colWidths[key] ?? defaultWidth
+      resizeState.current = { key, startX: e.clientX, startWidth }
+
+      const onMouseMove = (ev: MouseEvent) => {
+        const state = resizeState.current
+        if (!state) return
+        const next = Math.min(MAX_COL_WIDTH, Math.max(MIN_COL_WIDTH, state.startWidth + (ev.clientX - state.startX)))
+        setColWidths((prev) => ({ ...prev, [state.key]: next }))
+      }
+      const onMouseUp = () => {
+        resizeState.current = null
+        document.removeEventListener("mousemove", onMouseMove)
+        document.removeEventListener("mouseup", onMouseUp)
+      }
+      document.addEventListener("mousemove", onMouseMove)
+      document.addEventListener("mouseup", onMouseUp)
+    },
+    [colWidths],
+  )
+
+  const handleResizeReset = useCallback((key: string, e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setColWidths((prev) => {
+      const next = { ...prev }
+      delete next[key]
+      return next
+    })
+  }, [])
+
+  // 헤더 렌더링 순서와 동일하게 <colgroup>을 구성 (체크박스/링크/추가열/삭제 버튼 포함)
+  type ColDef = { key: string; resizable: boolean; defaultWidth: number }
+  const columnDefs: ColDef[] = []
+  if (bulkSelectable) columnDefs.push({ key: "__select__", resizable: false, defaultWidth: 32 })
+  columns.forEach((col, colIdx) => {
+    if (hasLinkColumn && colIdx === linkColumnIndex) {
+      columnDefs.push({ key: "__link__", resizable: true, defaultWidth: 96 })
+    }
+    columnDefs.push({ key: col, resizable: true, defaultWidth: DEFAULT_COL_WIDTH })
+  })
+  if (hasLinkColumn && linkColumnIndex >= columns.length) {
+    columnDefs.push({ key: "__link__", resizable: true, defaultWidth: 96 })
+  }
+  if (hasExtraColumn) columnDefs.push({ key: "__extra__", resizable: true, defaultWidth: 140 })
+  if (editable) columnDefs.push({ key: "__delete__", resizable: false, defaultWidth: 40 })
+
   const [selectedPks, setSelectedPks] = useState<Set<string>>(new Set())
   const [bulkDeleting, setBulkDeleting] = useState(false)
 
@@ -855,7 +952,12 @@ export function DataTable({
       )}
 
       <div className="overflow-hidden rounded-lg border border-border bg-card">
-        <Table containerClassName="max-h-[65vh] overflow-y-auto">
+        <Table containerClassName="max-h-[65vh] overflow-y-auto" className="w-auto table-fixed">
+          <colgroup>
+            {columnDefs.map((def) => (
+              <col key={def.key} style={{ width: colWidths[def.key] ?? def.defaultWidth }} />
+            ))}
+          </colgroup>
           <TableHeader>
             <TableRow>
               {bulkSelectable && (
@@ -875,30 +977,38 @@ export function DataTable({
                   <TableHead
                     key={col}
                     onClick={() => handleSort(col)}
-                    className="sticky top-0 z-10 cursor-pointer select-none whitespace-nowrap bg-card text-xs hover:bg-accent/60"
+                    className="sticky top-0 z-10 cursor-pointer select-none overflow-hidden whitespace-nowrap bg-card text-xs hover:bg-accent/60 relative"
                   >
-                    <span className="inline-flex items-center gap-1">
+                    <span className="inline-flex items-center gap-1 truncate">
                       {COLUMN_LABELS[col] ?? col}
                       {isSorted ? (
                         activeDir === "desc" ? (
-                          <ArrowDown className="h-3 w-3" />
+                          <ArrowDown className="h-3 w-3 shrink-0" />
                         ) : (
-                          <ArrowUp className="h-3 w-3" />
+                          <ArrowUp className="h-3 w-3 shrink-0" />
                         )
                       ) : (
-                        <ArrowUpDown className="h-3 w-3 text-muted-foreground/40" />
+                        <ArrowUpDown className="h-3 w-3 shrink-0 text-muted-foreground/40" />
                       )}
                     </span>
                     {editable && col === pkColumn && (
                       <span className="ml-1 text-[10px] text-muted-foreground">(PK)</span>
                     )}
+                    <ResizeHandle
+                      onMouseDown={(e) => handleResizeStart(col, DEFAULT_COL_WIDTH, e)}
+                      onDoubleClick={(e) => handleResizeReset(col, e)}
+                    />
                   </TableHead>
                 )
                 if (hasLinkColumn && colIdx === linkColumnIndex) {
                   return (
                     <Fragment key={`link-wrap-${col}`}>
-                      <TableHead className="sticky top-0 z-10 whitespace-nowrap bg-card text-xs">
-                        {rowLinks!.header}
+                      <TableHead className="sticky top-0 z-10 relative overflow-hidden whitespace-nowrap bg-card text-xs">
+                        <span className="truncate">{rowLinks!.header}</span>
+                        <ResizeHandle
+                          onMouseDown={(e) => handleResizeStart("__link__", 96, e)}
+                          onDoubleClick={(e) => handleResizeReset("__link__", e)}
+                        />
                       </TableHead>
                       {headCell}
                     </Fragment>
@@ -907,13 +1017,21 @@ export function DataTable({
                 return headCell
               })}
               {hasLinkColumn && linkColumnIndex >= columns.length && (
-                <TableHead className="sticky top-0 z-10 whitespace-nowrap bg-card text-xs">
-                  {rowLinks!.header}
+                <TableHead className="sticky top-0 z-10 relative overflow-hidden whitespace-nowrap bg-card text-xs">
+                  <span className="truncate">{rowLinks!.header}</span>
+                  <ResizeHandle
+                    onMouseDown={(e) => handleResizeStart("__link__", 96, e)}
+                    onDoubleClick={(e) => handleResizeReset("__link__", e)}
+                  />
                 </TableHead>
               )}
               {hasExtraColumn && (
-                <TableHead className="sticky top-0 z-10 whitespace-nowrap bg-card text-xs">
-                  {extraColumn!.header}
+                <TableHead className="sticky top-0 z-10 relative overflow-hidden whitespace-nowrap bg-card text-xs">
+                  <span className="truncate">{extraColumn!.header}</span>
+                  <ResizeHandle
+                    onMouseDown={(e) => handleResizeStart("__extra__", 140, e)}
+                    onDoubleClick={(e) => handleResizeReset("__extra__", e)}
+                  />
                 </TableHead>
               )}
               {editable && (
@@ -945,7 +1063,7 @@ export function DataTable({
                   const cell = (
                     <TableCell
                       key={col}
-                      className="max-w-[20ch] overflow-hidden font-mono text-xs align-top"
+                      className="overflow-hidden font-mono text-xs align-top"
                     >
                       {editable ? (
                         <EditableCell
