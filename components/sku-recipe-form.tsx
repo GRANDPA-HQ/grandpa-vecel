@@ -15,6 +15,8 @@ type RecipeRow = {
   prodId: string
   amount: string
   unit: "g" | "ml" | "ea"
+  // "개(ea)" 단위일 때 개당 평균 무게(g) — 100g 기준 영양정보 × 환산 중량으로 합계에 반영한다
+  avgWeight: string
   memo: string
 }
 
@@ -23,6 +25,7 @@ export type InitialRecipe = {
   prod_id: string
   amount: number
   unit: string
+  avg_weight: number | null
   memo: string | null
 }
 
@@ -70,7 +73,7 @@ function loadDraft(): Draft | null {
 }
 
 function createRow(): RecipeRow {
-  return { localId: crypto.randomUUID(), prodId: "", amount: "", unit: "g", memo: "" }
+  return { localId: crypto.randomUUID(), prodId: "", amount: "", unit: "g", avgWeight: "", memo: "" }
 }
 
 function createTab(): SkuTab {
@@ -83,6 +86,7 @@ function toRows(recipes: InitialRecipe[]): RecipeRow[] {
     prodId: r.prod_id,
     amount: String(r.amount),
     unit: r.unit as "g" | "ml" | "ea",
+    avgWeight: r.avg_weight !== null && r.avg_weight !== undefined ? String(r.avg_weight) : "",
     memo: r.memo ?? "",
   }))
 }
@@ -207,11 +211,26 @@ export function SkuRecipeForm({
     for (const row of active?.rows ?? []) {
       const amount = parseFloat(row.amount)
       if (!row.prodId || !Number.isFinite(amount) || amount <= 0) continue
+      const n = prodNutritionById?.[row.prodId]
+
       if (row.unit === "ea") {
-        eaExcluded++
+        // ea 단위는 개당 평균 무게(g) 입력값으로 중량 환산해 100g 기준 영양정보를 사용
+        const avgWeight = parseFloat(row.avgWeight)
+        if (!n || !Number.isFinite(avgWeight) || avgWeight <= 0) {
+          eaExcluded++
+          continue
+        }
+        const effectiveGrams = amount * avgWeight
+        grams += effectiveGrams
+        const factor = effectiveGrams / 100
+        kcal += n.kcal * factor
+        carb += n.carb * factor
+        protein += n.protein * factor
+        fat += n.fat * factor
+        counted++
         continue
       }
-      const n = prodNutritionById?.[row.prodId]
+
       grams += amount
       if (!n) {
         noDataExcluded++
@@ -231,9 +250,14 @@ export function SkuRecipeForm({
   // 행별 열량 미리보기 (g/ml 단위 + 레시피 영양정보 있는 생산품만)
   function rowKcal(row: RecipeRow): number | null {
     const amount = parseFloat(row.amount)
-    if (!row.prodId || !Number.isFinite(amount) || amount <= 0 || row.unit === "ea") return null
+    if (!row.prodId || !Number.isFinite(amount) || amount <= 0) return null
     const n = prodNutritionById?.[row.prodId]
     if (!n) return null
+    if (row.unit === "ea") {
+      const avgWeight = parseFloat(row.avgWeight)
+      if (!Number.isFinite(avgWeight) || avgWeight <= 0) return null
+      return (n.kcal * amount * avgWeight) / 100
+    }
     return (n.kcal * amount) / 100
   }
 
@@ -365,12 +389,16 @@ export function SkuRecipeForm({
           const valid = t.rows.filter((r) => r.prodId && r.amount !== "")
           return saveSkuRecipe(
             t.skuId,
-            valid.map((r) => ({
-              prodId: r.prodId,
-              amount: parseFloat(r.amount),
-              unit: r.unit,
-              memo: r.memo,
-            })),
+            valid.map((r) => {
+              const avgWeight = parseFloat(r.avgWeight)
+              return {
+                prodId: r.prodId,
+                amount: parseFloat(r.amount),
+                unit: r.unit,
+                avgWeight: Number.isFinite(avgWeight) && avgWeight > 0 ? avgWeight : null,
+                memo: r.memo,
+              }
+            }),
           )
         }),
       )
@@ -532,6 +560,7 @@ export function SkuRecipeForm({
                   <th className="px-4 py-3">생산품</th>
                   <th className="w-32 px-4 py-3">수량</th>
                   <th className="w-24 px-4 py-3">단위</th>
+                  <th className="w-28 px-4 py-3">평균 무게(g)</th>
                   <th className="w-24 px-4 py-3 text-right">열량</th>
                   <th className="px-4 py-3">메모</th>
                   <th className="w-10 px-2 py-3" />
@@ -629,6 +658,23 @@ export function SkuRecipeForm({
                       </select>
                     </td>
 
+                    <td className="px-4 py-2">
+                      {row.unit === "ea" ? (
+                        <Input
+                          type="number"
+                          min="0"
+                          step="any"
+                          value={row.avgWeight}
+                          onChange={(e) => updateRow(row.localId, "avgWeight", e.target.value)}
+                          placeholder="개당 g"
+                          title="개당 평균 무게(g) — 영양성분 합계 계산에 사용됩니다"
+                          className="h-8 border-none bg-transparent shadow-none focus-visible:ring-1 focus-visible:ring-indigo-500/40"
+                        />
+                      ) : (
+                        <span className="block px-1 text-xs text-muted-foreground/40">-</span>
+                      )}
+                    </td>
+
                     <td className="px-4 py-2 text-right font-mono text-xs text-muted-foreground">
                       {kcal !== null ? `${fmt(kcal)} kcal` : "-"}
                     </td>
@@ -676,7 +722,7 @@ export function SkuRecipeForm({
               <Flame className="h-4 w-4 text-orange-500" />
               <h2 className="text-sm font-semibold">영양성분 합계</h2>
               <span className="text-xs text-muted-foreground">
-                생산품 레시피의 원재료 영양정보로 계산한 100g당 영양성분 × 투입량 자동 계산 (ml은 1g으로 근사)
+                생산품 레시피의 원재료 영양정보로 계산한 100g당 영양성분 × 투입량 자동 계산 (ml은 1g으로 근사, ea는 평균 무게 환산)
               </span>
             </div>
 
@@ -710,7 +756,7 @@ export function SkuRecipeForm({
 
             {(nutrition.eaExcluded > 0 || nutrition.noDataExcluded > 0) && (
               <p className="mt-2 text-xs text-amber-600">
-                {nutrition.eaExcluded > 0 && `ea 단위 ${nutrition.eaExcluded}건은 중량을 알 수 없어 합계에서 제외됐습니다.`}
+                {nutrition.eaExcluded > 0 && `ea 단위 ${nutrition.eaExcluded}건은 평균 무게(g)가 입력되지 않아 합계에서 제외됐습니다. 평균 무게를 입력하면 합계에 반영됩니다.`}
                 {nutrition.eaExcluded > 0 && nutrition.noDataExcluded > 0 && " "}
                 {nutrition.noDataExcluded > 0 && `레시피 영양정보가 없는 생산품 ${nutrition.noDataExcluded}건은 중량만 합산됐습니다.`}
               </p>

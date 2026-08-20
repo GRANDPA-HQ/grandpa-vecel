@@ -8,6 +8,8 @@ type RecipeInput = {
   prodId: string
   amount: number
   unit: string
+  // "개(ea)" 단위 사용 시 개당 평균 무게(g) — 100g 기준 영양정보로 환산해 합계를 계산하는 데 쓰인다
+  avgWeight: number | null
   memo: string
 }
 
@@ -38,11 +40,17 @@ export async function saveSkuRecipe(
       prod_id: r.prodId,
       amount: r.amount,
       unit: r.unit,
+      avg_weight: r.unit === "ea" ? r.avgWeight : null,
       memo: r.memo || null,
       sort_order: i,
     }))
     let { error: insertError } = await admin.from("tb_sku_recipe").insert(values)
-    // sort_order 컬럼이 아직 없는 DB에서도 저장은 되도록 폴백
+    // avg_weight/sort_order 컬럼이 아직 없는 DB에서도 저장은 되도록 폴백
+    if (insertError && /avg_weight/i.test(insertError.message)) {
+      ;({ error: insertError } = await admin
+        .from("tb_sku_recipe")
+        .insert(values.map(({ avg_weight: _aw, ...v }) => v)))
+    }
     if (insertError && /sort_order/i.test(insertError.message)) {
       ;({ error: insertError } = await admin
         .from("tb_sku_recipe")

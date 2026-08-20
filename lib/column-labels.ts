@@ -80,6 +80,7 @@ export const COLUMN_LABELS: Record<string, string> = {
   ingredient_prod_id: "구성 생산품",
   amount: "수량",
   unit: "단위",
+  avg_weight: "평균 무게(g)",
   memo: "메모",
   sort_order: "순서",
   // 포장 부자재 (tb_submat_mst)

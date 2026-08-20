@@ -32,17 +32,41 @@ export default async function ProductionWritePage({
 
   // 생산품별 재료 구성 — 생산품 100g당 영양성분 계산용. 재료는 원재료뿐 아니라 다른
   // 생산품일 수도 있다(예: 요거트랜치믹스를 만들어두고 그걸 재료로 요거트랜치드레싱을 만드는 경우)
-  // ingredient_prod_id 컬럼이 아직 없는 DB에서는 원재료 구성만으로 폴백한다
-  let prodRecipeRes = await admin.from("tb_prod_recipe").select("prod_id,raw_id,ingredient_prod_id,amount,unit")
+  // ea 단위 재료는 avg_weight(개당 평균 무게)로 중량 환산해 반영한다.
+  // ingredient_prod_id/avg_weight 컬럼이 아직 없는 DB에서는 단계적으로 폴백한다
+  // (폴백마다 select 컬럼 구성이 달라 엄격한 응답 타입 추론과 충돌하므로 any로 둔다)
+  let prodRecipeRes: any = await admin
+    .from("tb_prod_recipe")
+    .select("prod_id,raw_id,ingredient_prod_id,amount,unit,avg_weight")
+  if (prodRecipeRes.error) {
+    prodRecipeRes = await admin
+      .from("tb_prod_recipe")
+      .select("prod_id,raw_id,ingredient_prod_id,amount,unit")
+  }
+  if (prodRecipeRes.error) {
+    prodRecipeRes = await admin.from("tb_prod_recipe").select("prod_id,raw_id,amount,unit,avg_weight")
+  }
   if (prodRecipeRes.error) {
     prodRecipeRes = await admin.from("tb_prod_recipe").select("prod_id,raw_id,amount,unit")
   }
 
   // 드래그로 정한 행 순서(sort_order)대로 조회 — 컬럼이 아직 없는 DB에서는 기존 방식 폴백
-  let recipeRes = await admin
+  // (폴백마다 select 컬럼 구성이 달라 엄격한 응답 타입 추론과 충돌하므로 any로 둔다)
+  let recipeRes: any = await admin
     .from("tb_sku_recipe")
-    .select("sku_id,prod_id,amount,unit,memo")
+    .select("sku_id,prod_id,amount,unit,avg_weight,memo")
     .order("sort_order")
+  if (recipeRes.error) {
+    recipeRes = await admin
+      .from("tb_sku_recipe")
+      .select("sku_id,prod_id,amount,unit,avg_weight,memo")
+  }
+  if (recipeRes.error) {
+    recipeRes = await admin
+      .from("tb_sku_recipe")
+      .select("sku_id,prod_id,amount,unit,memo")
+      .order("sort_order")
+  }
   if (recipeRes.error) {
     recipeRes = await admin.from("tb_sku_recipe").select("sku_id,prod_id,amount,unit,memo")
   }
@@ -77,10 +101,14 @@ export default async function ProductionWritePage({
     ]),
   ) as Record<string, string>
 
-  const initialRecipes = (recipeRes.data ?? []) as InitialRecipe[]
+  const initialRecipes = ((recipeRes.data ?? []) as Record<string, unknown>[]).map((r) => ({
+    ...r,
+    avg_weight: (r.avg_weight as number | null | undefined) ?? null,
+  })) as InitialRecipe[]
 
   // 생산품 100g당 영양성분 — 생산품 레시피의 재료 영양정보(100g 기준) × 투입량으로 계산.
-  // ea 단위 재료는 중량을 알 수 없어 제외하며, 프로덕트 레시피 합계 방식과 동일한 근사(ml≈1g)를 쓴다.
+  // ea 단위 재료는 avg_weight(개당 평균 무게, g)로 중량 환산해 반영하며(미입력 시 제외),
+  // 프로덕트 레시피 합계 방식과 동일한 근사(ml≈1g)를 쓴다.
   const rawNutritionMap = new Map(
     (rawRes.data ?? []).map((r) => [
       r.id as string,
@@ -93,7 +121,13 @@ export default async function ProductionWritePage({
     ]),
   )
 
-  type RecipeRow = { rawId: string | null; ingredientProdId: string | null; amount: number; unit: string }
+  type RecipeRow = {
+    rawId: string | null
+    ingredientProdId: string | null
+    amount: number
+    unit: string
+    avgWeight: number | null
+  }
   const recipeRowsByProd = new Map<string, RecipeRow[]>()
   for (const r of prodRecipeRes.data ?? []) {
     const prodId = r.prod_id as string | null
@@ -104,6 +138,7 @@ export default async function ProductionWritePage({
       ingredientProdId: (r as { ingredient_prod_id?: string | null }).ingredient_prod_id ?? null,
       amount: Number(r.amount),
       unit: String(r.unit ?? "").toLowerCase(),
+      avgWeight: (r as { avg_weight?: number | null }).avg_weight ?? null,
     })
     recipeRowsByProd.set(prodId, rows)
   }
@@ -125,15 +160,23 @@ export default async function ProductionWritePage({
     let fat = 0
     let hasData = false
     for (const row of recipeRowsByProd.get(prodId) ?? []) {
-      if (!Number.isFinite(row.amount) || row.amount <= 0 || row.unit === "ea") continue
+      if (!Number.isFinite(row.amount) || row.amount <= 0) continue
+      // ea 단위는 개당 평균 무게(avg_weight)를 곱해 중량으로 환산 — 미입력 행은 계산에서 제외
+      const effectiveGrams =
+        row.unit === "ea"
+          ? row.avgWeight && row.avgWeight > 0
+            ? row.amount * row.avgWeight
+            : null
+          : row.amount
+      if (effectiveGrams === null) continue
       const n = row.rawId
         ? rawNutritionMap.get(row.rawId)
         : row.ingredientProdId
           ? resolveProdNutrition(row.ingredientProdId, visiting)
           : null
-      grams += row.amount
+      grams += effectiveGrams
       if (!n || (n.kcal === null && n.carb === null && n.protein === null && n.fat === null)) continue
-      const factor = row.amount / 100
+      const factor = effectiveGrams / 100
       kcal += (n.kcal ?? 0) * factor
       carb += (n.carb ?? 0) * factor
       protein += (n.protein ?? 0) * factor
