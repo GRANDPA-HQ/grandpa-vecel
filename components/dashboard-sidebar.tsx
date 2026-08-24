@@ -57,13 +57,13 @@ export function DashboardSidebar({
     { kind: "leaf", label: "홈", href: "/dashboard", icon: LayoutDashboard, visible: true, exact: true },
 
     { kind: "group", label: "운영/생산 일지" },
-    { kind: "placeholder", label: "SP 운영일지", icon: Store },
+    { kind: "leaf", label: "SP 운영일지", href: "/dashboard/operation-log", icon: Store, visible: true, exact: true },
     { kind: "leaf", label: "KP 생산일지", href: "/dashboard/production-log", icon: ChefHat, visible: true },
 
     { kind: "group", label: "재고관리" },
-    { kind: "placeholder", label: "원재료", icon: Wheat },
-    { kind: "placeholder", label: "포장부자재", icon: Archive },
-    { kind: "placeholder", label: "생산품", icon: Factory },
+    { kind: "leaf", label: "원재료", href: "/dashboard/inventory-raw", icon: Wheat, visible: true, exact: true },
+    { kind: "leaf", label: "포장부자재", href: "/dashboard/inventory-submat", icon: Archive, visible: true, exact: true },
+    { kind: "leaf", label: "생산품", href: "/dashboard/inventory-prod", icon: Factory, visible: true, exact: true },
     { kind: "leaf", label: "판매품", href: "/dashboard/inventory", icon: ShoppingBag, visible: true, exact: true },
 
     { kind: "leaf", label: "SOP(방법서) 관리", href: `${DATA_TABLE_HREF}/tb_sop_mst`, icon: BookOpen, visible: true, exact: true },

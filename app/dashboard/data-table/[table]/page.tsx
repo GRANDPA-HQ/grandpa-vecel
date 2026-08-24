@@ -34,6 +34,7 @@ import {
   EMPLOYEE_FK_LOOKUPS,
   ZONE_FK_LOOKUPS,
   ASSET_FK_LOOKUPS,
+  ASSET_GROUP_OPTIONS,
   sortOptionsByLabelOrder,
   STORAGE_OPTIONS,
   STATUS_OPTIONS,
@@ -47,7 +48,7 @@ import {
   type SelectOption,
 } from "@/lib/table-config"
 
-const INSERTABLE_TABLES = new Set(["tb_prod_mst", "tb_raw_mst", "tb_sku_mst", "tb_sku_recipe", "tb_prod_recipe"])
+const INSERTABLE_TABLES = new Set(["tb_prod_mst", "tb_raw_mst", "tb_sku_mst", "tb_sku_recipe", "tb_prod_recipe", "tb_zone_mst"])
 
 // 체크박스 선택 일괄 삭제를 지원하는 테이블
 const BULK_DELETE_TABLES = new Set(["tb_raw_mst", "tb_prod_mst", "tb_sku_mst"])
@@ -77,6 +78,8 @@ const CATEGORY_FILTER_COLUMN: Record<string, string> = {
   tb_sku_mst: "category_code",
   tb_submat_mst: "category_code",
   tb_asset_mst: "asset_type_id",
+  tb_sop_mst: "sop_category",
+  tb_zone_mst: "zone_type_id",
 }
 
 export default async function TablePage({
@@ -84,12 +87,13 @@ export default async function TablePage({
   searchParams,
 }: {
   params: Promise<{ table: string }>
-  searchParams: Promise<{ sort?: string; dir?: string; q?: string; category?: string }>
+  searchParams: Promise<{ sort?: string; dir?: string; q?: string; category?: string; assetGroup?: string }>
 }) {
   const { table } = await params
   const tableName = decodeURIComponent(table)
-  const { sort, dir, q, category } = await searchParams
+  const { sort, dir, q, category, assetGroup } = await searchParams
   const categoryValue = category?.trim() ?? ""
+  const assetGroupValue = assetGroup?.trim() ?? ""
 
   const employee = await getCurrentEmployee()
   const storeScope = await getStoreScopeOptions(tableName, employee?.isSenior ?? false, employee?.storeId ?? null)
@@ -205,6 +209,8 @@ export default async function TablePage({
       columnOptions[l.column] = lookups[i]
       columnResolvers[l.column] = Object.fromEntries(lookups[i].map((o) => [o.value, o.label]))
     })
+    // 구역 유형(zone_type_id)이 곧 이 테이블의 "카테고리" 역할
+    categoryFilterOptions = columnOptions["zone_type_id"] ?? []
   }
 
   // tb_sop_mst: ENUM 드롭박스 + 구역 유형 FK를 이름으로 표시
@@ -212,6 +218,7 @@ export default async function TablePage({
     columnOptions["sop_category"] = SOP_CATEGORY_OPTIONS
     columnOptions["status"] = SOP_STATUS_OPTIONS
     columnOptions["target_type"] = SOP_TARGET_TYPE_OPTIONS
+    categoryFilterOptions = SOP_CATEGORY_OPTIONS
 
     const zoneTypeLookup = ZONE_FK_LOOKUPS.find((l) => l.column === "zone_type_id")
     if (zoneTypeLookup) {
@@ -226,15 +233,19 @@ export default async function TablePage({
   }
 
   // tb_asset_mst: 시설 유형/구역 FK를 이름으로 표시
+  let assetGroupFilterIds: string[] | null = null
   if (tableName === "tb_asset_mst") {
     const assetTypeLookup = ASSET_FK_LOOKUPS.find((l) => l.column === "asset_type_id")
-    const [assetTypeOpts, zoneOpts] = await Promise.all([
+    const [assetTypeOpts, zoneOpts, assetTypeGroups] = await Promise.all([
       assetTypeLookup
         ? getIdLabelOptions(assetTypeLookup.table, assetTypeLookup.labelColumn, assetTypeLookup.idColumn).catch(
             () => [] as SelectOption[],
           )
         : Promise.resolve([] as SelectOption[]),
       getZoneOptions().catch(() => [] as SelectOption[]),
+      // asset_type_id → 상위 구분(EQ/FX/FC) — "장비/집기/시설" 필터에서 해당 구분의 자산유형
+      // id 목록으로 변환해 asset_type_id에 in 필터로 적용하는 데 쓴다
+      getIdLabelOptions("tb_asset_type_mst", "asset_type", "asset_type_id").catch(() => [] as SelectOption[]),
     ])
     columnOptions["asset_type_id"] = assetTypeOpts
     columnResolvers["asset_type_id"] = Object.fromEntries(assetTypeOpts.map((o) => [o.value, o.label]))
@@ -242,6 +253,9 @@ export default async function TablePage({
     columnResolvers["zone_id"] = Object.fromEntries(zoneOpts.map((o) => [o.value, o.label]))
     // 시설 유형(asset_type_id)이 곧 이 테이블의 "카테고리" 역할
     categoryFilterOptions = assetTypeOpts
+    if (assetGroupValue) {
+      assetGroupFilterIds = assetTypeGroups.filter((g) => g.label === assetGroupValue).map((g) => g.value)
+    }
   }
 
   let rows: Record<string, unknown>[] = []
@@ -260,6 +274,10 @@ export default async function TablePage({
       filters: [
         ...(storeScope.filters ?? []),
         ...(categoryFilterColumn && categoryValue ? [{ column: categoryFilterColumn, value: categoryValue }] : []),
+      ],
+      inFilters: [
+        ...(storeScope.inFilters ?? []),
+        ...(assetGroupFilterIds ? [{ column: "asset_type_id", values: assetGroupFilterIds }] : []),
       ],
     })
     rows = result.rows
@@ -344,7 +362,10 @@ export default async function TablePage({
 
   // tb_sku_mst: 레시피(tb_sku_recipe)가 등록된 SKU에 레시피 작성 페이지로 가는 링크 표시
   // URL은 UUID 대신 sku_code를 사용해 짧게 유지 (/dashboard/production-write?sku=VFR_001)
-  // insertBeforeIndex: photo_url 컬럼 바로 앞에 표시되도록 위치 지정 (photo_url은 TABLE_TRAILING_COLS로 맨 뒤 고정됨)
+  // insertBeforeIndex: 항상 맨 앞(체크박스 바로 다음)에 고정 — 예전엔 photo_url 컬럼 바로 앞에
+  // 붙였는데, 직원이 "열 관리"에서 photo_url 위치를 옮기면 레시피도 같이 끌려가 포토 URL과
+  // 붙어 보이는 문제가 있었다. photo_url은 열 관리 목록에 있어 순서를 옮길 수 있지만
+  // 레시피는 실제 DB 컬럼이 아니라 열 관리로 관리할 수 없어, 아예 위치를 고정해 분리했다.
   let rowLinks: { header: string; hrefByPk: Record<string, string>; insertBeforeIndex?: number } | undefined
   if (tableName === "tb_sku_mst") {
     try {
@@ -353,7 +374,6 @@ export default async function TablePage({
       const skuIds = Array.from(new Set((recipeRows ?? []).map((r) => r.sku_id as string).filter(Boolean)))
       if (skuIds.length > 0) {
         const { data: skus } = await admin.from("tb_sku_mst").select("id,sku_code").in("id", skuIds)
-        const photoIdx = columns.indexOf("photo_url")
         rowLinks = {
           header: "레시피",
           hrefByPk: Object.fromEntries(
@@ -364,7 +384,7 @@ export default async function TablePage({
                 `/dashboard/production-write?sku=${encodeURIComponent(s.sku_code as string)}`,
               ]),
           ),
-          insertBeforeIndex: photoIdx !== -1 ? photoIdx : undefined,
+          insertBeforeIndex: 0,
         }
       }
     } catch {}
@@ -442,7 +462,7 @@ export default async function TablePage({
         </div>
       ) : (
         <DataTable
-          key={`${sortColumn ?? ""}-${sortDir}-${searchQuery}-${categoryValue}`}
+          key={`${sortColumn ?? ""}-${sortDir}-${searchQuery}-${categoryValue}-${assetGroupValue}`}
           columns={columns}
           rows={rows}
           total={total}
@@ -465,6 +485,11 @@ export default async function TablePage({
           categoryFilter={
             categoryFilterColumn && categoryFilterOptions.length > 0
               ? { column: categoryFilterColumn, options: categoryFilterOptions }
+              : undefined
+          }
+          extraFilter={
+            tableName === "tb_asset_mst"
+              ? { paramName: "assetGroup", options: ASSET_GROUP_OPTIONS, placeholder: "전체 구분" }
               : undefined
           }
         />
