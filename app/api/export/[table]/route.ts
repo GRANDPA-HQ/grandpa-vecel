@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import * as XLSX from "xlsx"
+import ExcelJS from "exceljs"
 import { createClient } from "@/lib/supabase/server"
 import { getCurrentEmployee } from "@/lib/permissions"
 import {
@@ -24,11 +24,30 @@ import {
   EMPLOYEE_FK_LOOKUPS,
   isPriceColumn,
 } from "@/lib/table-config"
+import { parseImageCode } from "@/lib/image-code"
+import { resolveImageByCode } from "@/lib/photo-resolve"
+
+// 사진이 있는 테이블 → 사진 코드가 담긴 컬럼(sourceColumn, 예: raw_code "RAW-BEV-001")과,
+// 화면(CellContent)이 이미 이미지로 특수 처리하는 실제 DB 컬럼이 있다면 그 이름(existingPhotoColumn).
+// tb_raw_mst는 "photo" 컬럼 자리에 화면에서도 PhotoCell로 사진을 보여주므로 그 자리를 그대로 재사용하고,
+// tb_prod_mst는 전용 사진 컬럼이 없어(코드 밑에 작게 곁들여 보여줄 뿐) 맨 앞에 새로 만들어 끼워 넣는다.
+const PHOTO_CONFIG: Record<string, { sourceColumn: string; existingPhotoColumn?: string }> = {
+  tb_raw_mst: { sourceColumn: "raw_code", existingPhotoColumn: "photo" },
+  tb_prod_mst: { sourceColumn: "prod_code" },
+}
+
+// ExcelJS가 임베드 지원하는 이미지 형식 (jpg는 jpeg로, webp는 미지원이라 건너뜀)
+function toExcelImageExtension(ext: string): "jpeg" | "png" | "gif" | null {
+  if (ext === "jpg" || ext === "jpeg") return "jpeg"
+  if (ext === "png") return "png"
+  if (ext === "gif") return "gif"
+  return null
+}
 
 /**
  * 데이터 테이블 엑셀 추출.
  * 화면과 동일한 검색(q)/정렬(sort, dir) 조건으로 매칭되는 "모든" 행을 .xlsx로 내려준다.
- * 검색 후 추출하면 검색 결과만 담긴다.
+ * 검색 후 추출하면 검색 결과만 담긴다. 원재료/생산품은 사진도 함께 셀에 임베드한다.
  */
 export async function GET(
   req: NextRequest,
@@ -161,36 +180,85 @@ export async function GET(
       return resolver?.[text] ?? text
     }
 
-    const header = columns.map((c) => COLUMN_LABELS[c] ?? c)
-    const data = rows.map((r) => columns.map((c) => formatValue(c, r[c])))
+    // 사진 컬럼 위치 정하기: tb_raw_mst처럼 화면에서 이미 이미지로 특수 처리하는 실제 컬럼("photo")이
+    // 있으면 그 자리를 그대로 쓰고(중복 컬럼 방지), 없으면(tb_prod_mst) 맨 앞에 새로 끼워 넣는다.
+    const photoConfig = PHOTO_CONFIG[tableName]
+    const hasPhotoColumn = !!photoConfig && columns.includes(photoConfig.sourceColumn)
+    let photoColumn: string | null = null
+    if (hasPhotoColumn) {
+      if (photoConfig.existingPhotoColumn && columns.includes(photoConfig.existingPhotoColumn)) {
+        photoColumn = photoConfig.existingPhotoColumn
+      } else {
+        photoColumn = "__photo__"
+        columns = ["__photo__", ...columns]
+      }
+    }
 
-    const ws = XLSX.utils.aoa_to_sheet([header, ...data])
-    // 가격 컬럼: 천 단위 쉼표 서식 (예: 10,000)
-    columns.forEach((c, ci) => {
-      if (!isPriceColumn(c)) return
-      for (let ri = 1; ri <= data.length; ri++) {
-        const cell = ws[XLSX.utils.encode_cell({ r: ri, c: ci })]
-        if (cell && cell.t === "n") cell.z = "#,##0"
+    const photosByRow = hasPhotoColumn && photoConfig
+      ? await Promise.all(
+          rows.map(async (r) => {
+            const code = String(r[photoConfig.sourceColumn] ?? "")
+            const parsed = parseImageCode(code)
+            if (!parsed) return null
+            return resolveImageByCode(parsed.category, parsed.num)
+          }),
+        )
+      : []
+
+    const header = columns.map((c) => (c === "__photo__" ? "사진" : COLUMN_LABELS[c] ?? c))
+
+    const workbook = new ExcelJS.Workbook()
+    const label = TABLE_LABELS[tableName] ?? tableName
+    const worksheet = workbook.addWorksheet(label.slice(0, 31))
+
+    const headerRow = worksheet.addRow(header)
+    headerRow.font = { bold: true }
+
+    rows.forEach((r, ri) => {
+      const rowValues = columns.map((c) => (c === photoColumn ? "" : formatValue(c, r[c])))
+      const row = worksheet.addRow(rowValues)
+      if (hasPhotoColumn) row.height = 60
+
+      columns.forEach((c, ci) => {
+        if (isPriceColumn(c)) {
+          const cell = row.getCell(ci + 1)
+          if (typeof cell.value === "number") cell.numFmt = "#,##0"
+        }
+      })
+
+      const photo = hasPhotoColumn ? photosByRow[ri] : null
+      if (photo) {
+        const excelExt = toExcelImageExtension(photo.ext)
+        const photoColIndex = columns.indexOf(photoColumn!)
+        if (excelExt && photoColIndex !== -1) {
+          const imageId = workbook.addImage({ buffer: photo.buffer as unknown as ExcelJS.Buffer, extension: excelExt })
+          // 사진 열의 셀 안에 꽉 차게(마진 4px) 배치 — row.number/col은 0-based
+          worksheet.addImage(imageId, {
+            tl: { col: photoColIndex + 0.06, row: row.number - 1 + 0.06 },
+            ext: { width: 72, height: 72 },
+          })
+        }
       }
     })
+
     // 대략적인 컬럼 폭 자동 조정 (한글은 2칸 기준, 최대 50칸)
     const width = (s: string) => [...s].reduce((w, ch) => w + (ch.charCodeAt(0) > 127 ? 2 : 1), 0)
-    ws["!cols"] = columns.map((_, i) => ({
-      wch: Math.min(
-        50,
-        Math.max(width(header[i]), ...data.slice(0, 200).map((row) => width(String(row[i] ?? "")))) + 2,
-      ),
-    }))
+    columns.forEach((c, ci) => {
+      const col = worksheet.getColumn(ci + 1)
+      if (c === photoColumn) {
+        col.width = 12
+        return
+      }
+      const dataWidths = rows.slice(0, 200).map((r) => width(String(formatValue(c, r[c]) ?? "")))
+      col.width = Math.min(50, Math.max(width(header[ci]), ...dataWidths) + 2)
+    })
 
-    const label = TABLE_LABELS[tableName] ?? tableName
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, label.slice(0, 31))
-    const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer
+    const buf = await workbook.xlsx.writeBuffer()
 
     const date = new Date().toISOString().slice(0, 10)
     const filename = `${label}${searchQuery ? `_검색_${searchQuery}` : ""}_${date}.xlsx`
 
-    return new NextResponse(new Uint8Array(buf), {
+    return new NextResponse(new Uint8Array(buf as ArrayBuffer), {
       headers: {
         "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         // 한글 파일명: RFC 5987 filename* + ASCII 폴백

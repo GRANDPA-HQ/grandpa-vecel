@@ -130,7 +130,8 @@ export const HIDDEN_COLS = new Set(["id", "created_at", "updated_at"])
 // 테이블별 추가 숨김 컬럼
 export const TABLE_HIDDEN_COLS: Record<string, Set<string>> = {
   tb_prod_mst:   new Set(["active", "owner", "owner_part", "part", "yield_rate"]),
-  tb_sku_mst:     new Set(["is_active"]),
+  // photo_url: 더 이상 사용하지 않아 목록 화면에서 숨김
+  tb_sku_mst:     new Set(["is_active", "photo_url"]),
   // sort_order: 작성 화면의 드래그 순서 저장용 내부 컬럼
   tb_sku_recipe:  new Set(["input_id", "sort_order"]),
   tb_prod_recipe: new Set(["input_id", "sort_order"]),
@@ -150,10 +151,7 @@ export const TABLE_COLUMN_ORDER: Record<string, string[]> = {
 }
 
 // 테이블별 항상 맨 뒤로 보낼 컬럼 (예: 값이 길어 스캔에 방해되는 URL류).
-// 나중에 다시 앞으로 옮기고 싶으면 이 목록에서 빼면 된다 (예: 사진 연동 후 photo_url을 맨 앞으로).
-export const TABLE_TRAILING_COLS: Record<string, string[]> = {
-  tb_sku_mst: ["photo_url"],
-}
+export const TABLE_TRAILING_COLS: Record<string, string[]> = {}
 
 // allergen_tags: 식약처 표시 의무 알러지 유발 성분 (ENUM 값 → 한글명)
 export const ALLERGEN_OPTIONS: { value: string; label: string }[] = [
@@ -214,6 +212,8 @@ export const TABLE_FIELD_ORDER: Record<string, string[]> = {
   tb_sku_mst:  ["category_code", "sku_code"],
   tb_raw_mst:  ["category_code", "raw_code"],
   tb_prod_mst: ["category_code", "prod_code"],
+  // 지점을 먼저 고른 뒤 그 지점의 구역 유형을 고르는 흐름
+  tb_zone_mst: ["store_id", "zone_type_id"],
 }
 
 // 테이블별 기본 정렬 컬럼
@@ -273,4 +273,11 @@ export const SOP_TARGET_TYPE_OPTIONS: SelectOption[] = [
   { value: "SKU",   label: "판매품" },
   { value: "ASSET", label: "자산" },
   { value: "NONE",  label: "없음" },
+]
+
+// tb_asset_type_mst.asset_type 값 (장비/집기/시설 상위 구분) — DB ENUM과 동일한 값
+export const ASSET_GROUP_OPTIONS: SelectOption[] = [
+  { value: "EQ", label: "장비" },
+  { value: "FX", label: "집기" },
+  { value: "FC", label: "시설" },
 ]

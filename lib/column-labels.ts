@@ -103,7 +103,7 @@ export const COLUMN_LABELS: Record<string, string> = {
   position_id: "직책",
   department: "부서",
   // 직원 (employees)
-  store_id: "매장",
+  store_id: "지점",
   part_id: "파트",
   rank_id: "직급",
   phone: "연락처",

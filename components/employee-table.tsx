@@ -36,6 +36,9 @@ const ENUM_OPTIONS: Record<string, string[]> = {
 
 const DATE_COLUMNS = new Set(["hired_at", "resigned_at"])
 
+// 매니저/점장은 특정 파트에 속하지 않고 매장 전체를 관리하므로 파트 구분을 두지 않는다
+const NO_PART_POSITIONS = new Set(["매니저", "점장"])
+
 export function EmployeeTable({
   employees,
   lookupOptions,
@@ -116,6 +119,15 @@ function EmployeeRow({
   function handleSelect(col: string, value: string) {
     setValues((prev) => ({ ...prev, [col]: value }))
     commit(col, value)
+
+    // 매니저/점장으로 바뀌면 더 이상 해당하지 않는 파트 값을 자동으로 비운다
+    if (col === "position_id") {
+      const newLabel = lookupOptions.position_id?.find((o) => o.value === value)?.label
+      if (newLabel && NO_PART_POSITIONS.has(newLabel) && values.part_id) {
+        setValues((prev) => ({ ...prev, part_id: "" }))
+        commit("part_id", "")
+      }
+    }
   }
 
   function handleBlur(col: string, value: string) {
@@ -141,12 +153,19 @@ function EmployeeRow({
     error && "border-destructive",
   )
 
+  const currentPositionLabel = lookupOptions.position_id?.find((o) => o.value === values.position_id)?.label
+  const isNoPartPosition = !!currentPositionLabel && NO_PART_POSITIONS.has(currentPositionLabel)
+
   return (
     <>
       <tr className="border-b border-border last:border-0 transition-colors hover:bg-muted/30">
         {COLUMNS.map((col) => (
           <td key={col} className="px-3 py-2">
-            {FK_COLUMNS.has(col) ? (
+            {col === "part_id" && isNoPartPosition ? (
+              <span className="text-xs text-muted-foreground" title="매니저/점장은 특정 파트에 속하지 않습니다">
+                해당없음
+              </span>
+            ) : FK_COLUMNS.has(col) ? (
               <select
                 value={values[col]}
                 onChange={(e) => handleSelect(col, e.target.value)}

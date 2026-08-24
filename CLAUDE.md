@@ -49,4 +49,4 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 ```
 
-`lib/supabase/config.ts` has a hardcoded fallback URL for the dev Supabase project. TypeScript build errors are suppressed in `next.config.mjs` (`ignoreBuildErrors: true`).
+TypeScript build errors are suppressed in `next.config.mjs` (`ignoreBuildErrors: true`).

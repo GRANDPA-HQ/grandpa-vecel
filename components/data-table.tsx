@@ -14,6 +14,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
+import { cn } from "@/lib/utils"
 import { updateRow, deleteRow, deleteRows } from "@/app/actions/table-edit"
 import { loadMoreRows } from "@/app/actions/table-rows"
 import { COLUMN_LABELS } from "@/lib/column-labels"
@@ -21,8 +22,7 @@ import { isPriceColumn, type RowCursor } from "@/lib/table-config"
 import { withBasePath } from "@/lib/base-path"
 import { ColumnSettingsMenu } from "@/components/column-settings-menu"
 import { SearchableSelect } from "@/components/searchable-select"
-
-const IMAGE_EXTS = ["jpg", "jpeg", "png", "gif", "webp"]
+import { IMAGE_EXTS, parseImageCode } from "@/lib/image-code"
 
 // description은 select 옵션에 hover 툴팁으로 표시 (예: 카테고리 코드 옆 설명)
 type SelectOption = { value: string; label: string; description?: string }
@@ -78,8 +78,6 @@ const ENUM_COLUMNS: Record<string, { value: string; label: string; className: st
   ],
 }
 
-const CODE_RE = /^(?:(?:RAW|PROD)-)?([A-Z][A-Z0-9_]*)[-_](\d+)$/i
-
 function parseMultiValue(val: string): string[] {
   if (!val) return []
   try {
@@ -93,13 +91,11 @@ function parseMultiValue(val: string): string[] {
 
 
 function deriveImageSrc(code: string, extIdx: number): string | null {
-  const match = code.match(CODE_RE)
-  if (!match) return null
-  const category = match[1].toUpperCase()
-  const num = match[2]
+  const parsed = parseImageCode(code)
+  if (!parsed) return null
   // next/image는 unoptimized 문자열 src에 basePath("/os")를 자동으로 붙여주지 않아 직접 붙여야 한다
   // (add-base-path가 next/link 등에만 적용되고 image-component에는 없음 — 확인됨).
-  return withBasePath(`/api/images/${category}/${category}-${num}.${IMAGE_EXTS[extIdx]}`)
+  return withBasePath(`/api/images/${parsed.category}/${parsed.category}-${parsed.num}.${IMAGE_EXTS[extIdx]}`)
 }
 
 function PhotoCell({ row }: { row: Record<string, unknown> }) {
@@ -250,7 +246,7 @@ function CellContent({
   if (resolved !== undefined)
     return <span title={text} className="block truncate">{resolved}</span>
   if (/^https?:\/\//i.test(text)) return <UrlChip url={text} />
-  if (!NO_IMAGE_COLS.has(col) && CODE_RE.test(text)) return <CodeImageCell code={text.toUpperCase()} />
+  if (!NO_IMAGE_COLS.has(col) && parseImageCode(text)) return <CodeImageCell code={text.toUpperCase()} />
   if (LONG_TEXT_COLS.has(col))
     return <span className="block whitespace-pre-wrap break-words">{text}</span>
   return <span title={text} className="block truncate">{text}</span>
@@ -271,12 +267,16 @@ const DEFAULT_COL_WIDTH = 160
 
 // 열 헤더 오른쪽 경계의 드래그 핸들 — 마우스 다운 시 컬럼 리사이즈를 시작한다.
 // onClick에서 stopPropagation을 걸어 핸들 클릭이 헤더의 정렬 클릭으로 전파되지 않게 한다.
+// isActive: 이 핸들로 지금 드래그 중인 동안 true — 드래그 중엔 마우스가 12px 히트 영역을
+// 벗어나 있어도(hover 상태가 아니어도) 강조 색이 계속 보이도록 유지한다.
 function ResizeHandle({
   onMouseDown,
   onDoubleClick,
+  isActive,
 }: {
   onMouseDown: (e: React.MouseEvent) => void
   onDoubleClick: (e: React.MouseEvent) => void
+  isActive: boolean
 }) {
   return (
     <div
@@ -284,9 +284,14 @@ function ResizeHandle({
       onDoubleClick={onDoubleClick}
       onClick={(e) => e.stopPropagation()}
       title="드래그하여 너비 조절 (더블클릭으로 초기화)"
-      className="absolute -right-1.5 top-0 z-20 h-full w-3 cursor-col-resize touch-none select-none"
+      className="group absolute -right-1.5 top-0 z-20 h-full w-3 cursor-col-resize touch-none select-none"
     >
-      <div className="mx-auto h-full w-px bg-transparent hover:bg-primary/50 active:bg-primary/60" />
+      <div
+        className={cn(
+          "mx-auto h-full w-0.5 transition-colors",
+          isActive ? "bg-primary" : "bg-transparent group-hover:bg-primary/40",
+        )}
+      />
     </div>
   )
 }
@@ -552,6 +557,7 @@ export function DataTable({
   allColumns,
   hiddenColumns,
   categoryFilter,
+  extraFilter,
 }: {
   columns: string[]
   rows: Record<string, unknown>[]
@@ -578,6 +584,9 @@ export function DataTable({
   extraColumn?: { header: string; cellsByPk: Record<string, ReactNode> }
   // 카테고리 선택 필터 — 검색창 옆에 표시되며 선택한 카테고리에 해당하는 행만 서버에서 조회한다
   categoryFilter?: { column: string; options: SelectOption[]; placeholder?: string }
+  // categoryFilter와 별개로 동작하는 두 번째 필터 (예: 시설 관리의 장비/집기/시설 상위 구분).
+  // 값은 자체 URL 파라미터(paramName)에 저장되며, 실제 필터링은 페이지(서버 컴포넌트)가 담당한다.
+  extraFilter?: { paramName: string; options: SelectOption[]; placeholder?: string }
 }) {
   const [rows, setRows] = useState(initialRows)
   const [errors, setErrors] = useState<ErrorEntry[]>([])
@@ -621,6 +630,18 @@ export function DataTable({
       router.push(`${pathname}?${params.toString()}`)
     },
     [pathname, router, searchParams],
+  )
+
+  const activeExtra = extraFilter ? searchParams.get(extraFilter.paramName) ?? "" : ""
+  const handleExtraChange = useCallback(
+    (value: string) => {
+      if (!extraFilter) return
+      const params = new URLSearchParams(searchParams.toString())
+      if (value) params.set(extraFilter.paramName, value)
+      else params.delete(extraFilter.paramName)
+      router.push(`${pathname}?${params.toString()}`)
+    },
+    [pathname, router, searchParams, extraFilter],
   )
 
   const handleRowUpdate = useCallback(
@@ -721,8 +742,15 @@ export function DataTable({
 
   // ── 열 너비 드래그 조절: 테이블별로 localStorage에 저장해 새로고침/재방문 시에도 유지 ──
   const [colWidths, setColWidths] = useState<Record<string, number>>({})
+  // 드래그 중인 열 key — 헤더/셀 강조 표시에 사용 (드래그당 시작/끝 2번만 바뀜, 매 픽셀마다 바뀌지 않음)
+  const [resizingKey, setResizingKey] = useState<string | null>(null)
   const resizeState = useRef<{ key: string; startX: number; startWidth: number } | null>(null)
   const widthsLoadedRef = useRef(false)
+  // table-layout:fixed + width:auto인 테이블은 브라우저가 <col> 너비 변경만으로는
+  // 테이블 자체의 폭을 다시 계산해주지 않아, 드래그해도 실제 셀 너비가 그대로인 버그가 있었다.
+  // 그래서 <table>과 각 <col>에 직접 접근해 드래그 중 실시간으로 픽셀 단위로 동기화한다.
+  const tableElRef = useRef<HTMLTableElement>(null)
+  const colElRefs = useRef<Record<string, HTMLTableColElement | null>>({})
 
   useEffect(() => {
     if (!tableName || widthsLoadedRef.current) return
@@ -740,28 +768,50 @@ export function DataTable({
     } catch {}
   }, [colWidths, tableName])
 
+  // 드래그 중 매 픽셀마다 React state를 갱신하면 전체 테이블(수백 행)이 매번 리렌더돼
+  // 매우 느려지고 화면이 버벅였다. 이제 드래그 중에는 <col>/<table> DOM을 직접 조작해
+  // 즉시 반영하고, state 커밋(및 localStorage 저장)은 마우스를 뗄 때 한 번만 한다.
+  const applyLiveWidth = useCallback((key: string, next: number) => {
+    const colEl = colElRefs.current[key]
+    if (colEl) colEl.style.width = `${next}px`
+    const tableEl = tableElRef.current
+    if (tableEl) {
+      let total = 0
+      for (const el of Object.values(colElRefs.current)) {
+        if (el) total += parseFloat(el.style.width || "0")
+      }
+      tableEl.style.width = `${total}px`
+    }
+  }, [])
+
   const handleResizeStart = useCallback(
     (key: string, defaultWidth: number, e: React.MouseEvent) => {
       e.preventDefault()
       e.stopPropagation()
       const startWidth = colWidths[key] ?? defaultWidth
       resizeState.current = { key, startX: e.clientX, startWidth }
+      setResizingKey(key)
 
       const onMouseMove = (ev: MouseEvent) => {
         const state = resizeState.current
         if (!state) return
         const next = Math.min(MAX_COL_WIDTH, Math.max(MIN_COL_WIDTH, state.startWidth + (ev.clientX - state.startX)))
-        setColWidths((prev) => ({ ...prev, [state.key]: next }))
+        applyLiveWidth(state.key, next)
       }
-      const onMouseUp = () => {
+      const onMouseUp = (ev: MouseEvent) => {
+        const state = resizeState.current
         resizeState.current = null
+        setResizingKey(null)
         document.removeEventListener("mousemove", onMouseMove)
         document.removeEventListener("mouseup", onMouseUp)
+        if (!state) return
+        const next = Math.min(MAX_COL_WIDTH, Math.max(MIN_COL_WIDTH, state.startWidth + (ev.clientX - state.startX)))
+        setColWidths((prev) => ({ ...prev, [state.key]: next }))
       }
       document.addEventListener("mousemove", onMouseMove)
       document.addEventListener("mouseup", onMouseUp)
     },
-    [colWidths],
+    [colWidths, applyLiveWidth],
   )
 
   const handleResizeReset = useCallback((key: string, e: React.MouseEvent) => {
@@ -789,6 +839,10 @@ export function DataTable({
   }
   if (hasExtraColumn) columnDefs.push({ key: "__extra__", resizable: true, defaultWidth: 140 })
   if (editable) columnDefs.push({ key: "__delete__", resizable: false, defaultWidth: 40 })
+
+  // table-layout:fixed + width:auto인 <table>은 <col> 너비만 바꿔서는 테이블 자체 폭을
+  // 다시 계산하지 않는 브라우저 동작 때문에, 합산 폭을 명시적으로 지정해줘야 리사이즈가 실제로 반영된다.
+  const totalTableWidth = columnDefs.reduce((sum, def) => sum + (colWidths[def.key] ?? def.defaultWidth), 0)
 
   const [selectedPks, setSelectedPks] = useState<Set<string>>(new Set())
   const [bulkDeleting, setBulkDeleting] = useState(false)
@@ -871,9 +925,9 @@ export function DataTable({
 
   return (
     <div className="flex flex-col gap-3">
-      {(searchEnabled || exportHref || hasColumnVisibilityMenu || categoryFilter) && (
+      {(searchEnabled || exportHref || hasColumnVisibilityMenu || categoryFilter || extraFilter) && (
         <div className="flex flex-wrap items-center justify-between gap-2">
-          {searchEnabled || categoryFilter ? (
+          {searchEnabled || categoryFilter || extraFilter ? (
             <div className="flex flex-1 flex-wrap items-center gap-2">
               {searchEnabled && (
                 <form onSubmit={handleSearchSubmit} className="flex max-w-sm flex-1 items-center gap-2">
@@ -893,6 +947,19 @@ export function DataTable({
                     검색
                   </button>
                 </form>
+              )}
+              {extraFilter && (
+                <SearchableSelect
+                  className="w-40 shrink-0"
+                  value={activeExtra}
+                  onChange={handleExtraChange}
+                  placeholder={extraFilter.placeholder ?? "전체"}
+                  searchPlaceholder="검색..."
+                  options={[
+                    { value: "", label: extraFilter.placeholder ?? "전체" },
+                    ...extraFilter.options,
+                  ]}
+                />
               )}
               {categoryFilter && (
                 <SearchableSelect
@@ -952,10 +1019,21 @@ export function DataTable({
       )}
 
       <div className="overflow-hidden rounded-lg border border-border bg-card">
-        <Table containerClassName="max-h-[65vh] overflow-y-auto" className="w-auto table-fixed">
+        <Table
+          ref={tableElRef}
+          containerClassName="max-h-[65vh] overflow-y-auto"
+          className="table-fixed"
+          style={{ width: totalTableWidth }}
+        >
           <colgroup>
             {columnDefs.map((def) => (
-              <col key={def.key} style={{ width: colWidths[def.key] ?? def.defaultWidth }} />
+              <col
+                key={def.key}
+                ref={(el) => {
+                  colElRefs.current[def.key] = el
+                }}
+                style={{ width: colWidths[def.key] ?? def.defaultWidth }}
+              />
             ))}
           </colgroup>
           <TableHeader>
@@ -977,7 +1055,10 @@ export function DataTable({
                   <TableHead
                     key={col}
                     onClick={() => handleSort(col)}
-                    className="sticky top-0 z-10 cursor-pointer select-none overflow-hidden whitespace-nowrap bg-card text-xs hover:bg-accent/60 relative"
+                    className={cn(
+                      "sticky top-0 z-10 cursor-pointer select-none overflow-hidden whitespace-nowrap text-xs hover:bg-accent/60 relative transition-colors",
+                      resizingKey === col ? "bg-primary/10" : "bg-card",
+                    )}
                   >
                     <span className="inline-flex items-center gap-1 truncate">
                       {COLUMN_LABELS[col] ?? col}
@@ -997,17 +1078,24 @@ export function DataTable({
                     <ResizeHandle
                       onMouseDown={(e) => handleResizeStart(col, DEFAULT_COL_WIDTH, e)}
                       onDoubleClick={(e) => handleResizeReset(col, e)}
+                      isActive={resizingKey === col}
                     />
                   </TableHead>
                 )
                 if (hasLinkColumn && colIdx === linkColumnIndex) {
                   return (
                     <Fragment key={`link-wrap-${col}`}>
-                      <TableHead className="sticky top-0 z-10 relative overflow-hidden whitespace-nowrap bg-card text-xs">
+                      <TableHead
+                        className={cn(
+                          "sticky top-0 z-10 relative overflow-hidden whitespace-nowrap text-xs transition-colors",
+                          resizingKey === "__link__" ? "bg-primary/10" : "bg-card",
+                        )}
+                      >
                         <span className="truncate">{rowLinks!.header}</span>
                         <ResizeHandle
                           onMouseDown={(e) => handleResizeStart("__link__", 96, e)}
                           onDoubleClick={(e) => handleResizeReset("__link__", e)}
+                          isActive={resizingKey === "__link__"}
                         />
                       </TableHead>
                       {headCell}
@@ -1017,20 +1105,32 @@ export function DataTable({
                 return headCell
               })}
               {hasLinkColumn && linkColumnIndex >= columns.length && (
-                <TableHead className="sticky top-0 z-10 relative overflow-hidden whitespace-nowrap bg-card text-xs">
+                <TableHead
+                  className={cn(
+                    "sticky top-0 z-10 relative overflow-hidden whitespace-nowrap text-xs transition-colors",
+                    resizingKey === "__link__" ? "bg-primary/10" : "bg-card",
+                  )}
+                >
                   <span className="truncate">{rowLinks!.header}</span>
                   <ResizeHandle
                     onMouseDown={(e) => handleResizeStart("__link__", 96, e)}
                     onDoubleClick={(e) => handleResizeReset("__link__", e)}
+                    isActive={resizingKey === "__link__"}
                   />
                 </TableHead>
               )}
               {hasExtraColumn && (
-                <TableHead className="sticky top-0 z-10 relative overflow-hidden whitespace-nowrap bg-card text-xs">
+                <TableHead
+                  className={cn(
+                    "sticky top-0 z-10 relative overflow-hidden whitespace-nowrap text-xs transition-colors",
+                    resizingKey === "__extra__" ? "bg-primary/10" : "bg-card",
+                  )}
+                >
                   <span className="truncate">{extraColumn!.header}</span>
                   <ResizeHandle
                     onMouseDown={(e) => handleResizeStart("__extra__", 140, e)}
                     onDoubleClick={(e) => handleResizeReset("__extra__", e)}
+                    isActive={resizingKey === "__extra__"}
                   />
                 </TableHead>
               )}
@@ -1063,7 +1163,10 @@ export function DataTable({
                   const cell = (
                     <TableCell
                       key={col}
-                      className="overflow-hidden font-mono text-xs align-top"
+                      className={cn(
+                        "overflow-hidden font-mono text-xs align-top transition-colors",
+                        resizingKey === col && "bg-primary/5",
+                      )}
                     >
                       {editable ? (
                         <EditableCell
