@@ -1,9 +1,9 @@
 "use client"
 
 import { useState, useTransition } from "react"
-import { Trash2 } from "lucide-react"
+import { Trash2, KeyRound, Check } from "lucide-react"
 import { updateEmployeeField } from "@/app/actions/users"
-import { deleteEmployee } from "@/app/actions/invitations"
+import { deleteEmployee, resetEmployeePassword } from "@/app/actions/invitations"
 import { COLUMN_LABELS } from "@/lib/column-labels"
 import { cn } from "@/lib/utils"
 
@@ -101,6 +101,7 @@ function EmployeeRow({
   })
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  const [resetDone, setResetDone] = useState(false)
 
   const employeeId = String(employee.id ?? "")
 
@@ -144,6 +145,21 @@ function EmployeeRow({
       const result = await deleteEmployee(employeeId)
       if (result.error) setError(result.error)
       // 성공 시 revalidatePath로 목록이 자동 갱신된다
+    })
+  }
+
+  function handleResetPassword() {
+    const label = values.name || values.email || "이 직원"
+    if (!window.confirm(`${label}의 비밀번호를 재설정하시겠습니까?\n새 비밀번호가 즉시 적용되고 본인 이메일로 발송됩니다.`)) return
+    setError(null)
+    setResetDone(false)
+    startTransition(async () => {
+      const result = await resetEmployeePassword(employeeId)
+      if (result.error) setError(result.error)
+      else {
+        setResetDone(true)
+        setTimeout(() => setResetDone(false), 3000)
+      }
     })
   }
 
@@ -205,16 +221,31 @@ function EmployeeRow({
           </td>
         ))}
         <td className="px-3 py-2">
-          {!isSelf && (
+          <div className="flex items-center gap-1">
             <button
-              onClick={handleDelete}
+              onClick={handleResetPassword}
               disabled={isPending}
-              title="직원 삭제"
-              className="rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-50"
+              title="비밀번호 재설정 (새 비밀번호를 본인 이메일로 발송)"
+              className={cn(
+                "rounded p-1 transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+                resetDone
+                  ? "text-emerald-600"
+                  : "text-muted-foreground hover:bg-accent hover:text-foreground",
+              )}
             >
-              <Trash2 className="h-4 w-4" />
+              {resetDone ? <Check className="h-4 w-4" /> : <KeyRound className="h-4 w-4" />}
             </button>
-          )}
+            {!isSelf && (
+              <button
+                onClick={handleDelete}
+                disabled={isPending}
+                title="직원 삭제"
+                className="rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            )}
+          </div>
         </td>
       </tr>
       {error && (

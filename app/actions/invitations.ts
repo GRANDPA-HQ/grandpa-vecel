@@ -3,8 +3,19 @@
 import { createClient as createAdminClient } from "@supabase/supabase-js"
 import { revalidatePath } from "next/cache"
 import { getCurrentEmployee } from "@/lib/permissions"
+import { sendInviteEmail, sendPasswordResetEmail } from "@/lib/email"
 
 const DEFAULT_PASSWORD = "1111"
+
+// 사람이 눈으로 구분하기 쉽도록 헷갈리는 문자(0/O, 1/l/I) 제외
+const PASSWORD_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"
+function generatePassword(length = 10): string {
+  let out = ""
+  for (let i = 0; i < length; i++) {
+    out += PASSWORD_CHARS[Math.floor(Math.random() * PASSWORD_CHARS.length)]
+  }
+  return out
+}
 
 function createAdmin() {
   return createAdminClient(
@@ -47,6 +58,8 @@ export type InviteState = {
   error?: string
   success?: boolean
   email?: string
+  // 계정 생성은 됐지만 안내 메일 발송에 실패한 경우 (계정 생성 자체는 롤백하지 않는다)
+  emailWarning?: string
 }
 
 /**
@@ -125,6 +138,15 @@ export async function inviteEmployee(
     )
 
   revalidatePath("/dashboard/employees")
+
+  // 4) 안내 메일 발송 — 실패해도 계정 생성 자체는 이미 끝났으니 되돌리지 않고 경고만 알린다
+  try {
+    await sendInviteEmail(email, { password: DEFAULT_PASSWORD })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "이메일 발송 실패"
+    return { success: true, email, emailWarning: `계정은 생성됐지만 안내 메일 발송에 실패했습니다. (${msg})` }
+  }
+
   return { success: true, email }
 }
 
@@ -155,5 +177,36 @@ export async function deleteEmployee(employeeId: string): Promise<{ error: strin
   )
 
   revalidatePath("/dashboard/employees")
+  return { error: null }
+}
+
+/**
+ * 비밀번호 재설정: 무작위 새 비밀번호를 계정에 즉시 적용하고, 본인 이메일로 발송한다.
+ */
+export async function resetEmployeePassword(employeeId: string): Promise<{ error: string | null }> {
+  const auth = await requireSenior()
+  if ("error" in auth) return { error: auth.error }
+
+  const admin = createAdmin()
+
+  const { data: emp } = await admin
+    .from("employees")
+    .select("email")
+    .eq("id", employeeId)
+    .maybeSingle()
+  const email = (emp as Row | null)?.email as string | undefined
+  if (!email) return { error: "직원 이메일을 찾을 수 없습니다." }
+
+  const newPassword = generatePassword()
+  const { error: updateError } = await admin.auth.admin.updateUserById(employeeId, { password: newPassword })
+  if (updateError) return { error: `비밀번호 재설정에 실패했습니다. ${updateError.message}` }
+
+  try {
+    await sendPasswordResetEmail(email, { password: newPassword })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "이메일 발송 실패"
+    return { error: `비밀번호는 재설정됐지만 메일 발송에 실패했습니다. (${msg})` }
+  }
+
   return { error: null }
 }
