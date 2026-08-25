@@ -29,11 +29,13 @@ import { resolveImageByCode } from "@/lib/photo-resolve"
 
 // 사진이 있는 테이블 → 사진 코드가 담긴 컬럼(sourceColumn, 예: raw_code "RAW-BEV-001")과,
 // 화면(CellContent)이 이미 이미지로 특수 처리하는 실제 DB 컬럼이 있다면 그 이름(existingPhotoColumn).
-// tb_raw_mst는 "photo" 컬럼 자리에 화면에서도 PhotoCell로 사진을 보여주므로 그 자리를 그대로 재사용하고,
-// tb_prod_mst는 전용 사진 컬럼이 없어(코드 밑에 작게 곁들여 보여줄 뿐) 맨 앞에 새로 만들어 끼워 넣는다.
+// tb_raw_mst는 "photo" 컬럼 자리에 화면에서도 PhotoCell로 사진을 보여주므로 그 자리를 그대로 재사용한다.
+// tb_prod_mst는 뺐다 — 원재료(RAW-*)와 생산품(PROD-*) 코드가 같은 카테고리-번호를 공유해서
+// (예: RAW-BEV-001 / PROD-BEV-001) 같은 이미지 파일을 가리키는데, 생산품 사진은 따로 관리된 적이
+// 없어 이 컬럼을 켜두면 전혀 무관한 원재료 사진이 생산품 사진인 것처럼 잘못 나온다 (components/data-table.tsx의
+// NO_IMAGE_COLS와 동일한 이유).
 const PHOTO_CONFIG: Record<string, { sourceColumn: string; existingPhotoColumn?: string }> = {
   tb_raw_mst: { sourceColumn: "raw_code", existingPhotoColumn: "photo" },
-  tb_prod_mst: { sourceColumn: "prod_code" },
 }
 
 // ExcelJS가 임베드 지원하는 이미지 형식 (jpg는 jpeg로, webp는 미지원이라 건너뜀)

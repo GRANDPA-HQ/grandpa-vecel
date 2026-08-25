@@ -403,13 +403,21 @@ export async function getCategoryIdMap(): Promise<Record<string, string>> {
 
 // category_code는 카테고리 유형(RAW/SKU)별로 중복될 수 있다 (예: SDS가 원재료·생산품
 // 분류와 판매품 분류에 각각 다른 이름으로 존재) — 반드시 유형으로 구분해서 조회해야 한다.
-// tb_raw_mst·tb_prod_mst는 "RAW" 유형을, tb_sku_mst는 "SKU" 유형을 쓴다.
+// tb_raw_mst·tb_prod_mst는 DB상 category_type="RAW & PROD" 값을 공유해서 쓰고
+// (원재료와 생산품이 같은 카테고리 코드 체계를 쓰기 때문), tb_sku_mst는 "SKU" 유형을 쓴다.
+// 호출부는 읽기 쉬운 "RAW"만 넘기고, 실제 DB에 저장된 문자열로 여기서 변환한다.
 // 옵션 라벨에 "코드 : 명칭"을 함께 보여주고, 원문 설명은 description으로 함께 내려준다.
+const CATEGORY_TYPE_DB_VALUE: Record<"RAW" | "SKU", string> = {
+  RAW: "RAW & PROD",
+  SKU: "SKU",
+}
+
 export async function getCategoryOptions(
   categoryType: "RAW" | "SKU",
 ): Promise<{ value: string; label: string; description?: string }[]> {
+  const dbCategoryType = CATEGORY_TYPE_DB_VALUE[categoryType]
   const res = await fetch(
-    `${SUPABASE_URL}/rest/v1/tb_category_mst?select=category_code,category_name_kr,description&category_type=eq.${categoryType}&order=sort_order`,
+    `${SUPABASE_URL}/rest/v1/tb_category_mst?select=category_code,category_name_kr,description&category_type=eq.${encodeURIComponent(dbCategoryType)}&order=sort_order`,
     { headers: authHeaders(), next: { revalidate: 60 } },
   )
   if (!res.ok) return []
