@@ -281,3 +281,16 @@ export const ASSET_GROUP_OPTIONS: SelectOption[] = [
   { value: "FX", label: "집기" },
   { value: "FC", label: "시설" },
 ]
+
+// 로그인 시 미리 캐싱해도 안전한 테이블 — 매장과 무관하게 전 직원에게 항상 동일한 마스터 데이터.
+// employees/tb_zone_mst/tb_asset_mst 등은 매장별로 보이는 행이 달라(STORE_SCOPED_TABLES 참고)
+// 테이블명만으로 캐시를 공유하면 다른 매장 데이터가 샐 수 있어 대상에서 제외한다.
+export const CACHEABLE_MASTER_TABLES = new Set([
+  "tb_raw_mst",
+  "tb_prod_mst",
+  "tb_sku_mst",
+  "tb_submat_mst",
+  "tb_category_mst",
+  "tb_sop_mst",
+  "tb_store_mst",
+])

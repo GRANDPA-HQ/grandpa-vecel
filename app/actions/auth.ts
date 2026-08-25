@@ -1,8 +1,10 @@
 "use server"
 
 import { redirect } from "next/navigation"
+import { after } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createClient as createAdminClient } from "@supabase/supabase-js"
+import { warmMasterTableCaches } from "@/lib/supabase/db"
 
 function createAdmin() {
   return createAdminClient(
@@ -41,6 +43,9 @@ export async function signIn(
   const supabase = await createClient()
   const { error } = await supabase.auth.signInWithPassword({ email, password })
   if (error) return { error: error.message }
+
+  // 응답(리다이렉트)을 지연시키지 않고 백그라운드에서 마스터 데이터 캐시를 미리 데운다
+  after(() => warmMasterTableCaches())
 
   redirect("/dashboard")
 }
