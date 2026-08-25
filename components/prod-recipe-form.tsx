@@ -144,6 +144,8 @@ export function ProdRecipeForm({
   // 행 드래그 순서 변경: armed = 핸들을 누른 행만 draggable로 만들어 입력 필드 조작과 충돌 방지
   const [rowDragId, setRowDragId] = useState<string | null>(null)
   const [rowDragArmed, setRowDragArmed] = useState<string | null>(null)
+  // 드래그 중 마우스가 올라간 행 — 놓았을 때 실제로 삽입될 위치를 표시선으로 보여주는 데 사용
+  const [dragOverRowId, setDragOverRowId] = useState<string | null>(null)
   const [draftReady, setDraftReady] = useState(false)
 
   function flash(type: "success" | "error", text: string) {
@@ -186,6 +188,8 @@ export function ProdRecipeForm({
   }, [tabs, activeId, draftReady])
 
   const active = tabs.find((t) => t.localId === activeId)
+  // 드래그 중인 행이 배열에서 원래 있던 인덱스 — 목표 행의 위/아래 어느 쪽에 표시선을 그릴지 판단하는 데 사용
+  const dragSourceRowIdx = rowDragId ? (active?.rows.findIndex((r) => r.localId === rowDragId) ?? -1) : -1
   const usedProdIds = new Set(tabs.map((t) => t.prodId).filter(Boolean))
 
   // 생산품을 재료로 선택할 때 목록에서 제외할 값 (자기 자신을 재료로 쓸 수는 없음)
@@ -599,6 +603,10 @@ export function ProdRecipeForm({
               <tbody className="divide-y divide-border">
                 {active.rows.map((row, idx) => {
                   const kcal = rowKcal(row)
+                  const isDropTarget =
+                    dragOverRowId === row.localId && rowDragId !== null && rowDragId !== row.localId
+                  const dropBefore = isDropTarget && dragSourceRowIdx > -1 && dragSourceRowIdx > idx
+                  const dropAfter = isDropTarget && dragSourceRowIdx > -1 && dragSourceRowIdx < idx
                   return (
                     <tr
                       key={row.localId}
@@ -608,21 +616,28 @@ export function ProdRecipeForm({
                         e.dataTransfer.effectAllowed = "move"
                       }}
                       onDragOver={(e) => {
-                        if (rowDragId) e.preventDefault()
+                        if (rowDragId) {
+                          e.preventDefault()
+                          if (dragOverRowId !== row.localId) setDragOverRowId(row.localId)
+                        }
                       }}
                       onDrop={(e) => {
                         e.preventDefault()
                         if (rowDragId) moveRow(rowDragId, row.localId)
                         setRowDragId(null)
                         setRowDragArmed(null)
+                        setDragOverRowId(null)
                       }}
                       onDragEnd={() => {
                         setRowDragId(null)
                         setRowDragArmed(null)
+                        setDragOverRowId(null)
                       }}
                       className={cn(
                         "group transition-colors hover:bg-muted/30",
                         rowDragId === row.localId && "opacity-40",
+                        dropBefore && "border-t-2 border-indigo-500",
+                        dropAfter && "border-b-2 border-indigo-500",
                       )}
                     >
                       <td className="px-4 py-2.5">
