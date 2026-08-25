@@ -34,10 +34,8 @@ export function InviteDialog({ onClose }: { onClose: () => void }) {
         </div>
 
         <p className="mb-4 rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
-          이메일을 입력하면 계정이 바로 생성됩니다.
-          <br />
-          아이디는 <b>입력한 이메일</b>, 초기 비밀번호는 <b>1111</b> 입니다.
-          생성 후 직원에게 직접 알려주세요.
+          이메일을 입력하면 계정이 바로 생성되고, 아이디/초기 비밀번호(<b>1111</b>) 안내 메일이
+          해당 주소로 자동 발송됩니다.
         </p>
 
         <form ref={formRef} action={formAction} className="flex flex-col gap-4">
@@ -60,12 +58,17 @@ export function InviteDialog({ onClose }: { onClose: () => void }) {
           )}
           {state?.success && (
             <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800" role="status">
-              <p className="font-medium">계정이 생성되었습니다. 직원에게 전달해주세요:</p>
+              <p className="font-medium">
+                {state.emailWarning ? "계정이 생성되었습니다." : "계정이 생성되고 안내 메일이 발송되었습니다."}
+              </p>
               <p className="mt-1 font-mono text-xs">
                 아이디: {state.email}
                 <br />
                 비밀번호: 1111
               </p>
+              {state.emailWarning && (
+                <p className="mt-2 text-xs text-amber-700">{state.emailWarning}</p>
+              )}
             </div>
           )}
 
