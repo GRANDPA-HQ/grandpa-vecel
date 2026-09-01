@@ -13,6 +13,11 @@ export const COLUMN_LABELS: Record<string, string> = {
   fat_ea: "지방(개당, g)",
   purchase_mode: "구매 방식",
   purchase_section_id: "구매 담당 섹션",
+  active: "활성 여부",
+  origin: "원산지",
+  pack_qty: "내용량",
+  pack_unit: "내용량 단위",
+  nutrition_source: "영양성분 출처",
   // 생산품 (tb_prod_mst)
   prod_code: "생산품 코드",
   prod_name: "생산품명",
