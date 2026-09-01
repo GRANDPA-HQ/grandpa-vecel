@@ -1060,7 +1060,7 @@ export function DataTable({
                     key={col}
                     onClick={() => handleSort(col)}
                     className={cn(
-                      "sticky top-0 z-10 cursor-pointer select-none overflow-hidden whitespace-nowrap text-xs hover:bg-accent/60 relative transition-colors",
+                      "sticky top-0 z-10 cursor-pointer select-none overflow-hidden whitespace-nowrap text-xs hover:bg-accent/60 transition-colors",
                       resizingKey === col ? "bg-primary/10" : "bg-card",
                     )}
                   >
@@ -1091,7 +1091,7 @@ export function DataTable({
                     <Fragment key={`link-wrap-${col}`}>
                       <TableHead
                         className={cn(
-                          "sticky top-0 z-10 relative overflow-hidden whitespace-nowrap text-xs transition-colors",
+                          "sticky top-0 z-10 overflow-hidden whitespace-nowrap text-xs transition-colors",
                           resizingKey === "__link__" ? "bg-primary/10" : "bg-card",
                         )}
                       >
@@ -1111,7 +1111,7 @@ export function DataTable({
               {hasLinkColumn && linkColumnIndex >= columns.length && (
                 <TableHead
                   className={cn(
-                    "sticky top-0 z-10 relative overflow-hidden whitespace-nowrap text-xs transition-colors",
+                    "sticky top-0 z-10 overflow-hidden whitespace-nowrap text-xs transition-colors",
                     resizingKey === "__link__" ? "bg-primary/10" : "bg-card",
                   )}
                 >
@@ -1126,7 +1126,7 @@ export function DataTable({
               {hasExtraColumn && (
                 <TableHead
                   className={cn(
-                    "sticky top-0 z-10 relative overflow-hidden whitespace-nowrap text-xs transition-colors",
+                    "sticky top-0 z-10 overflow-hidden whitespace-nowrap text-xs transition-colors",
                     resizingKey === "__extra__" ? "bg-primary/10" : "bg-card",
                   )}
                 >
