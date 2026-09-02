@@ -14,17 +14,26 @@ export type AttendanceLogRow = { check_type: CheckType; checked_at: string }
 export function deriveStatus(todayLogs: AttendanceLogRow[]): {
   status: AttendanceStatus
   breakCount: number
+  // 오늘 출근(IN) 시각 — 근무중 상태일 때 "(09:03 출근)" 표기에 쓴다.
+  checkedInAt: string | null
+  // 현재 휴게가 시작된 시각 — 휴게중 상태일 때만 값이 있고, "(11:40부터)" 표기에 쓴다.
+  onBreakSinceAt: string | null
 } {
-  if (todayLogs.length === 0) return { status: "BEFORE_WORK", breakCount: 0 }
+  if (todayLogs.length === 0) {
+    return { status: "BEFORE_WORK", breakCount: 0, checkedInAt: null, onBreakSinceAt: null }
+  }
 
   const sorted = [...todayLogs].sort((a, b) => a.checked_at.localeCompare(b.checked_at))
-  const last = sorted[sorted.length - 1].check_type
+  const last = sorted[sorted.length - 1]
   const breakCount = sorted.filter((l) => l.check_type === "BREAK_START").length
 
   const status: AttendanceStatus =
-    last === "BREAK_START" ? "ON_BREAK" : last === "OUT" ? "DONE" : "WORKING" // IN 또는 BREAK_END → 근무중
+    last.check_type === "BREAK_START" ? "ON_BREAK" : last.check_type === "OUT" ? "DONE" : "WORKING" // IN 또는 BREAK_END → 근무중
 
-  return { status, breakCount }
+  const checkedInAt = sorted.find((l) => l.check_type === "IN")?.checked_at ?? null
+  const onBreakSinceAt = status === "ON_BREAK" ? last.checked_at : null
+
+  return { status, breakCount, checkedInAt, onBreakSinceAt }
 }
 
 // 상태별로 허용되는 다음 액션 — Step2 버튼 노출과 서버 액션의 상태 전이 검증에 공용으로 쓴다.

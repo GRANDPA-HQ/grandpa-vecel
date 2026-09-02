@@ -10,6 +10,7 @@ import {
   STATUS_LABEL,
   type CheckType,
 } from "@/lib/attendance-status"
+import { isoToKstTime, nowKstTime } from "@/lib/date-kst"
 import { StaffGrid } from "@/components/attendance/staff-grid"
 import { PinPad } from "@/components/attendance/pin-pad"
 import { ConfirmScreen } from "@/components/attendance/confirm-screen"
@@ -39,7 +40,14 @@ export function AttendanceKiosk({
   const [pinError, setPinError] = useState<string | undefined>(undefined)
   const [pinPending, setPinPending] = useState(false)
 
+  const [clock, setClock] = useState<string>(() => nowKstTime())
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // 액션 선택 화면의 "현재 시각" 표시용 — 30초마다 갱신
+  useEffect(() => {
+    const interval = setInterval(() => setClock(nowKstTime()), 30000)
+    return () => clearInterval(interval)
+  }, [])
 
   const resetToGrid = useCallback(() => {
     setScreen({ kind: "grid" })
@@ -64,17 +72,19 @@ export function AttendanceKiosk({
     }
   }, [screen, bumpIdleTimer])
 
-  const applyOptimisticStatus = useCallback((staffId: string, checkType: CheckType) => {
-    setStaff((prev) =>
-      prev.map((s) => {
-        if (s.id !== staffId) return s
-        if (checkType === "IN") return { ...s, status: "WORKING" }
-        if (checkType === "BREAK_START") return { ...s, status: "ON_BREAK", breakCount: s.breakCount + 1 }
-        if (checkType === "BREAK_END") return { ...s, status: "WORKING" }
-        return { ...s, status: "DONE" }
-      }),
-    )
-  }, [])
+  const applyServerStatus = useCallback(
+    (staffId: string, checkType: CheckType, checkedInAt: string | null, onBreakSinceAt: string | null) => {
+      setStaff((prev) =>
+        prev.map((s) => {
+          if (s.id !== staffId) return s
+          const status = checkType === "IN" || checkType === "BREAK_END" ? "WORKING" : checkType === "BREAK_START" ? "ON_BREAK" : "DONE"
+          const breakCount = checkType === "BREAK_START" ? s.breakCount + 1 : s.breakCount
+          return { ...s, status, breakCount, checkedInAt, onBreakSinceAt }
+        }),
+      )
+    },
+    [],
+  )
 
   const selectStaffForAction = (staffId: string) => {
     bumpIdleTimer()
@@ -96,7 +106,7 @@ export function AttendanceKiosk({
       setPinError(result.error)
       return
     }
-    applyOptimisticStatus(staffId, checkType)
+    applyServerStatus(staffId, checkType, result.checkedInAt, result.onBreakSinceAt)
     setScreen({
       kind: "confirm-attendance",
       message: `${result.message}`,
@@ -155,15 +165,23 @@ export function AttendanceKiosk({
         const s = staff.find((x) => x.id === screen.staffId)
         if (!s) return null
         const actions = ACTION_ALLOWED[s.status]
+        const statusDetail =
+          s.status === "WORKING" && s.checkedInAt
+            ? ` (${isoToKstTime(s.checkedInAt)} 출근)`
+            : s.status === "ON_BREAK" && s.onBreakSinceAt
+              ? ` (${isoToKstTime(s.onBreakSinceAt)}부터)`
+              : ""
         return (
           <div className="flex flex-col items-center gap-6 py-8">
             <div className="w-full max-w-xs rounded-xl border border-border bg-card p-4 text-center">
               <p className="text-base font-semibold">{s.name}님</p>
               <p className="mt-1 text-xs text-muted-foreground">
                 현재 상태: {STATUS_LABEL[s.status]}
+                {statusDetail}
                 {s.breakCount > 0 && ` · 오늘 휴게 ${s.breakCount}회`}
               </p>
             </div>
+            <p className="text-2xl font-bold tracking-tight">{clock}</p>
             <div className="flex w-full max-w-xs flex-col gap-3">
               {actions.length === 0 && (
                 <p className="text-center text-sm text-muted-foreground">오늘 처리할 수 있는 동작이 없습니다.</p>

@@ -1,6 +1,6 @@
 "use server"
 
-import { revalidatePath } from "next/cache"
+import { revalidatePath, updateTag, unstable_cache } from "next/cache"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { getCurrentEmployee } from "@/lib/permissions"
 import { hashPin, verifyPin, generatePin } from "@/lib/pin"
@@ -21,6 +21,8 @@ export type KioskStaff = {
   status: AttendanceStatus
   breakCount: number
   positionId: string | null
+  checkedInAt: string | null
+  onBreakSinceAt: string | null
 }
 
 function todayRangeIso() {
@@ -47,18 +49,14 @@ async function getIssuedStaffIds(
   return new Set((data ?? []).map((row) => row.staff_id as string))
 }
 
-/**
- * 오늘의 SP 직원 목록 + 상태를 매장 스코핑해 조회한다. PIN이 아직 발급되지 않은 직원은 키오스크에서
- * 인증할 방법이 없으므로 목록에서 제외한다.
- */
-export async function getKioskData(): Promise<{ staff: KioskStaff[] } | { error: string }> {
-  const employee = await getCurrentEmployee()
-  if (!employee) return { error: "로그인이 필요합니다." }
-  if (!employee.storeId) return { error: "소속 매장이 없어 출퇴근 화면을 사용할 수 없습니다." }
+// 매장별 키오스크 직원 목록 캐시 태그 — 로그인 직후 예열하고, 출퇴근 기록·PIN 발급/재발급 시 무효화한다.
+// 매장 단위로 태그를 나눠 다른 매장 데이터가 섞이지 않게 한다(공용 테이블 캐시와 달리 매장 스코핑 필요).
+const kioskStaffTag = (storeId: string) => `kiosk-staff:${storeId}`
 
+async function fetchKioskStaff(storeId: string): Promise<KioskStaff[]> {
   const admin = createAdminClient()
   const spPartId = await getSpPartId(admin)
-  if (!spPartId) return { staff: [] }
+  if (!spPartId) return []
 
   const { from, to } = todayRangeIso()
 
@@ -66,19 +64,19 @@ export async function getKioskData(): Promise<{ staff: KioskStaff[] } | { error:
     admin
       .from("employees")
       .select("id, name, position_id")
-      .eq("store_id", employee.storeId)
+      .eq("store_id", storeId)
       .eq("part_id", spPartId)
       .order("name", { ascending: true }),
     admin
       .from("tb_sp_attendance_log")
       .select("staff_id, check_type, checked_at")
-      .eq("store_id", employee.storeId)
+      .eq("store_id", storeId)
       .gte("checked_at", from)
       .lt("checked_at", to),
   ])
 
-  if (employeeError) return { error: employeeError.message }
-  if (logError) return { error: logError.message }
+  if (employeeError) throw new Error(employeeError.message)
+  if (logError) throw new Error(logError.message)
 
   const issuedIds = await getIssuedStaffIds(admin, (employeeRows ?? []).map((row) => row.id as string))
 
@@ -89,20 +87,61 @@ export async function getKioskData(): Promise<{ staff: KioskStaff[] } | { error:
     logsByStaff.set(row.staff_id as string, list)
   }
 
-  const staff: KioskStaff[] = (employeeRows ?? [])
+  return (employeeRows ?? [])
     .filter((row) => issuedIds.has(row.id as string))
     .map((row) => {
-      const { status, breakCount } = deriveStatus(logsByStaff.get(row.id as string) ?? [])
+      const { status, breakCount, checkedInAt, onBreakSinceAt } = deriveStatus(
+        logsByStaff.get(row.id as string) ?? [],
+      )
       return {
         id: row.id as string,
         name: row.name as string,
         status,
         breakCount,
         positionId: (row.position_id as string | null) ?? null,
+        checkedInAt,
+        onBreakSinceAt,
       }
     })
+}
 
-  return { staff }
+/**
+ * 매장별 키오스크 직원 목록을 Next.js Data Cache에 60초간 캐싱한다(쓰기 시 updateTag로 즉시 무효화).
+ * 오늘 날짜를 캐시 키에 포함해 자정이 지나면 자연스럽게 새 캐시 항목을 쓰도록 한다.
+ */
+function getCachedKioskStaff(storeId: string): Promise<KioskStaff[]> {
+  const cached = unstable_cache(
+    () => fetchKioskStaff(storeId),
+    [`kiosk-staff:${storeId}:${todayKst()}`],
+    { tags: [kioskStaffTag(storeId)], revalidate: 60 },
+  )
+  return cached()
+}
+
+/**
+ * 로그인 직후 해당 매장의 키오스크 직원 캐시를 미리 데운다.
+ * app/actions/auth.ts의 signIn()이 next/server의 after()로 응답을 막지 않고 백그라운드에서 호출한다.
+ * 실패해도 로그인 자체엔 영향 없도록 무시한다.
+ */
+export async function warmAttendanceCache(storeId: string): Promise<void> {
+  await getCachedKioskStaff(storeId).catch(() => {})
+}
+
+/**
+ * 오늘의 SP 직원 목록 + 상태를 매장 스코핑해 조회한다. PIN이 아직 발급되지 않은 직원은 키오스크에서
+ * 인증할 방법이 없으므로 목록에서 제외한다.
+ */
+export async function getKioskData(): Promise<{ staff: KioskStaff[] } | { error: string }> {
+  const employee = await getCurrentEmployee()
+  if (!employee) return { error: "로그인이 필요합니다." }
+  if (!employee.storeId) return { error: "소속 매장이 없어 출퇴근 화면을 사용할 수 없습니다." }
+
+  try {
+    const staff = await getCachedKioskStaff(employee.storeId)
+    return { staff }
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "직원 목록을 불러오지 못했습니다." }
+  }
 }
 
 /**
@@ -112,7 +151,16 @@ export async function checkAttendance(
   staffId: string,
   checkType: CheckType,
   pin: string,
-): Promise<{ success: true; message: string; staffName: string } | { error: string }> {
+): Promise<
+  | {
+      success: true
+      message: string
+      staffName: string
+      checkedInAt: string | null
+      onBreakSinceAt: string | null
+    }
+  | { error: string }
+> {
   const employee = await getCurrentEmployee()
   if (!employee) return { error: "로그인이 필요합니다." }
   if (!employee.storeId) return { error: "소속 매장이 없습니다." }
@@ -150,16 +198,34 @@ export async function checkAttendance(
     return { error: "현재 상태에서는 이 동작을 할 수 없습니다. 화면을 새로고침해 주세요." }
   }
 
-  const { error: insertError } = await admin.from("tb_sp_attendance_log").insert({
-    staff_id: staffId,
-    store_id: employee.storeId,
-    check_type: checkType,
-  })
+  const { data: insertedRow, error: insertError } = await admin
+    .from("tb_sp_attendance_log")
+    .insert({
+      staff_id: staffId,
+      store_id: employee.storeId,
+      check_type: checkType,
+    })
+    .select("checked_at")
+    .single()
   if (insertError) return { error: insertError.message }
 
+  updateTag(kioskStaffTag(employee.storeId))
   revalidatePath("/dashboard")
 
-  return { success: true, message: CONFIRM_MESSAGE[checkType], staffName: staffRow.name as string }
+  // 방금 기록한 이벤트까지 포함해 다시 파생해야 정확한 출근/휴게시작 시각을 돌려줄 수 있다
+  // (예: 휴게종료 후엔 근무중이 되지만, 화면엔 그날의 최초 출근 시각을 보여줘야 함).
+  const afterAction = deriveStatus([
+    ...((logRows ?? []) as AttendanceLogRow[]),
+    { check_type: checkType, checked_at: insertedRow.checked_at as string },
+  ])
+
+  return {
+    success: true,
+    message: CONFIRM_MESSAGE[checkType],
+    staffName: staffRow.name as string,
+    checkedInAt: afterAction.checkedInAt,
+    onBreakSinceAt: afterAction.onBreakSinceAt,
+  }
 }
 
 // ── PIN 발급 관리 — 시니어 전용 ─────────────────────────────
@@ -231,6 +297,8 @@ export async function reissuePin(
     .upsert({ staff_id: employeeId, pin_hash, updated_at: new Date().toISOString() }, { onConflict: "staff_id" })
   if (error) return { error: error.message }
 
+  // 새로 PIN이 발급되면 키오스크 목록에 바로 나타나야 하므로 캐시를 즉시 무효화한다.
+  updateTag(kioskStaffTag(employee.storeId))
   revalidatePath("/dashboard/attendance/manage")
   revalidatePath("/dashboard")
   return { success: true, pin }
