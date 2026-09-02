@@ -54,3 +54,23 @@ export function isoToKstWeekday(iso: string): number {
   const jsDay = new Date(`${dateStr}T00:00:00Z`).getUTCDay() // 0=일 ... 6=토
   return (jsDay + 6) % 7 // 0=월 ... 6=일
 }
+
+const KST_TIME_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  timeZone: "Asia/Seoul",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+})
+
+/** ISO timestamptz 값을 KST 기준 "HH:MM"으로 변환 (출퇴근 키오스크의 출근/휴게시작 시각 표기용) */
+export function isoToKstTime(iso: string): string {
+  const parts = KST_TIME_FORMATTER.formatToParts(new Date(iso))
+  const hour = parts.find((p) => p.type === "hour")?.value ?? "00"
+  const minute = parts.find((p) => p.type === "minute")?.value ?? "00"
+  return `${hour}:${minute}`
+}
+
+/** 지금(KST) 시각을 "HH:MM"으로 반환 — 키오스크 화면의 현재 시각 표시용 */
+export function nowKstTime(): string {
+  return isoToKstTime(new Date().toISOString())
+}

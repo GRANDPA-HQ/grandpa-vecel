@@ -5,6 +5,8 @@ import { after } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createClient as createAdminClient } from "@supabase/supabase-js"
 import { warmMasterTableCaches } from "@/lib/supabase/db"
+import { warmAttendanceCache } from "@/app/actions/attendance"
+import { warmNoticesCache } from "@/app/actions/notices"
 
 function createAdmin() {
   return createAdminClient(
@@ -41,11 +43,22 @@ export async function signIn(
   if (!email || !password) return { error: "Email and password are required." }
 
   const supabase = await createClient()
-  const { error } = await supabase.auth.signInWithPassword({ email, password })
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password })
   if (error) return { error: error.message }
 
-  // 응답(리다이렉트)을 지연시키지 않고 백그라운드에서 마스터 데이터 캐시를 미리 데운다
-  after(() => warmMasterTableCaches())
+  // 응답(리다이렉트)을 지연시키지 않고 백그라운드에서 마스터 데이터 캐시 +
+  // 소속 매장의 출퇴근 키오스크/공지 캐시를 미리 데운다
+  const userId = data.user?.id
+  after(async () => {
+    await warmMasterTableCaches()
+    if (!userId) return
+    const admin = createAdmin()
+    const { data: emp } = await admin.from("employees").select("store_id").eq("id", userId).maybeSingle()
+    const storeId = emp?.store_id as string | undefined
+    if (storeId) {
+      await Promise.all([warmAttendanceCache(storeId), warmNoticesCache(storeId)])
+    }
+  })
 
   redirect("/dashboard")
 }

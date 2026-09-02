@@ -1,6 +1,6 @@
 "use server"
 
-import { revalidatePath } from "next/cache"
+import { revalidatePath, updateTag, unstable_cache } from "next/cache"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { getCurrentEmployee } from "@/lib/permissions"
 import { verifyPin } from "@/lib/pin"
@@ -75,33 +75,30 @@ async function getAckStaffSets(
   return byNotice
 }
 
-/**
- * 매장 전체(또는 지정된 직책) 기준 "진행중" 공지 목록 — 대상 중 1명이라도 미확인이면 노출, 전원 확인 시 목록에서 빠진다.
- */
-export async function getActiveNotices(): Promise<{ notices: ActiveNotice[] } | { error: string }> {
-  const employee = await getCurrentEmployee()
-  if (!employee) return { error: "로그인이 필요합니다." }
-  if (!employee.storeId) return { error: "소속 매장이 없습니다." }
+// 매장별 공지 캐시 태그 — "진행중" 위젯용/"전체 공지함"용을 따로 둔다.
+const activeNoticesTag = (storeId: string) => `notices-active:${storeId}`
+const noticeListTag = (storeId: string) => `notices-list:${storeId}`
 
+async function fetchActiveNotices(storeId: string): Promise<ActiveNotice[]> {
   const admin = createAdminClient()
 
   const [eligibleStaff, { data: noticeRows, error: noticeError }] = await Promise.all([
-    getEligibleStaff(admin, employee.storeId),
+    getEligibleStaff(admin, storeId),
     admin
       .from("tb_notice")
       .select("id, title, target_position_id")
-      .eq("store_id", employee.storeId)
+      .eq("store_id", storeId)
       .order("created_at", { ascending: false }),
   ])
 
-  if (noticeError) return { error: noticeError.message }
+  if (noticeError) throw new Error(noticeError.message)
 
   const noticeIds = (noticeRows ?? []).map((n) => n.id as string)
-  if (noticeIds.length === 0 || eligibleStaff.length === 0) return { notices: [] }
+  if (noticeIds.length === 0 || eligibleStaff.length === 0) return []
 
   const ackStaffByNotice = await getAckStaffSets(admin, noticeIds)
 
-  const notices: ActiveNotice[] = (noticeRows ?? [])
+  return (noticeRows ?? [])
     .map((n) => {
       const targetPositionId = (n.target_position_id as string | null) ?? null
       const subset = targetSubset(eligibleStaff, targetPositionId)
@@ -116,35 +113,26 @@ export async function getActiveNotices(): Promise<{ notices: ActiveNotice[] } | 
       }
     })
     .filter((n) => n.total > 0 && n.unread > 0)
-
-  return { notices }
 }
 
-/**
- * 전체 공지함 — 진행중 여부와 관계없이 매장의 모든 공지를 최신순으로 보여준다.
- */
-export async function listNotices(): Promise<{ notices: NoticeSummary[] } | { error: string }> {
-  const employee = await getCurrentEmployee()
-  if (!employee) return { error: "로그인이 필요합니다." }
-  if (!employee.storeId) return { error: "소속 매장이 없습니다." }
-
+async function fetchNoticeList(storeId: string): Promise<NoticeSummary[]> {
   const admin = createAdminClient()
 
   const [eligibleStaff, { data: noticeRows, error: noticeError }] = await Promise.all([
-    getEligibleStaff(admin, employee.storeId),
+    getEligibleStaff(admin, storeId),
     admin
       .from("tb_notice")
       .select("id, title, body, created_at, target_position_id")
-      .eq("store_id", employee.storeId)
+      .eq("store_id", storeId)
       .order("created_at", { ascending: false }),
   ])
 
-  if (noticeError) return { error: noticeError.message }
+  if (noticeError) throw new Error(noticeError.message)
 
   const noticeIds = (noticeRows ?? []).map((n) => n.id as string)
   const ackStaffByNotice = await getAckStaffSets(admin, noticeIds)
 
-  const notices: NoticeSummary[] = (noticeRows ?? []).map((n) => {
+  return (noticeRows ?? []).map((n) => {
     const targetPositionId = (n.target_position_id as string | null) ?? null
     const subset = targetSubset(eligibleStaff, targetPositionId)
     const ackedSet = ackStaffByNotice.get(n.id as string) ?? new Set<string>()
@@ -159,8 +147,67 @@ export async function listNotices(): Promise<{ notices: NoticeSummary[] } | { er
       targetPositionId,
     }
   })
+}
 
-  return { notices }
+/** 매장별 "진행중" 공지 목록을 60초간 캐싱한다(쓰기 시 updateTag로 즉시 무효화). */
+function getCachedActiveNotices(storeId: string): Promise<ActiveNotice[]> {
+  const cached = unstable_cache(() => fetchActiveNotices(storeId), [`notices-active:${storeId}`], {
+    tags: [activeNoticesTag(storeId)],
+    revalidate: 60,
+  })
+  return cached()
+}
+
+/** 매장별 전체 공지함 목록을 60초간 캐싱한다(쓰기 시 updateTag로 즉시 무효화). */
+function getCachedNoticeList(storeId: string): Promise<NoticeSummary[]> {
+  const cached = unstable_cache(() => fetchNoticeList(storeId), [`notices-list:${storeId}`], {
+    tags: [noticeListTag(storeId)],
+    revalidate: 60,
+  })
+  return cached()
+}
+
+/**
+ * 로그인 직후 해당 매장의 공지 캐시(위젯용/전체함용)를 미리 데운다.
+ * app/actions/auth.ts의 signIn()이 next/server의 after()로 응답을 막지 않고 백그라운드에서 호출한다.
+ */
+export async function warmNoticesCache(storeId: string): Promise<void> {
+  await Promise.all([
+    getCachedActiveNotices(storeId).catch(() => {}),
+    getCachedNoticeList(storeId).catch(() => {}),
+  ])
+}
+
+/**
+ * 매장 전체(또는 지정된 직책) 기준 "진행중" 공지 목록 — 대상 중 1명이라도 미확인이면 노출, 전원 확인 시 목록에서 빠진다.
+ */
+export async function getActiveNotices(): Promise<{ notices: ActiveNotice[] } | { error: string }> {
+  const employee = await getCurrentEmployee()
+  if (!employee) return { error: "로그인이 필요합니다." }
+  if (!employee.storeId) return { error: "소속 매장이 없습니다." }
+
+  try {
+    const notices = await getCachedActiveNotices(employee.storeId)
+    return { notices }
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "공지를 불러오지 못했습니다." }
+  }
+}
+
+/**
+ * 전체 공지함 — 진행중 여부와 관계없이 매장의 모든 공지를 최신순으로 보여준다.
+ */
+export async function listNotices(): Promise<{ notices: NoticeSummary[] } | { error: string }> {
+  const employee = await getCurrentEmployee()
+  if (!employee) return { error: "로그인이 필요합니다." }
+  if (!employee.storeId) return { error: "소속 매장이 없습니다." }
+
+  try {
+    const notices = await getCachedNoticeList(employee.storeId)
+    return { notices }
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "공지를 불러오지 못했습니다." }
+  }
 }
 
 /**
@@ -191,6 +238,8 @@ export async function createNotice(
 
   if (error) return { error: error.message }
 
+  updateTag(activeNoticesTag(storeId))
+  updateTag(noticeListTag(storeId))
   revalidatePath("/dashboard/attendance/notices")
   revalidatePath("/dashboard")
   return { success: true }
@@ -241,6 +290,9 @@ export async function ackNotice(
 
   if (ackError) return { error: ackError.message }
 
+  updateTag(activeNoticesTag(employee.storeId))
+  updateTag(noticeListTag(employee.storeId))
   revalidatePath("/dashboard/attendance/notices")
+  revalidatePath("/dashboard")
   return { success: true }
 }
