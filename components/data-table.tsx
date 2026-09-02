@@ -158,7 +158,7 @@ function CodeImageCell({ code }: { code: string }) {
 }
 
 // 이미지를 표시하지 않을 컬럼 목록.
-// - raw_code: tb_raw_mst의 실제 "photo" 컬럼(PhotoCell)이 이미 같은 사진을 보여주므로 중복 렌더링 방지.
+// - raw_code: tb_raw_mst의 실제 "photo_urls" 컬럼(PhotoCell)이 이미 같은 사진을 보여주므로 중복 렌더링 방지.
 // - prod_code: 원재료(RAW-*)와 생산품(PROD-*) 코드가 같은 카테고리-번호 체계를 공유해서
 //   (예: RAW-BEV-001 / PROD-BEV-001) images/BEV/BEV-001.* 파일을 함께 가리킨다. 생산품 사진은
 //   따로 관리되는 적이 없어서, 이 컬럼에 이미지 추측을 켜두면 전혀 무관한 원재료 사진이 우연히
@@ -194,13 +194,17 @@ function CellContent({
   value,
   row,
   columnResolvers,
+  tableName,
 }: {
   col: string
   value: unknown
   row: Record<string, unknown>
   columnResolvers?: Record<string, Record<string, string>>
+  tableName?: string
 }) {
-  if (col === "photo") return <PhotoCell row={row} />
+  // tb_raw_mst.photo_urls만 raw_code 기반 코드-이미지 조회(PhotoCell)를 쓴다 — 값 자체는 무시하고
+  // raw_code로 파일을 찾는 예전 방식이라, 실제 URL 배열을 담는 다른 테이블의 동명 컬럼과는 다르게 취급해야 한다.
+  if (col === "photo_urls" && tableName === "tb_raw_mst") return <PhotoCell row={row} />
   // 가격 컬럼: 천 단위 쉼표 표시 (예: 10,000)
   if (isPriceColumn(col)) {
     const n =
@@ -336,7 +340,7 @@ function EditableCell({
   }, [editing, editStr])
 
   const pkValue = String(row[pkColumn] ?? "")
-  const canEdit = col !== pkColumn && col !== "photo"
+  const canEdit = col !== pkColumn && !(col === "photo_urls" && tableName === "tb_raw_mst")
   const originalStr = formatCell(value)
 
   const enumKey = `${tableName}.${col}`
@@ -387,7 +391,7 @@ function EditableCell({
   }, [editStr, commitSave])
 
   if (!canEdit) {
-    return <CellContent col={col} value={value} row={row} columnResolvers={columnResolvers} />
+    return <CellContent col={col} value={value} row={row} columnResolvers={columnResolvers} tableName={tableName} />
   }
 
   // ── 다중 선택 체크박스 편집 모드 ──
@@ -534,7 +538,7 @@ function EditableCell({
       ) : colDisplay ? (
         <span className="text-xs">{colDisplay.label}</span>
       ) : (
-        <CellContent col={col} value={value} row={row} columnResolvers={columnResolvers} />
+        <CellContent col={col} value={value} row={row} columnResolvers={columnResolvers} tableName={tableName} />
       )}
     </div>
   )
@@ -586,8 +590,9 @@ export function DataTable({
   rowLinks?: { header: string; hrefByPk: Record<string, string>; insertBeforeIndex?: number }
   // 임의의 미리 렌더링된 셀을 맨 뒤에 추가 컬럼으로 붙인다 (예: 포장 부자재의 존 태그 편집 UI)
   extraColumn?: { header: string; cellsByPk: Record<string, ReactNode> }
-  // 카테고리 선택 필터 — 검색창 옆에 표시되며 선택한 카테고리에 해당하는 행만 서버에서 조회한다
-  categoryFilter?: { column: string; options: SelectOption[]; placeholder?: string }
+  // 카테고리 선택 필터 — 검색창 옆에 표시되며 선택한 카테고리에 해당하는 행만 서버에서 조회한다.
+  // placeholder/searchPlaceholder를 지정하면 "카테고리" 문구 대신 쓸 수 있다 (예: 시설의 "지점" 선택란).
+  categoryFilter?: { column: string; options: SelectOption[]; placeholder?: string; searchPlaceholder?: string }
   // categoryFilter와 별개로 동작하는 두 번째 필터 (예: 시설 관리의 장비/집기/시설 상위 구분).
   // 값은 자체 URL 파라미터(paramName)에 저장되며, 실제 필터링은 페이지(서버 컴포넌트)가 담당한다.
   extraFilter?: { paramName: string; options: SelectOption[]; placeholder?: string }
@@ -970,10 +975,10 @@ export function DataTable({
                   className="w-56 shrink-0"
                   value={activeCategory}
                   onChange={handleCategoryChange}
-                  placeholder="전체 카테고리"
-                  searchPlaceholder="카테고리 검색..."
+                  placeholder={categoryFilter.placeholder ?? "전체 카테고리"}
+                  searchPlaceholder={categoryFilter.searchPlaceholder ?? "카테고리 검색..."}
                   options={[
-                    { value: "", label: "전체 카테고리" },
+                    { value: "", label: categoryFilter.placeholder ?? "전체 카테고리" },
                     ...categoryFilter.options,
                   ]}
                 />
@@ -1186,7 +1191,7 @@ export function DataTable({
                           onError={handleError}
                         />
                       ) : (
-                        <CellContent col={col} value={row[col]} row={row} columnResolvers={columnResolvers} />
+                        <CellContent col={col} value={row[col]} row={row} columnResolvers={columnResolvers} tableName={tableName} />
                       )}
                     </TableCell>
                   )

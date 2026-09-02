@@ -39,7 +39,6 @@ import {
   STORAGE_OPTIONS,
   STATUS_OPTIONS,
   UNIT_OPTIONS,
-  ACTIVE_OPTIONS,
   SKU_MULTI_OPTIONS,
   TABLE_FIELD_ORDER,
   SOP_CATEGORY_OPTIONS,
@@ -65,19 +64,20 @@ const TABLE_SEARCH_PLACEHOLDER: Record<string, string> = {
 const STORAGE_TABLES = new Set(["tb_prod_mst", "tb_raw_mst"])
 const STATUS_TABLES = new Set(["tb_prod_mst"])
 const UNIT_TABLES = new Set(["tb_prod_mst"])
-// active 컬럼(DB에서는 'active'/'inactive' ENUM)이 있는 테이블 — 자유 입력 대신 select로 제한
-const ACTIVE_TABLES = new Set(["tb_prod_mst", "tb_raw_mst", "tb_category_mst"])
 
-// 검색창 옆 카테고리 선택 필터 — 원재료/생산품/판매품/포장 부자재/시설 공통.
+// 검색창 옆 카테고리 선택 필터 — 원재료/생산품/판매품/포장 부자재/방법서/구역 공통.
 // 필터링에 쓸 컬럼명만 정의하고, 옵션 목록은 테이블별로 다른 소스에서 조회한다
 // (원재료·생산품은 tb_category_mst "RAW" 유형, 판매품은 "SKU" 유형, 포장 부자재는
-// tb_submat_category_mst, 시설은 tb_asset_type_mst를 FK로 참조).
+// tb_submat_category_mst를 FK로 참조).
+// tb_asset_mst("장비/집기/시설")는 예외 — 이 슬롯을 "카테고리"가 아니라 "지점" 선택란으로 쓴다.
+// asset_mst엔 store_id가 없어 zone_id 경유로 간접 연결되므로, "store"는 실제 컬럼명이 아니라
+// 아래 tb_asset_mst 블록에서 값을 zone_id 목록으로 변환해 별도 처리한다는 표시일 뿐이다.
 const CATEGORY_FILTER_COLUMN: Record<string, string> = {
   tb_raw_mst: "category_code",
   tb_prod_mst: "category_code",
   tb_sku_mst: "category_code",
   tb_submat_mst: "category_code",
-  tb_asset_mst: "asset_type_id",
+  tb_asset_mst: "store",
   tb_sop_mst: "sop_category",
   tb_zone_mst: "zone_type_id",
 }
@@ -232,11 +232,13 @@ export default async function TablePage({
     }
   }
 
-  // tb_asset_mst: 시설 유형/구역 FK를 이름으로 표시
+  // tb_asset_mst: 시설 유형/구역 FK를 이름으로 표시 + 지점 선택 필터(zone_id 경유)
   let assetGroupFilterIds: string[] | null = null
+  let assetStoreZoneIds: string[] | null = null
   if (tableName === "tb_asset_mst") {
     const assetTypeLookup = ASSET_FK_LOOKUPS.find((l) => l.column === "asset_type_id")
-    const [assetTypeOpts, zoneOpts, assetTypeGroups] = await Promise.all([
+    const storeLookup = EMPLOYEE_FK_LOOKUPS.find((l) => l.column === "store_id")!
+    const [assetTypeOpts, zoneOpts, assetTypeGroups, storeOpts] = await Promise.all([
       assetTypeLookup
         ? getIdLabelOptions(assetTypeLookup.table, assetTypeLookup.labelColumn, assetTypeLookup.idColumn).catch(
             () => [] as SelectOption[],
@@ -246,13 +248,20 @@ export default async function TablePage({
       // asset_type_id → 상위 구분(EQ/FX/FC) — "장비/집기/시설" 필터에서 해당 구분의 자산유형
       // id 목록으로 변환해 asset_type_id에 in 필터로 적용하는 데 쓴다
       getIdLabelOptions("tb_asset_type_mst", "asset_type", "asset_type_id").catch(() => [] as SelectOption[]),
+      getIdLabelOptions(storeLookup.table, storeLookup.labelColumn).catch(() => [] as SelectOption[]),
     ])
     columnOptions["asset_type_id"] = assetTypeOpts
     columnResolvers["asset_type_id"] = Object.fromEntries(assetTypeOpts.map((o) => [o.value, o.label]))
     columnOptions["zone_id"] = zoneOpts
     columnResolvers["zone_id"] = Object.fromEntries(zoneOpts.map((o) => [o.value, o.label]))
-    // 시설 유형(asset_type_id)이 곧 이 테이블의 "카테고리" 역할
-    categoryFilterOptions = assetTypeOpts
+    // "카테고리" 선택란 대신 "지점" 선택란을 노출 — asset_mst엔 store_id가 없어 zone_id 경유로
+    // 골라낸 매장 소속 zone_id 목록을 in 필터로 적용한다
+    categoryFilterOptions = storeOpts
+    if (categoryValue) {
+      const admin = createAdminClient()
+      const { data: zoneRows } = await admin.from("tb_zone_mst").select("zone_id").eq("store_id", categoryValue)
+      assetStoreZoneIds = (zoneRows ?? []).map((row) => row.zone_id as string)
+    }
     if (assetGroupValue) {
       assetGroupFilterIds = assetTypeGroups.filter((g) => g.label === assetGroupValue).map((g) => g.value)
     }
@@ -273,11 +282,15 @@ export default async function TablePage({
       ...storeScope,
       filters: [
         ...(storeScope.filters ?? []),
-        ...(categoryFilterColumn && categoryValue ? [{ column: categoryFilterColumn, value: categoryValue }] : []),
+        // tb_asset_mst는 "지점" 선택란을 zone_id 경유 in 필터(아래)로 처리하므로 여기선 제외
+        ...(categoryFilterColumn && categoryValue && tableName !== "tb_asset_mst"
+          ? [{ column: categoryFilterColumn, value: categoryValue }]
+          : []),
       ],
       inFilters: [
         ...(storeScope.inFilters ?? []),
         ...(assetGroupFilterIds ? [{ column: "asset_type_id", values: assetGroupFilterIds }] : []),
+        ...(assetStoreZoneIds ? [{ column: "zone_id", values: assetStoreZoneIds }] : []),
       ],
     })
     rows = result.rows
@@ -312,7 +325,7 @@ export default async function TablePage({
     const savedValid = savedOrder.filter((c) => columns.includes(c))
     columns = [...savedValid, ...columns.filter((c) => !savedValid.includes(c))]
   } else {
-    // 지정된 컬럼(예: photo_url)은 항상 맨 뒤로 보낸다
+    // 지정된 컬럼(예: photo_urls)은 항상 맨 뒤로 보낸다
     const trailingCols = TABLE_TRAILING_COLS[tableName]
     if (trailingCols && trailingCols.length > 0) {
       columns = [
@@ -352,9 +365,6 @@ export default async function TablePage({
   if (UNIT_TABLES.has(tableName)) {
     columnOptions["unit"] = UNIT_OPTIONS
   }
-  if (ACTIVE_TABLES.has(tableName)) {
-    columnOptions["active"] = ACTIVE_OPTIONS
-  }
   if (tableName === "tb_sku_mst") {
     // allergen_tags는 ENUM 값(MILK 등)으로 저장되므로 표시 시 한글명으로 변환
     columnResolvers["allergen_tags"] = Object.fromEntries(ALLERGEN_OPTIONS.map((o) => [o.value, o.label]))
@@ -362,9 +372,9 @@ export default async function TablePage({
 
   // tb_sku_mst: 레시피(tb_sku_recipe)가 등록된 SKU에 레시피 작성 페이지로 가는 링크 표시
   // URL은 UUID 대신 sku_code를 사용해 짧게 유지 (/dashboard/production-write?sku=VFR_001)
-  // insertBeforeIndex: 항상 맨 앞(체크박스 바로 다음)에 고정 — 예전엔 photo_url 컬럼 바로 앞에
-  // 붙였는데, 직원이 "열 관리"에서 photo_url 위치를 옮기면 레시피도 같이 끌려가 포토 URL과
-  // 붙어 보이는 문제가 있었다. photo_url은 열 관리 목록에 있어 순서를 옮길 수 있지만
+  // insertBeforeIndex: 항상 맨 앞(체크박스 바로 다음)에 고정 — 예전엔 photo_urls 컬럼 바로 앞에
+  // 붙였는데, 직원이 "열 관리"에서 photo_urls 위치를 옮기면 레시피도 같이 끌려가 포토 URL과
+  // 붙어 보이는 문제가 있었다. photo_urls는 열 관리 목록에 있어 순서를 옮길 수 있지만
   // 레시피는 실제 DB 컬럼이 아니라 열 관리로 관리할 수 없어, 아예 위치를 고정해 분리했다.
   let rowLinks: { header: string; hrefByPk: Record<string, string>; insertBeforeIndex?: number } | undefined
   if (tableName === "tb_sku_mst") {
@@ -484,7 +494,13 @@ export default async function TablePage({
           extraColumn={extraColumn}
           categoryFilter={
             categoryFilterColumn && categoryFilterOptions.length > 0
-              ? { column: categoryFilterColumn, options: categoryFilterOptions }
+              ? {
+                  column: categoryFilterColumn,
+                  options: categoryFilterOptions,
+                  ...(tableName === "tb_asset_mst"
+                    ? { placeholder: "전체 지점", searchPlaceholder: "지점 검색..." }
+                    : {}),
+                }
               : undefined
           }
           extraFilter={

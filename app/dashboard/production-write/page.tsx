@@ -8,7 +8,6 @@ import {
   STORAGE_OPTIONS,
   STATUS_OPTIONS,
   UNIT_OPTIONS,
-  ACTIVE_OPTIONS,
   SKU_MULTI_OPTIONS,
   TABLE_FIELD_ORDER,
 } from "@/lib/table-config"
@@ -238,7 +237,6 @@ export default async function ProductionWritePage({
                 storage: STORAGE_OPTIONS,
                 status: STATUS_OPTIONS,
                 unit: UNIT_OPTIONS,
-                active: ACTIVE_OPTIONS,
               }}
               fieldOrder={TABLE_FIELD_ORDER["tb_prod_mst"]}
               buttonLabel="생산품 등록"
