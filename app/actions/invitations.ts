@@ -122,7 +122,8 @@ export async function inviteEmployee(
     ...defaults,
     name,
     email,
-    employment_type: "정규직",
+    // 신규 직원 기본 고용형태: 파트타임 (정규직으로 바로 등록되던 것을 수정)
+    employment_type: "파트타임",
     status: "재직",
     hired_at: new Date().toISOString().slice(0, 10),
   })
