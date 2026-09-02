@@ -5,18 +5,26 @@ import { useRouter } from "next/navigation"
 import { X, Plus } from "lucide-react"
 import { addSubmatZoneLink, removeSubmatZoneLink } from "@/app/actions/submat-zone"
 
-type ZoneOption = { value: string; label: string }
+type ZoneOption = { value: string; label: string; group?: string }
+
+// zone_group 중 특정 파트 전용이 아니라 KP/SP가 함께 쓰는 공용 존 그룹.
+// (예: OPSZ-2 "소모품·부자재 보관 존"은 tb_zone_type_mst 메모에 "KP/SP 공용"이라고 명시돼 있음)
+const SHARED_ZONE_GROUPS = new Set(["OPS"])
 
 export function SubmatZoneCell({
   submatId,
   initialZoneIds,
   zoneOptions,
+  managePartId,
 }: {
   submatId: string
   // 이 부자재에 이미 연결된 zone_type_id 목록
   initialZoneIds: string[]
   // 전체 Zone유형 옵션 (tb_zone_type_mst)
   zoneOptions: ZoneOption[]
+  // 이 부자재의 관리 파트(SP/KP) — 존 추가 선택지를 해당 파트(+ 공용 존)로 좁히는 데 씀.
+  // SP/KP가 아닌 값(빈 값 등)이면 예전처럼 전체 존을 보여준다 (안전한 기본 동작 유지).
+  managePartId?: string
 }) {
   const [zoneIds, setZoneIds] = useState(initialZoneIds)
   const [adding, setAdding] = useState(false)
@@ -25,7 +33,11 @@ export function SubmatZoneCell({
   const router = useRouter()
 
   const labelOf = (id: string) => zoneOptions.find((o) => o.value === id)?.label ?? id
-  const remainingOptions = zoneOptions.filter((o) => !zoneIds.includes(o.value))
+  const partFiltered =
+    managePartId === "SP" || managePartId === "KP"
+      ? zoneOptions.filter((o) => o.group === managePartId || (o.group && SHARED_ZONE_GROUPS.has(o.group)))
+      : zoneOptions
+  const remainingOptions = partFiltered.filter((o) => !zoneIds.includes(o.value))
 
   function handleAdd(zoneTypeId: string) {
     if (!zoneTypeId) return
