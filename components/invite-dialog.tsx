@@ -34,7 +34,7 @@ export function InviteDialog({ onClose }: { onClose: () => void }) {
         </div>
 
         <p className="mb-4 rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
-          이메일을 입력하면 계정이 바로 생성되고, 아이디/초기 비밀번호(<b>1111</b>) 안내 메일이
+          이메일을 입력하면 계정이 바로 생성되고, 아이디/무작위로 생성된 초기 비밀번호 안내 메일이
           해당 주소로 자동 발송됩니다.
         </p>
 
@@ -64,7 +64,7 @@ export function InviteDialog({ onClose }: { onClose: () => void }) {
               <p className="mt-1 font-mono text-xs">
                 아이디: {state.email}
                 <br />
-                비밀번호: 1111
+                비밀번호: {state.password}
               </p>
               {state.emailWarning && (
                 <p className="mt-2 text-xs text-amber-700">{state.emailWarning}</p>

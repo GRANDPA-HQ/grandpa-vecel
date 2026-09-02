@@ -23,9 +23,11 @@ export const TABLE_PK: Record<string, string> = {
 // 시니어가 아닌 직원은 본인 소속 매장(employees.store_id) 값과 이 컬럼이 일치하는 행만 볼 수 있다.
 // tb_store_mst는 자기 자신이 매장이라 store_id가 아니라 PK("id")로 스코핑한다.
 export const STORE_SCOPED_TABLES: Record<string, string> = {
-  employees:    "store_id",
-  tb_zone_mst:  "store_id",
-  tb_store_mst: "id",
+  employees:         "store_id",
+  tb_zone_mst:       "store_id",
+  tb_store_mst:      "id",
+  tb_sp_attendance_log: "store_id",
+  tb_notice:         "store_id",
 }
 
 // 매장 스코핑 강제 필터 생성. 시니어면 필터 없음(전체 조회).
@@ -67,6 +69,9 @@ export const TABLE_LABELS: Record<string, string> = {
   tb_zone_mst:           "구역",
   tb_sop_mst:            "방법서",
   tb_asset_mst:          "시설",
+  tb_sp_attendance_log:  "SP 출퇴근 기록",
+  tb_notice:             "공지",
+  tb_notice_ack:         "공지 확인",
 }
 
 // employees 테이블의 FK 컬럼 → 이름 표시용 조회 설정 (화면·엑셀 추출 공용)
@@ -129,9 +134,9 @@ export const HIDDEN_COLS = new Set(["id", "created_at", "updated_at"])
 
 // 테이블별 추가 숨김 컬럼
 export const TABLE_HIDDEN_COLS: Record<string, Set<string>> = {
-  tb_prod_mst:   new Set(["active", "owner", "owner_part", "part", "yield_rate"]),
-  // photo_url: 더 이상 사용하지 않아 목록 화면에서 숨김
-  tb_sku_mst:     new Set(["is_active", "photo_url"]),
+  tb_prod_mst:   new Set(["is_active", "owner", "owner_part", "part", "yield_rate"]),
+  // photo_urls: 더 이상 사용하지 않아 목록 화면에서 숨김
+  tb_sku_mst:     new Set(["is_active", "photo_urls"]),
   // sort_order: 작성 화면의 드래그 순서 저장용 내부 컬럼
   tb_sku_recipe:  new Set(["input_id", "sort_order"]),
   tb_prod_recipe: new Set(["input_id", "sort_order"]),
@@ -191,14 +196,6 @@ export const STATUS_OPTIONS: SelectOption[] = ["SEMI", "PREP", "COOK", "UNPROC"]
 
 export const UNIT_OPTIONS: SelectOption[] = ["g", "ml", "ea"].map((v) => ({ value: v, label: v }))
 
-// active 컬럼은 DB에서 'active'/'inactive' ENUM(public.active_status)이지만, 다른 boolean
-// 컬럼(is_active 등)과 화면 표기를 통일하기 위해 true/false로 라벨만 바꿔서 보여준다.
-// 자유 입력이던 필드를 select로 제한해 잘못된 값이 저장되는 것을 막는다.
-export const ACTIVE_OPTIONS: SelectOption[] = [
-  { value: "active", label: "true" },
-  { value: "inactive", label: "false" },
-]
-
 export const SKU_MULTI_OPTIONS: Record<string, MultiOption[]> = {
   concept_tags:   ["Daily Balance", "Light & Clean", "Protein Care", "Digestive Comfort", "Recovery Food"],
   meal_time_tags: ["Breakfast", "Lunch", "Dinner"],
@@ -232,6 +229,8 @@ export const TABLE_DEFAULT_SORT: Record<string, { column: string; dir: "asc" | "
   tb_store_mst:    { column: "store_code", dir: "asc" },
   tb_sop_mst:      { column: "sop_code", dir: "asc" },
   tb_asset_mst:    { column: "asset_code", dir: "asc" },
+  tb_sp_attendance_log: { column: "checked_at", dir: "desc" },
+  tb_notice:       { column: "created_at", dir: "desc" },
 }
 
 // 테이블별 검색 대상 컬럼 (코드/이름 등)
@@ -248,9 +247,10 @@ export const TABLE_SEARCH_COLUMNS: Record<string, string[]> = {
   employees:       ["name", "phone", "email"],
   tb_submat_mst:   ["submat_id", "item_name", "item_name_short"],
   tb_store_mst:    ["store_code", "store_name", "address"],
-  tb_zone_mst:     ["memo"],
+  tb_zone_mst:     ["note"],
   tb_sop_mst:      ["sop_code", "sop_title"],
   tb_asset_mst:    ["asset_code", "asset_name", "serial_no"],
+  tb_notice:       ["title"],
 }
 
 // tb_sop_mst 드롭박스 옵션 (DB ENUM과 동일한 값)

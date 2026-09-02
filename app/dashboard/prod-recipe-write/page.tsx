@@ -12,7 +12,6 @@ import {
   STORAGE_OPTIONS,
   STATUS_OPTIONS,
   UNIT_OPTIONS,
-  ACTIVE_OPTIONS,
   TABLE_FIELD_ORDER,
 } from "@/lib/table-config"
 
@@ -143,7 +142,6 @@ export default async function ProdRecipeWritePage() {
               columnOptions={{
                 category_code: categoryOptions,
                 storage: STORAGE_OPTIONS,
-                active: ACTIVE_OPTIONS,
               }}
               fieldOrder={TABLE_FIELD_ORDER["tb_raw_mst"]}
               buttonLabel="원재료 등록"
@@ -159,7 +157,6 @@ export default async function ProdRecipeWritePage() {
                 storage: STORAGE_OPTIONS,
                 status: STATUS_OPTIONS,
                 unit: UNIT_OPTIONS,
-                active: ACTIVE_OPTIONS,
               }}
               fieldOrder={TABLE_FIELD_ORDER["tb_prod_mst"]}
               buttonLabel="생산품 등록"

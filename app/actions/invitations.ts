@@ -5,8 +5,6 @@ import { revalidatePath } from "next/cache"
 import { getCurrentEmployee } from "@/lib/permissions"
 import { sendInviteEmail, sendPasswordResetEmail } from "@/lib/email"
 
-const DEFAULT_PASSWORD = "1111"
-
 // 사람이 눈으로 구분하기 쉽도록 헷갈리는 문자(0/O, 1/l/I) 제외
 const PASSWORD_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"
 function generatePassword(length = 10): string {
@@ -58,12 +56,14 @@ export type InviteState = {
   error?: string
   success?: boolean
   email?: string
+  // 초기 비밀번호는 계정 생성 시점에 무작위로 생성 — 해시로만 저장되므로 이 응답이 유일하게 평문을 볼 수 있는 순간
+  password?: string
   // 계정 생성은 됐지만 안내 메일 발송에 실패한 경우 (계정 생성 자체는 롤백하지 않는다)
   emailWarning?: string
 }
 
 /**
- * 직원 추가: 계정을 즉시 생성하고 (아이디 = 이메일, 비밀번호 = 1111)
+ * 직원 추가: 계정을 즉시 생성하고 (아이디 = 이메일, 비밀번호 = 무작위 6자리 영숫자)
  * 직원(employees) 테이블에 등록한다. users에도 함께 기록해 작성자 표시 등 기존 기능과 호환.
  */
 export async function inviteEmployee(
@@ -87,10 +87,11 @@ export async function inviteEmployee(
     .maybeSingle()
   if (existing) return { error: "이미 등록된 직원 이메일입니다." }
 
-  // 1) 인증 계정 즉시 생성 (이메일 확인 절차 없이 바로 로그인 가능)
+  // 1) 인증 계정 즉시 생성 (이메일 확인 절차 없이 바로 로그인 가능) — 초기 비밀번호는 매번 무작위 생성
+  const password = generatePassword(6)
   const { data: created, error: createError } = await admin.auth.admin.createUser({
     email,
-    password: DEFAULT_PASSWORD,
+    password,
     email_confirm: true,
   })
   if (createError || !created.user) {
@@ -141,13 +142,13 @@ export async function inviteEmployee(
 
   // 4) 안내 메일 발송 — 실패해도 계정 생성 자체는 이미 끝났으니 되돌리지 않고 경고만 알린다
   try {
-    await sendInviteEmail(email, { password: DEFAULT_PASSWORD })
+    await sendInviteEmail(email, { password })
   } catch (e) {
     const msg = e instanceof Error ? e.message : "이메일 발송 실패"
-    return { success: true, email, emailWarning: `계정은 생성됐지만 안내 메일 발송에 실패했습니다. (${msg})` }
+    return { success: true, email, password, emailWarning: `계정은 생성됐지만 안내 메일 발송에 실패했습니다. (${msg})` }
   }
 
-  return { success: true, email }
+  return { success: true, email, password }
 }
 
 /**

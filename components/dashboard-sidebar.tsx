@@ -19,6 +19,8 @@ import {
   Factory,
   ShoppingBag,
   BookOpen,
+  UserCog,
+  Megaphone,
   type LucideIcon,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -55,6 +57,10 @@ export function DashboardSidebar({
   // group 항목은 클릭 불가능한 섹션 구분 라벨이며, 그 뒤로 이어지는 leaf/placeholder들을 묶어 보여준다.
   const navItems: NavEntry[] = [
     { kind: "leaf", label: "홈", href: "/dashboard", icon: LayoutDashboard, visible: true, exact: true },
+
+    { kind: "group", label: "출퇴근" },
+    { kind: "leaf", label: "공지 게시판", href: "/dashboard/attendance/notices", icon: Megaphone, visible: true, exact: true },
+    { kind: "leaf", label: "PIN 발급 관리", href: "/dashboard/attendance/manage", icon: UserCog, visible: isManager, exact: true },
 
     { kind: "group", label: "운영/생산 일지" },
     { kind: "leaf", label: "SP 운영일지", href: "/dashboard/operation-log", icon: Store, visible: true, exact: true },
