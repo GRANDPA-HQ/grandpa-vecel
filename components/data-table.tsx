@@ -174,18 +174,26 @@ function UrlChip({ url }: { url: string }) {
   try {
     domain = new URL(url).hostname.replace(/^www\./, "")
   } catch {}
+  // 예전엔 칩 전체가 <a>라서 어디를 눌러도 새 탭으로 이동해버려 값 수정이 불가능했다.
+  // 이제 텍스트 영역은 클릭 시 그대로 편집 모드로 들어가도록 두고(상위 셀의 클릭 핸들러가 받도록
+  // stopPropagation을 걸지 않음), 아이콘만 별도로 눌러야 새 탭에서 열리게 분리한다.
   return (
-    <a
-      href={url}
-      target="_blank"
-      rel="noopener noreferrer"
-      title={url}
-      onClick={(e) => e.stopPropagation()}
-      className="inline-flex max-w-full items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary hover:bg-primary/20"
+    <span
+      title="클릭하면 링크를 수정할 수 있습니다 · 아이콘을 누르면 새 탭에서 열립니다"
+      className="inline-flex max-w-full items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary"
     >
-      <ExternalLink className="h-3 w-3 shrink-0" />
       <span className="truncate">{domain}</span>
-    </a>
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        title="새 탭에서 열기"
+        onClick={(e) => e.stopPropagation()}
+        className="shrink-0 hover:opacity-70"
+      >
+        <ExternalLink className="h-3 w-3" />
+      </a>
+    </span>
   )
 }
 
@@ -1065,7 +1073,7 @@ export function DataTable({
                     key={col}
                     onClick={() => handleSort(col)}
                     className={cn(
-                      "sticky top-0 z-10 cursor-pointer select-none overflow-hidden whitespace-nowrap text-xs hover:bg-accent/60 relative transition-colors",
+                      "sticky top-0 z-10 cursor-pointer select-none overflow-hidden whitespace-nowrap text-xs hover:bg-accent/60 transition-colors",
                       resizingKey === col ? "bg-primary/10" : "bg-card",
                     )}
                   >
@@ -1096,7 +1104,7 @@ export function DataTable({
                     <Fragment key={`link-wrap-${col}`}>
                       <TableHead
                         className={cn(
-                          "sticky top-0 z-10 relative overflow-hidden whitespace-nowrap text-xs transition-colors",
+                          "sticky top-0 z-10 overflow-hidden whitespace-nowrap text-xs transition-colors",
                           resizingKey === "__link__" ? "bg-primary/10" : "bg-card",
                         )}
                       >
@@ -1116,7 +1124,7 @@ export function DataTable({
               {hasLinkColumn && linkColumnIndex >= columns.length && (
                 <TableHead
                   className={cn(
-                    "sticky top-0 z-10 relative overflow-hidden whitespace-nowrap text-xs transition-colors",
+                    "sticky top-0 z-10 overflow-hidden whitespace-nowrap text-xs transition-colors",
                     resizingKey === "__link__" ? "bg-primary/10" : "bg-card",
                   )}
                 >
@@ -1131,7 +1139,7 @@ export function DataTable({
               {hasExtraColumn && (
                 <TableHead
                   className={cn(
-                    "sticky top-0 z-10 relative overflow-hidden whitespace-nowrap text-xs transition-colors",
+                    "sticky top-0 z-10 overflow-hidden whitespace-nowrap text-xs transition-colors",
                     resizingKey === "__extra__" ? "bg-primary/10" : "bg-card",
                   )}
                 >
