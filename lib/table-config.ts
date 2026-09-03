@@ -148,6 +148,10 @@ export const TABLE_HIDDEN_COLS: Record<string, Set<string>> = {
   tb_sop_mst:     new Set(["sop_id"]),
   // asset_id: gen_random_uuid() PK — asset_code가 사람이 읽는 코드 역할을 하므로 숨김
   tb_asset_mst:   new Set(["asset_id"]),
+  // purchase_section_id: manage_part_id(관리 파트)와 항상 같은 값을 쓰도록 되어 있었고
+  // 실제로는 모든 행에서 비어 있어(null) 별도로 관리되지 않는 중복 컬럼 — 목록 화면에서 숨김.
+  // (DB 컬럼 자체는 남겨둔다. 나중에 실제로 필요해지면 이 줄만 지우면 다시 노출된다.)
+  tb_submat_mst:  new Set(["purchase_section_id"]),
 }
 
 // 테이블별 데이터 테이블 컬럼 표시 순서 (지정 안 한 나머지 컬럼은 기존 순서 그대로 뒤에 붙음)

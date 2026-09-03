@@ -427,6 +427,7 @@ export default async function TablePage({
                   submatId={submatId}
                   initialZoneIds={linksBySubmat[submatId] ?? []}
                   zoneOptions={zoneOptions}
+                  managePartId={String(row["manage_part_id"] ?? "")}
                 />
               ),
             ]

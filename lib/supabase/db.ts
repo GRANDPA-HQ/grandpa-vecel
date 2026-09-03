@@ -579,9 +579,9 @@ export async function getIdLabelOptions(
  * TB_SUBMAT_MST 등 전사 공통 카탈로그 테이블은 zone_id가 아닌 zone_type_id를 참조한다.
  * (물리 실체를 참조하는 자산·재고·로그 테이블만 zone_id를 참조 — 서대표 확정 v1.0 원칙)
  */
-export async function getZoneTypeOptions(): Promise<{ value: string; label: string }[]> {
+export async function getZoneTypeOptions(): Promise<{ value: string; label: string; group?: string }[]> {
   const res = await fetch(
-    `${SUPABASE_URL}/rest/v1/tb_zone_type_mst?select=zone_type_id,zone_type_code,zone_type_name&order=zone_type_code`,
+    `${SUPABASE_URL}/rest/v1/tb_zone_type_mst?select=zone_type_id,zone_type_code,zone_type_name,zone_group&order=zone_type_code`,
     { headers: authHeaders(), cache: "no-store" },
   )
   if (!res.ok) return []
@@ -589,10 +589,13 @@ export async function getZoneTypeOptions(): Promise<{ value: string; label: stri
     zone_type_id: string
     zone_type_code?: string
     zone_type_name?: string
+    zone_group?: string
   }[]
   return rows.map((r) => ({
     value: r.zone_type_id,
     label: [r.zone_type_code, r.zone_type_name].filter(Boolean).join(" · ") || r.zone_type_id,
+    // 관리 파트(SP/KP)별로 존 선택지를 좁힐 때 씀 (예: 포장 부자재의 "존 추가")
+    group: r.zone_group,
   }))
 }
 
