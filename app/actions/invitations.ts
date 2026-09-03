@@ -32,23 +32,32 @@ async function requireSenior(): Promise<{ userId: string } | { error: string }> 
 
 type Row = Record<string, unknown>
 
-// 신규 직원 기본값: 매장(첫 매장), 파트(정렬 첫 파트), 직책(스태프), 직급(최하위 레벨)
+// 신규 직원 기본값: 매장(첫 매장), 파트(정렬 첫 파트), 직책(스태프), 직급(수습)
+// 직책/직급은 코드값(STAFF/TRAINEE)으로 정확히 지정한다 — 정렬 순서에 기대는 방식은
+// DB가 행을 반환하는 순서가 매번 보장되지 않아, 의도와 다른 직책(예: 점장)이
+// 조용히 기본값으로 들어갈 수 있다.
 async function getInviteDefaults(admin: ReturnType<typeof createAdmin>) {
   const [stores, parts, positions, ranks] = await Promise.all([
     admin.from("tb_store_mst").select("id").order("created_at").limit(1),
     admin.from("parts").select("id").order("sort_order").limit(1),
-    admin.from("positions").select("id, name_ko"),
-    admin.from("ranks").select("id, level").order("level").limit(1),
+    admin.from("positions").select("id, code, name_ko"),
+    admin.from("ranks").select("id, code, name_ko"),
   ])
   const positionRows = (positions.data ?? []) as Row[]
+  const rankRows = (ranks.data ?? []) as Row[]
+
   const staff =
-    positionRows.find((p) => typeof p.name_ko === "string" && p.name_ko.includes("스태프")) ??
-    positionRows[0]
+    positionRows.find((p) => p.code === "STAFF") ??
+    positionRows.find((p) => typeof p.name_ko === "string" && p.name_ko.includes("스태프"))
+  const trainee =
+    rankRows.find((r) => r.code === "TRAINEE") ??
+    rankRows.find((r) => typeof r.name_ko === "string" && r.name_ko.includes("수습"))
+
   return {
     store_id: (stores.data?.[0] as Row | undefined)?.id ?? null,
     part_id: (parts.data?.[0] as Row | undefined)?.id ?? null,
     position_id: staff?.id ?? null,
-    rank_id: (ranks.data?.[0] as Row | undefined)?.id ?? null,
+    rank_id: trainee?.id ?? null,
   }
 }
 
@@ -113,7 +122,8 @@ export async function inviteEmployee(
     ...defaults,
     name,
     email,
-    employment_type: "정규직",
+    // 신규 직원 기본 고용형태: 파트타임 (정규직으로 바로 등록되던 것을 수정)
+    employment_type: "파트타임",
     status: "재직",
     hired_at: new Date().toISOString().slice(0, 10),
   })

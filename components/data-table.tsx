@@ -76,6 +76,16 @@ const ENUM_COLUMNS: Record<string, { value: string; label: string; className: st
     { value: "휴직", label: "휴직", className: "bg-yellow-100 text-yellow-700 border-yellow-200" },
     { value: "퇴사", label: "퇴사", className: "bg-gray-100 text-gray-500 border-gray-200" },
   ],
+  // 포장 부자재: 자유 텍스트 입력 대신 SP/KP 중 하나로만 고르게 고정 (parts 테이블 코드와 동일)
+  "tb_submat_mst.manage_part_id": [
+    { value: "SP", label: "SP · 서비스", className: "bg-blue-100 text-blue-700 border-blue-200" },
+    { value: "KP", label: "KP · 키친", className: "bg-orange-100 text-orange-700 border-orange-200" },
+  ],
+  // 포장 부자재: true/false를 직접 타이핑하는 대신 활성/비활성 버튼으로 선택
+  "tb_submat_mst.is_active": [
+    { value: "true", label: "활성", className: "bg-emerald-100 text-emerald-700 border-emerald-200" },
+    { value: "false", label: "비활성", className: "bg-gray-100 text-gray-500 border-gray-200" },
+  ],
 }
 
 function parseMultiValue(val: string): string[] {
@@ -1291,9 +1301,6 @@ export function DataTable({
                   </span>
                   <span>
                     pk: <span className="text-foreground">{err.pkValue}</span>
-                  </span>
-                  <span>
-                    value: <span className="text-foreground">&quot;{err.attempted}&quot;</span>
                   </span>
                 </div>
                 <p className="mt-1 text-destructive">{err.message}</p>
