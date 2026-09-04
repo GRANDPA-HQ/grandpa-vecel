@@ -40,6 +40,7 @@ import {
   STATUS_OPTIONS,
   UNIT_OPTIONS,
   STORE_SCOPE_OPTIONS,
+  READ_ONLY_TABLES,
   SKU_MULTI_OPTIONS,
   TABLE_FIELD_ORDER,
   SOP_CATEGORY_OPTIONS,
@@ -493,6 +494,7 @@ export default async function TablePage({
           searchEnabled={searchEnabled}
           searchPlaceholder={searchEnabled ? TABLE_SEARCH_PLACEHOLDER[tableName] ?? `${searchColumns.join(", ")} 검색` : undefined}
           bulkDeleteEnabled={BULK_DELETE_TABLES.has(tableName)}
+          readOnly={READ_ONLY_TABLES.has(tableName)}
           allColumns={toggleableColumns}
           hiddenColumns={hiddenColumns}
           rowLinks={rowLinks}
