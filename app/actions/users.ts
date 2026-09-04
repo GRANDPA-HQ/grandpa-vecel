@@ -91,3 +91,50 @@ export async function updateEmployeeField(
   revalidatePath("/dashboard/employees")
   return { error: null }
 }
+
+/**
+ * 직원 상태(재직/휴직/퇴사)와 퇴사일자를 한 번에 갱신한다. 퇴사로 바꾸는 순간 퇴사일자를
+ * 같이 저장해야 "재직·휴직=null / 퇴사=날짜" 규칙이 중간 상태 없이 항상 유지된다.
+ */
+export async function updateEmployeeStatus(
+  employeeId: string,
+  status: string,
+  resignedAt: string | null,
+): Promise<{ error: string | null }> {
+  const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!
+  const payload = { status, resigned_at: resignedAt }
+
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/employees?id=eq.${encodeURIComponent(employeeId)}`,
+    {
+      method: "PATCH",
+      headers: {
+        apikey: SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+        "Content-Type": "application/json",
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify(payload),
+    },
+  )
+
+  if (!res.ok) {
+    const text = await res.text()
+    return { error: `수정 실패 (${res.status}): ${text.slice(0, 200)}` }
+  }
+
+  // status는 레거시 호환 users 테이블에도 함께 반영 (없거나 실패해도 무시)
+  await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${encodeURIComponent(employeeId)}`, {
+    method: "PATCH",
+    headers: {
+      apikey: SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+      "Content-Type": "application/json",
+      Prefer: "return=minimal",
+    },
+    body: JSON.stringify({ status }),
+  }).catch(() => {})
+
+  revalidatePath("/dashboard/employees")
+  return { error: null }
+}

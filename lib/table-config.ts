@@ -88,6 +88,31 @@ export const EMPLOYEE_FK_LOOKUPS: {
   { column: "rank_id",     table: "ranks",     labelColumn: "name_ko", labelOrder: ["수습", "정규", "시니어"] },
 ]
 
+// 지점 구분(scope)별로 배정 가능한 파트 code — 매장(store)은 서비스/키친만,
+// 본사(hq)는 경영지원/재무회계만 선택 가능하도록 좁힌다.
+export const PART_CODES_BY_STORE_SCOPE: Record<string, string[]> = {
+  store: ["SP", "KP"],
+  hq: ["MGMT", "FIN"],
+}
+
+// 직원 관리(/dashboard/employees) 표시 컬럼 기본 순서.
+// employee-table.tsx는 "use client"라 거기서 export한 상수를 서버 컴포넌트(page.tsx)에서 가져오면
+// 클라이언트 레퍼런스로 처리돼 배열이 아니게 되므로, 서버/클라이언트 양쪽이 쓸 상수는 여기에 둔다.
+export const EMPLOYEE_COLUMNS = [
+  "name",
+  "phone",
+  "email",
+  "store_id",
+  "part_id",
+  "position_id",
+  "rank_id",
+  "employment_type",
+  "status",
+  "hired_at",
+  "resigned_at",
+  "notes",
+] as const
+
 // tb_zone_mst 테이블의 FK 컬럼 → 이름 표시용 조회 설정 (PK 컬럼명이 "id"가 아닌 테이블 포함)
 export const ZONE_FK_LOOKUPS: {
   column: string
@@ -196,6 +221,13 @@ export type MultiOption = string | SelectOption
 
 export const STORAGE_OPTIONS: SelectOption[] = ["냉장", "냉동", "상온"].map((v) => ({ value: v, label: v }))
 
+// tb_store_mst.scope — 매장(store) vs 본사(hq). 직원 관리에서 배정 가능한 파트를
+// 이 값으로 좁힌다 (PART_CODES_BY_STORE_SCOPE 참고).
+export const STORE_SCOPE_OPTIONS: SelectOption[] = [
+  { value: "store", label: "매장" },
+  { value: "hq", label: "본사" },
+]
+
 export const STATUS_OPTIONS: SelectOption[] = ["SEMI", "PREP", "COOK", "UNPROC"].map((v) => ({ value: v, label: v }))
 
 export const UNIT_OPTIONS: SelectOption[] = ["g", "ml", "ea"].map((v) => ({ value: v, label: v }))
@@ -215,6 +247,7 @@ export const TABLE_FIELD_ORDER: Record<string, string[]> = {
   tb_prod_mst: ["category_code", "prod_code"],
   // 지점을 먼저 고른 뒤 그 지점의 구역 유형을 고르는 흐름
   tb_zone_mst: ["store_id", "zone_type_id"],
+  tb_store_mst: ["store_code", "store_name", "scope", "address"],
 }
 
 // 테이블별 기본 정렬 컬럼

@@ -31,8 +31,8 @@ export default async function DashboardPage() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">출퇴근 (PIN 체크인)</h1>
-        <p className="mt-1 text-sm text-muted-foreground">{employee.storeName} · SP 파트 공용 화면</p>
+        <h1 className="text-2xl font-semibold tracking-tight">{employee.storeName} SP(서비스파트) HOME</h1>
+        <p className="mt-1 text-sm text-muted-foreground">출퇴근(PIN 체크인) · SP 파트 공용 화면</p>
       </div>
       <AttendanceKiosk initialStaff={kioskResult.staff} initialNotices={notices} />
     </div>

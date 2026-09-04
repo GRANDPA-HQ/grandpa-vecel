@@ -299,7 +299,7 @@ export async function reissuePin(
 
   // 새로 PIN이 발급되면 키오스크 목록에 바로 나타나야 하므로 캐시를 즉시 무효화한다.
   updateTag(kioskStaffTag(employee.storeId))
-  revalidatePath("/dashboard/attendance/manage")
+  revalidatePath("/dashboard/employees/pin")
   revalidatePath("/dashboard")
   return { success: true, pin }
 }
