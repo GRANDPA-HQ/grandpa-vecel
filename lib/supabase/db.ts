@@ -284,6 +284,44 @@ export async function getAllTableRows(
 }
 
 /**
+ * 감사 로그(tb_audit_log) 기록용 — 수정 전 특정 컬럼 값을 조회한다.
+ * PATCH를 보내기 직전에 호출해 "이전 값"을 남겨야 나중에 되돌릴 수 있다.
+ */
+export async function getRowValue(
+  table: string,
+  pkColumn: string,
+  pkValue: string,
+  column: string,
+): Promise<unknown> {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/${encodeURIComponent(table)}?select=${encodeURIComponent(column)}&${encodeURIComponent(pkColumn)}=eq.${encodeURIComponent(pkValue)}`,
+    { headers: authHeaders(), cache: "no-store" },
+  )
+  if (!res.ok) return undefined
+  const rows = (await res.json()) as Record<string, unknown>[]
+  return rows[0]?.[column]
+}
+
+/**
+ * 감사 로그 기록용 — 삭제 전 행 전체를 조회한다. 삭제된 행을 되돌리려면(재삽입) 전체 값이 필요하다.
+ */
+export async function getRowsByPk(
+  table: string,
+  pkColumn: string,
+  pkValues: string[],
+): Promise<Record<string, unknown>[]> {
+  if (pkValues.length === 0) return []
+  const quoted = pkValues.map((v) => `"${v.replace(/"/g, '\\"')}"`).join(",")
+  const filter = `${encodeURIComponent(pkColumn)}=in.${encodeURIComponent(`(${quoted})`)}`
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${encodeURIComponent(table)}?select=*&${filter}`, {
+    headers: authHeaders(),
+    cache: "no-store",
+  })
+  if (!res.ok) return []
+  return (await res.json()) as Record<string, unknown>[]
+}
+
+/**
  * Update a single row in a table, identified by the given primary key column/value.
  */
 export async function updateTableRow(
@@ -667,18 +705,19 @@ export async function getSubmatZoneLinks(): Promise<SubmatZoneLink[]> {
 }
 
 /**
- * Insert a single row into a table.
+ * Insert a single row into a table. 감사 로그가 생성된 PK를 남길 수 있도록 삽입된 행을 반환한다
+ * (return=representation).
  */
 export async function insertTableRow(
   table: string,
   data: Record<string, unknown>,
-): Promise<void> {
+): Promise<Record<string, unknown> | null> {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${encodeURIComponent(table)}`, {
     method: "POST",
     headers: {
       ...authHeaders(),
       "Content-Type": "application/json",
-      Prefer: "return=minimal",
+      Prefer: "return=representation",
     },
     body: JSON.stringify(data),
   })
@@ -691,6 +730,12 @@ export async function insertTableRow(
     throw new Error(`HTTP ${res.status}: ${body}`)
   }
   revalidateTableCache(table)
+  try {
+    const rows = (await res.json()) as Record<string, unknown>[]
+    return rows[0] ?? null
+  } catch {
+    return null
+  }
 }
 
 export type SalesOrderRecord = {

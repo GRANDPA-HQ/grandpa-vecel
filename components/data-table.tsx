@@ -576,6 +576,7 @@ export function DataTable({
   hiddenColumns,
   categoryFilter,
   extraFilter,
+  readOnly,
 }: {
   columns: string[]
   rows: Record<string, unknown>[]
@@ -606,6 +607,9 @@ export function DataTable({
   // categoryFilter와 별개로 동작하는 두 번째 필터 (예: 시설 관리의 장비/집기/시설 상위 구분).
   // 값은 자체 URL 파라미터(paramName)에 저장되며, 실제 필터링은 페이지(서버 컴포넌트)가 담당한다.
   extraFilter?: { paramName: string; options: SelectOption[]; placeholder?: string }
+  // true면 pkColumn이 있어도 인라인 수정/삭제 UI를 감춘다 (예: 감사 로그 — 뷰어에서 값을 고치거나
+  // 지울 수 있으면 감사 로그로서의 신뢰성이 깨짐)
+  readOnly?: boolean
 }) {
   const [rows, setRows] = useState(initialRows)
   const [errors, setErrors] = useState<ErrorEntry[]>([])
@@ -752,7 +756,7 @@ export function DataTable({
     [tableName, pkColumn, handleError],
   )
 
-  const editable = !!tableName && !!pkColumn
+  const editable = !!tableName && !!pkColumn && !readOnly
   const bulkSelectable = editable && !!bulkDeleteEnabled
   const hasLinkColumn = !!rowLinks && !!pkColumn
   const hasExtraColumn = !!extraColumn && !!pkColumn

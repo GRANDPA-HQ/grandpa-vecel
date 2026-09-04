@@ -1,6 +1,18 @@
 "use server"
 
-import { updateTableRow, insertTableRow, deleteTableRow, deleteTableRows, getNextSkuCode, getNextRawCode, getNextProdCode } from "@/lib/supabase/db"
+import {
+  updateTableRow,
+  insertTableRow,
+  deleteTableRow,
+  deleteTableRows,
+  getRowValue,
+  getRowsByPk,
+  getNextSkuCode,
+  getNextRawCode,
+  getNextProdCode,
+} from "@/lib/supabase/db"
+import { recordAuditLog } from "@/lib/audit-log"
+import { TABLE_PK } from "@/lib/table-config"
 
 export async function fetchNextSkuCode(categoryCode: string): Promise<string> {
   try {
@@ -51,7 +63,18 @@ export async function updateRow(
       } catch {}
     }
 
+    // PATCH 직전에 이전 값을 읽어둬야 감사 로그로 남겨 나중에 되돌릴 수 있다
+    const oldValue = await getRowValue(table, pkColumn, pkValue, column).catch(() => undefined)
     await updateTableRow(table, pkColumn, pkValue, { [column]: parsed })
+    await recordAuditLog({
+      tableName: table,
+      pkColumn,
+      pkValue,
+      action: "update",
+      columnName: column,
+      oldValue: oldValue ?? null,
+      newValue: parsed,
+    })
     return { error: null }
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e) }
@@ -64,7 +87,11 @@ export async function deleteRow(
   pkValue: string,
 ): Promise<{ error: string | null }> {
   try {
+    const [oldRow] = await getRowsByPk(table, pkColumn, [pkValue]).catch(() => [])
     await deleteTableRow(table, pkColumn, pkValue)
+    if (oldRow) {
+      await recordAuditLog({ tableName: table, pkColumn, pkValue, action: "delete", oldValue: oldRow })
+    }
     return { error: null }
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e) }
@@ -77,7 +104,19 @@ export async function deleteRows(
   pkValues: string[],
 ): Promise<{ error: string | null }> {
   try {
+    const oldRows = await getRowsByPk(table, pkColumn, pkValues).catch(() => [])
     await deleteTableRows(table, pkColumn, pkValues)
+    await Promise.all(
+      oldRows.map((row) =>
+        recordAuditLog({
+          tableName: table,
+          pkColumn,
+          pkValue: String(row[pkColumn] ?? ""),
+          action: "delete",
+          oldValue: row,
+        }),
+      ),
+    )
     return { error: null }
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e) }
@@ -107,7 +146,20 @@ export async function insertRow(
         parsed[key] = val
       }
     }
-    await insertTableRow(table, parsed)
+    const created = await insertTableRow(table, parsed)
+    if (created) {
+      const pkColumn = TABLE_PK[table] ?? "id"
+      const pkValue = created[pkColumn]
+      if (pkValue !== undefined && pkValue !== null) {
+        await recordAuditLog({
+          tableName: table,
+          pkColumn,
+          pkValue: String(pkValue),
+          action: "insert",
+          newValue: created,
+        })
+      }
+    }
     return { error: null }
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e) }

@@ -72,7 +72,12 @@ export const TABLE_LABELS: Record<string, string> = {
   tb_sp_attendance_log:  "SP 출퇴근 기록",
   tb_notice:             "공지",
   tb_notice_ack:         "공지 확인",
+  tb_audit_log:          "감사 로그",
 }
+
+// 뷰어에서 인라인 수정·삭제를 막을 테이블 — 감사 로그는 그 자체가 변경 이력이라
+// 뷰어에서 값을 고치거나 지울 수 있으면 신뢰할 수 없게 된다.
+export const READ_ONLY_TABLES = new Set(["tb_audit_log"])
 
 // employees 테이블의 FK 컬럼 → 이름 표시용 조회 설정 (화면·엑셀 추출 공용)
 // labelOrder: 드롭다운 표시 순서 (없으면 라벨 컬럼 기준 기본 정렬)
@@ -177,6 +182,8 @@ export const TABLE_HIDDEN_COLS: Record<string, Set<string>> = {
   // 실제로는 모든 행에서 비어 있어(null) 별도로 관리되지 않는 중복 컬럼 — 목록 화면에서 숨김.
   // (DB 컬럼 자체는 남겨둔다. 나중에 실제로 필요해지면 이 줄만 지우면 다시 노출된다.)
   tb_submat_mst:  new Set(["purchase_section_id"]),
+  // changed_by는 uuid FK — changed_by_name에 당시 이름이 스냅샷으로 이미 있어 목록에서는 숨김
+  tb_audit_log:   new Set(["changed_by"]),
 }
 
 // 테이블별 데이터 테이블 컬럼 표시 순서 (지정 안 한 나머지 컬럼은 기존 순서 그대로 뒤에 붙음)
@@ -268,6 +275,7 @@ export const TABLE_DEFAULT_SORT: Record<string, { column: string; dir: "asc" | "
   tb_asset_mst:    { column: "asset_code", dir: "asc" },
   tb_sp_attendance_log: { column: "checked_at", dir: "desc" },
   tb_notice:       { column: "created_at", dir: "desc" },
+  tb_audit_log:    { column: "changed_at", dir: "desc" },
 }
 
 // 테이블별 검색 대상 컬럼 (코드/이름 등)
@@ -288,6 +296,7 @@ export const TABLE_SEARCH_COLUMNS: Record<string, string[]> = {
   tb_sop_mst:      ["sop_code", "sop_title"],
   tb_asset_mst:    ["asset_code", "asset_name", "serial_no"],
   tb_notice:       ["title"],
+  tb_audit_log:    ["table_name", "pk_value", "changed_by_name"],
 }
 
 // tb_sop_mst 드롭박스 옵션 (DB ENUM과 동일한 값)

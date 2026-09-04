@@ -149,4 +149,14 @@ export const COLUMN_LABELS: Record<string, string> = {
   warranty_until: "보증 만료일",
   as_contact: "A/S 연락처",
   service_vendor: "관리 업체",
+  // 감사 로그 (tb_audit_log)
+  table_name: "테이블",
+  pk_column: "PK 컬럼",
+  pk_value: "PK 값",
+  action: "동작",
+  column_name: "수정된 컬럼",
+  old_value: "이전 값",
+  new_value: "새 값",
+  changed_by_name: "작업자",
+  changed_at: "작업 시각",
 }
