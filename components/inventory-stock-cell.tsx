@@ -5,7 +5,17 @@ import { Check, Loader2 } from "lucide-react"
 import { updateRow } from "@/app/actions/table-edit"
 import { cn } from "@/lib/utils"
 
-export function InventoryStockCell({ skuId, initialQty }: { skuId: string; initialQty: number }) {
+export function InventoryStockCell({
+  tableName,
+  pkColumn,
+  pkValue,
+  initialQty,
+}: {
+  tableName: string
+  pkColumn: string
+  pkValue: string
+  initialQty: number
+}) {
   const [value, setValue] = useState(String(initialQty))
   const [saved, setSaved] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -24,7 +34,7 @@ export function InventoryStockCell({ skuId, initialQty }: { skuId: string; initi
       return
     }
     startTransition(async () => {
-      const { error } = await updateRow("tb_sku_mst", "id", skuId, "stock_qty", String(n), "number")
+      const { error } = await updateRow(tableName, pkColumn, pkValue, "stock_qty", String(n), "number")
       if (error) {
         setError(error)
         return

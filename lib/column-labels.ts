@@ -126,6 +126,7 @@ export const COLUMN_LABELS: Record<string, string> = {
   store_name: "지점명",
   address: "주소",
   opened_at: "개점일",
+  scope: "지점 구분",
   // 구역 (tb_zone_mst)
   zone_type_id: "구역 유형",
   // 방법서 (tb_sop_mst)

@@ -19,7 +19,6 @@ import {
   Factory,
   ShoppingBag,
   BookOpen,
-  UserCog,
   Megaphone,
   type LucideIcon,
 } from "lucide-react"
@@ -60,7 +59,6 @@ export function DashboardSidebar({
 
     { kind: "group", label: "출퇴근" },
     { kind: "leaf", label: "공지 게시판", href: "/dashboard/attendance/notices", icon: Megaphone, visible: true, exact: true },
-    { kind: "leaf", label: "PIN 발급 관리", href: "/dashboard/attendance/manage", icon: UserCog, visible: isManager, exact: true },
 
     { kind: "group", label: "운영/생산 일지" },
     { kind: "leaf", label: "SP 운영일지", href: "/dashboard/operation-log", icon: Store, visible: true, exact: true },
@@ -106,7 +104,14 @@ export function DashboardSidebar({
     { kind: "leaf", label: "판매품 레시피 작성", href: "/dashboard/production-write", icon: ClipboardList, visible: true, exact: true },
     { kind: "leaf", label: "레시피 가이드", href: "/dashboard/recipe-guide", icon: BookText, visible: true },
 
-    { kind: "leaf", label: "직원 관리", href: "/dashboard/employees", icon: Users, visible: isManager },
+    {
+      kind: "leaf",
+      label: "직원 관리",
+      href: "/dashboard/employees",
+      icon: Users,
+      visible: isManager,
+      submenu: [{ label: "PIN 발급 관리", href: "/dashboard/employees/pin" }],
+    },
     { kind: "leaf", label: "버그 리포트", href: "/dashboard/bug-report", icon: Bug, visible: true },
   ]
 

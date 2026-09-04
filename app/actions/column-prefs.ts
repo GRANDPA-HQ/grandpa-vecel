@@ -31,6 +31,8 @@ async function upsertColumnPrefs(tableName: string, patch: Record<string, unknow
   if (error) return { error: "설정을 저장하지 못했습니다." }
 
   revalidatePath(`/dashboard/data-table/${tableName}`)
+  // employees는 범용 데이터 테이블 뷰어가 아니라 전용 화면(/dashboard/employees)에서 열 관리를 쓴다
+  if (tableName === "employees") revalidatePath("/dashboard/employees")
   return { success: true }
 }
 

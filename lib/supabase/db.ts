@@ -575,6 +575,34 @@ export async function getIdLabelOptions(
 }
 
 /**
+ * parts 목록을 code까지 포함해 조회 — 직원 관리에서 지점 scope(store/hq)별로
+ * 배정 가능한 파트를 code 기준으로 좁히는 데 쓴다 (이름만으로는 구분 불가).
+ */
+export async function getPartOptionsWithCode(): Promise<{ value: string; label: string; code: string }[]> {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/parts?select=id,code,name_ko&order=sort_order`,
+    { headers: authHeaders(), cache: "no-store" },
+  )
+  if (!res.ok) return []
+  const rows = (await res.json()) as { id: string; code: string; name_ko: string }[]
+  return rows.map((r) => ({ value: r.id, label: r.name_ko, code: r.code }))
+}
+
+/**
+ * 지점 id → scope("store" | "hq") 맵. 직원 관리에서 직원이 소속된 지점의 scope에 따라
+ * 파트 선택지를 좁히는 데 쓴다(매장=서비스/키친, 본사=경영지원/재무회계).
+ */
+export async function getStoreScopeMap(): Promise<Record<string, string>> {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/tb_store_mst?select=id,scope`,
+    { headers: authHeaders(), cache: "no-store" },
+  )
+  if (!res.ok) return {}
+  const rows = (await res.json()) as { id: string; scope: string }[]
+  return Object.fromEntries(rows.map((r) => [r.id, r.scope]))
+}
+
+/**
  * Fetch id → display label mapping for tb_zone_type_mst (전사 공통 Zone 정의).
  * TB_SUBMAT_MST 등 전사 공통 카탈로그 테이블은 zone_id가 아닌 zone_type_id를 참조한다.
  * (물리 실체를 참조하는 자산·재고·로그 테이블만 zone_id를 참조 — 서대표 확정 v1.0 원칙)
@@ -782,6 +810,84 @@ export async function getSkuStockRows(): Promise<SkuStockRow[] | null> {
   }
 
   return (await res.json()) as SkuStockRow[]
+}
+
+/**
+ * 원재료(tb_raw_mst)/생산품(tb_prod_mst)/포장부자재(tb_submat_mst) 재고 관리용 목록 — 1차 구현.
+ * 판매품(getSkuStockRows)과 동일한 패턴: 지점/존 구분 없이 단일 stock_qty 컬럼만 관리한다.
+ */
+export type RawStockRow = {
+  id: string
+  raw_code: string
+  raw_name: string
+  category_code: string | null
+  stock_qty: number
+  is_active: boolean
+}
+
+export async function getRawStockRows(): Promise<RawStockRow[] | null> {
+  const url =
+    `${SUPABASE_URL}/rest/v1/tb_raw_mst` +
+    `?select=id,raw_code,raw_name,category_code,stock_qty,is_active` +
+    `&order=raw_code.asc`
+
+  const res = await fetch(url, { headers: authHeaders(), cache: "no-store" })
+
+  if (!res.ok) {
+    if (res.status === 404 || res.status === 400) return null
+    throw new Error(`Failed to read 원재료 stock (${res.status})`)
+  }
+
+  return (await res.json()) as RawStockRow[]
+}
+
+export type ProdStockRow = {
+  id: string
+  prod_code: string
+  prod_name: string
+  category_code: string | null
+  stock_qty: number
+  is_active: boolean
+}
+
+export async function getProdStockRows(): Promise<ProdStockRow[] | null> {
+  const url =
+    `${SUPABASE_URL}/rest/v1/tb_prod_mst` +
+    `?select=id,prod_code,prod_name,category_code,stock_qty,is_active` +
+    `&order=prod_code.asc`
+
+  const res = await fetch(url, { headers: authHeaders(), cache: "no-store" })
+
+  if (!res.ok) {
+    if (res.status === 404 || res.status === 400) return null
+    throw new Error(`Failed to read 생산품 stock (${res.status})`)
+  }
+
+  return (await res.json()) as ProdStockRow[]
+}
+
+export type SubmatStockRow = {
+  submat_id: string
+  item_name: string
+  category_code: string | null
+  stock_qty: number
+  is_active: boolean
+}
+
+export async function getSubmatStockRows(): Promise<SubmatStockRow[] | null> {
+  const url =
+    `${SUPABASE_URL}/rest/v1/tb_submat_mst` +
+    `?select=submat_id,item_name,category_code,stock_qty,is_active` +
+    `&order=submat_id.asc`
+
+  const res = await fetch(url, { headers: authHeaders(), cache: "no-store" })
+
+  if (!res.ok) {
+    if (res.status === 404 || res.status === 400) return null
+    throw new Error(`Failed to read 포장부자재 stock (${res.status})`)
+  }
+
+  return (await res.json()) as SubmatStockRow[]
 }
 
 /**

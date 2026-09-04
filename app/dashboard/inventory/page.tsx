@@ -1,6 +1,6 @@
 import { AlertTriangle, PackageSearch } from "lucide-react"
 import { getSkuStockRows, getCategoryOptions } from "@/lib/supabase/db"
-import { InventoryTable } from "@/components/inventory-table"
+import { InventoryTable, type InventoryRow } from "@/components/inventory-table"
 import type { SelectOption } from "@/lib/table-config"
 
 export default async function InventoryPage() {
@@ -12,6 +12,16 @@ export default async function InventoryPage() {
     loadError = e instanceof Error ? e.message : String(e)
   }
   const categoryOptions: SelectOption[] = await getCategoryOptions("SKU").catch(() => [])
+
+  const inventoryRows: InventoryRow[] = (rows ?? []).map((r) => ({
+    pkValue: r.id,
+    code: r.sku_code,
+    name: r.sku_name,
+    categoryCode: r.category_code,
+    isActive: r.is_active,
+    stockQty: r.stock_qty,
+    priceLabel: r.sell_price != null ? `${r.sell_price.toLocaleString("ko-KR")}원` : null,
+  }))
 
   return (
     <div className="flex flex-col gap-6">
@@ -40,7 +50,15 @@ export default async function InventoryPage() {
           <p className="text-sm">등록된 판매품(SKU)이 없습니다.</p>
         </div>
       ) : (
-        <InventoryTable rows={rows} categoryOptions={categoryOptions} />
+        <InventoryTable
+          rows={inventoryRows}
+          categoryOptions={categoryOptions}
+          tableName="tb_sku_mst"
+          pkColumn="id"
+          emptyMessage="해당 카테고리의 판매품이 없습니다."
+          activeLabel="판매중"
+          inactiveLabel="판매중지"
+        />
       )}
     </div>
   )

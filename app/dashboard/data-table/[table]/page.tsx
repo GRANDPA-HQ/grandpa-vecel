@@ -39,6 +39,7 @@ import {
   STORAGE_OPTIONS,
   STATUS_OPTIONS,
   UNIT_OPTIONS,
+  STORE_SCOPE_OPTIONS,
   SKU_MULTI_OPTIONS,
   TABLE_FIELD_ORDER,
   SOP_CATEGORY_OPTIONS,
@@ -47,7 +48,7 @@ import {
   type SelectOption,
 } from "@/lib/table-config"
 
-const INSERTABLE_TABLES = new Set(["tb_prod_mst", "tb_raw_mst", "tb_sku_mst", "tb_sku_recipe", "tb_prod_recipe", "tb_zone_mst"])
+const INSERTABLE_TABLES = new Set(["tb_prod_mst", "tb_raw_mst", "tb_sku_mst", "tb_sku_recipe", "tb_prod_recipe", "tb_zone_mst", "tb_store_mst"])
 
 // 체크박스 선택 일괄 삭제를 지원하는 테이블
 const BULK_DELETE_TABLES = new Set(["tb_raw_mst", "tb_prod_mst", "tb_sku_mst"])
@@ -364,6 +365,9 @@ export default async function TablePage({
   }
   if (UNIT_TABLES.has(tableName)) {
     columnOptions["unit"] = UNIT_OPTIONS
+  }
+  if (tableName === "tb_store_mst") {
+    columnOptions["scope"] = STORE_SCOPE_OPTIONS
   }
   if (tableName === "tb_sku_mst") {
     // allergen_tags는 ENUM 값(MILK 등)으로 저장되므로 표시 시 한글명으로 변환
