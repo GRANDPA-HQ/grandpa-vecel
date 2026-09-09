@@ -31,6 +31,21 @@ export function kstDateToIso(dateStr: string): string {
   return `${dateStr}T00:00:00+09:00`
 }
 
+/** KST 기준 "YYYY-MM-DD" 날짜 + "HH:MM" 시각을 +09:00 오프셋 ISO 문자열로 변환 (출퇴근 이력 수정용) */
+export function kstDateTimeToIso(dateStr: string, timeStr: string): string {
+  return `${dateStr}T${timeStr}:00+09:00`
+}
+
+/** "YYYY-MM" 문자열이 유효한 월인지 검사 */
+export function isValidMonthStr(value: string | undefined): value is string {
+  return !!value && /^\d{4}-\d{2}$/.test(value)
+}
+
+/** 오늘 월을 KST 기준 "YYYY-MM"으로 반환 */
+export function currentMonthKst(): string {
+  return todayKst().slice(0, 7)
+}
+
 /** ISO timestamptz 값을 KST 기준 "YYYY-MM-DD"로 변환 (일별 집계용) */
 export function isoToKstDate(iso: string): string {
   return KST_FORMATTER.format(new Date(iso))
