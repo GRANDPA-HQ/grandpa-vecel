@@ -10,12 +10,43 @@ import {
   PAGE_SIZE,
   type RowCursor,
 } from "@/lib/table-config"
+import { COLUMN_LABELS } from "@/lib/column-labels"
 
 // CACHEABLE_MASTER_TABLES에 속한 테이블의 캐시 태그 — 쓰기 시 updateTag로 이 태그만 즉시 무효화한다.
 // (updateTag는 revalidateTag와 달리 Server Action 안에서 바로 최신 데이터를 읽게 해준다 — "read-your-own-writes")
 const cacheTag = (table: string) => `table:${table}`
 function revalidateTableCache(table: string) {
   if (CACHEABLE_MASTER_TABLES.has(table)) updateTag(cacheTag(table))
+}
+
+/**
+ * PostgREST가 돌려주는 날것의 Postgres 에러(JSON body)를 사람이 이해할 수 있는 한글 메시지로 바꾼다.
+ * 파싱에 실패하거나 알려진 패턴이 아니면 원본 메시지를 그대로 보여준다(디버깅용으로 여전히 유용).
+ */
+function friendlyPostgrestError(status: number, body: string): string {
+  let parsed: { code?: string; message?: string } = {}
+  try {
+    parsed = JSON.parse(body)
+  } catch {
+    return `HTTP ${status}: ${body}`
+  }
+  const raw = parsed.message ?? ""
+
+  const notNull = raw.match(/null value in column "([^"]+)"/)
+  if (notNull) {
+    const col = notNull[1]
+    return `"${COLUMN_LABELS[col] ?? col}" 항목은 필수입니다. 값을 입력해주세요.`
+  }
+  if (parsed.code === "23505" || /duplicate key value/.test(raw)) {
+    return "이미 등록된 값입니다. 중복되지 않는 값을 입력해주세요."
+  }
+  if (parsed.code === "23503" || /foreign key constraint/.test(raw)) {
+    return "선택한 값이 존재하지 않거나 삭제된 항목입니다. 다시 선택해주세요."
+  }
+  if (parsed.code === "23514" || /check constraint/.test(raw)) {
+    return "입력한 값이 허용되지 않는 형식이거나 범위를 벗어났습니다."
+  }
+  return raw || `HTTP ${status}: ${body}`
 }
 
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -37,7 +68,7 @@ type OpenApiSpec = {
     string,
     {
       required?: string[]
-      properties?: Record<string, { type?: string; format?: string; description?: string }>
+      properties?: Record<string, { type?: string; format?: string; description?: string; default?: unknown }>
     }
   >
 }
@@ -77,7 +108,9 @@ export async function getTables(): Promise<TableInfo[]> {
         name: colName,
         type: col.type ?? "unknown",
         format: col.format ?? "",
-        required: (def.required ?? []).includes(colName),
+        // DB 기본값(default)이 있는 컬럼은 NOT NULL이라도 사용자가 직접 채우지 않아도 되므로
+        // "필수 입력"에서 제외한다 (예: stock_qty default 0, is_active default true).
+        required: (def.required ?? []).includes(colName) && col.default === undefined,
       })),
     }))
     .sort((a, b) => a.name.localeCompare(b.name))
@@ -346,7 +379,7 @@ export async function updateTableRow(
     try {
       body = await res.text()
     } catch {}
-    throw new Error(`HTTP ${res.status}: ${body}`)
+    throw new Error(friendlyPostgrestError(res.status, body))
   }
   revalidateTableCache(table)
 }
@@ -727,7 +760,7 @@ export async function insertTableRow(
     try {
       body = await res.text()
     } catch {}
-    throw new Error(`HTTP ${res.status}: ${body}`)
+    throw new Error(friendlyPostgrestError(res.status, body))
   }
   revalidateTableCache(table)
   try {

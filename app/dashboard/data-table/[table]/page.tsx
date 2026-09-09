@@ -89,13 +89,14 @@ export default async function TablePage({
   searchParams,
 }: {
   params: Promise<{ table: string }>
-  searchParams: Promise<{ sort?: string; dir?: string; q?: string; category?: string; assetGroup?: string }>
+  searchParams: Promise<{ sort?: string; dir?: string; q?: string; category?: string; assetGroup?: string; zone?: string }>
 }) {
   const { table } = await params
   const tableName = decodeURIComponent(table)
-  const { sort, dir, q, category, assetGroup } = await searchParams
+  const { sort, dir, q, category, assetGroup, zone } = await searchParams
   const categoryValue = category?.trim() ?? ""
   const assetGroupValue = assetGroup?.trim() ?? ""
+  const zoneValue = zone?.trim() ?? ""
 
   const employee = await getCurrentEmployee()
   const storeScope = await getStoreScopeOptions(tableName, employee?.isSenior ?? false, employee?.storeId ?? null)
@@ -269,6 +270,22 @@ export default async function TablePage({
     }
   }
 
+  // tb_submat_mst: Zone유형 선택 필터 — submat_id 자체엔 zone_type_id가 없어(tb_submat_zone_link
+  // 다대다 연결 테이블 경유) 선택한 존유형과 연결된 submat_id 목록을 뽑아 in 필터로 적용한다.
+  // 아래 extraColumn(존 태그 표시) 블록에서도 같은 조회 결과(submatZoneOptions/submatZoneLinks)를 재사용한다.
+  let submatZoneOptions: SelectOption[] = []
+  let submatZoneLinks: SubmatZoneLink[] = []
+  let submatZoneFilterIds: string[] | null = null
+  if (tableName === "tb_submat_mst") {
+    ;[submatZoneOptions, submatZoneLinks] = await Promise.all([
+      getZoneTypeOptions().catch(() => [] as SelectOption[]),
+      getSubmatZoneLinks().catch(() => [] as SubmatZoneLink[]),
+    ])
+    if (zoneValue) {
+      submatZoneFilterIds = submatZoneLinks.filter((l) => l.zone_type_id === zoneValue).map((l) => l.submat_id)
+    }
+  }
+
   let rows: Record<string, unknown>[] = []
   let total: number | null = null
   let nextCursor = null as Awaited<ReturnType<typeof getTableRows>>["nextCursor"]
@@ -293,6 +310,7 @@ export default async function TablePage({
         ...(storeScope.inFilters ?? []),
         ...(assetGroupFilterIds ? [{ column: "asset_type_id", values: assetGroupFilterIds }] : []),
         ...(assetStoreZoneIds ? [{ column: "zone_id", values: assetStoreZoneIds }] : []),
+        ...(submatZoneFilterIds ? [{ column: "submat_id", values: submatZoneFilterIds }] : []),
       ],
     })
     rows = result.rows
@@ -407,16 +425,12 @@ export default async function TablePage({
 
   // tb_submat_mst: 부자재가 사용되는 Zone유형(tb_zone_type_mst)을 태그로 표시·편집.
   // 전사 공통 카탈로그 테이블이라 zone_id가 아닌 zone_type_id를 참조한다 (서대표 확정 v1.0 원칙).
-  // ※ tb_submat_zone_link 테이블이 아직 없으면 조회가 빈 배열로 폴백되어 화면은 정상 렌더링된다.
+  // 존유형 옵션/연결 데이터는 위쪽 존 검색 필터 블록에서 이미 조회해둔 걸 그대로 재사용한다.
   let extraColumn: { header: string; cellsByPk: Record<string, ReactNode> } | undefined
   if (tableName === "tb_submat_mst") {
     try {
-      const [zoneOptions, links] = await Promise.all([
-        getZoneTypeOptions().catch(() => [] as SelectOption[]),
-        getSubmatZoneLinks().catch(() => [] as SubmatZoneLink[]),
-      ])
       const linksBySubmat: Record<string, string[]> = {}
-      for (const link of links) {
+      for (const link of submatZoneLinks) {
         ;(linksBySubmat[link.submat_id] ??= []).push(link.zone_type_id)
       }
       extraColumn = {
@@ -431,7 +445,7 @@ export default async function TablePage({
                   key={submatId}
                   submatId={submatId}
                   initialZoneIds={linksBySubmat[submatId] ?? []}
-                  zoneOptions={zoneOptions}
+                  zoneOptions={submatZoneOptions}
                   managePartId={String(row["manage_part_id"] ?? "")}
                 />
               ),
@@ -478,7 +492,7 @@ export default async function TablePage({
         </div>
       ) : (
         <DataTable
-          key={`${sortColumn ?? ""}-${sortDir}-${searchQuery}-${categoryValue}-${assetGroupValue}`}
+          key={`${sortColumn ?? ""}-${sortDir}-${searchQuery}-${categoryValue}-${assetGroupValue}-${zoneValue}`}
           columns={columns}
           rows={rows}
           total={total}
@@ -513,7 +527,9 @@ export default async function TablePage({
           extraFilter={
             tableName === "tb_asset_mst"
               ? { paramName: "assetGroup", options: ASSET_GROUP_OPTIONS, placeholder: "전체 구분" }
-              : undefined
+              : tableName === "tb_submat_mst" && submatZoneOptions.length > 0
+                ? { paramName: "zone", options: submatZoneOptions, placeholder: "전체 존" }
+                : undefined
           }
         />
       )}

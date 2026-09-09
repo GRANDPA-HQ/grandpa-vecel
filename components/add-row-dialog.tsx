@@ -167,6 +167,20 @@ export function AddRowDialog({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
+
+    // 필수 항목이 비어있으면 서버로 보내기 전에 막고, 어떤 항목이 빠졌는지 바로 알려준다
+    // (예: 카테고리를 안 고르면 코드 자동 채번도 안 되고 등록도 실패하는데, 이걸 미리 알려줘야 함)
+    const missing = columns.filter((col) => {
+      if (!col.required) return false
+      const value = values[col.name]
+      if (columnMultiOptions?.[col.name]) return parseMultiValue(value).length === 0
+      return !value || value.trim() === ""
+    })
+    if (missing.length > 0) {
+      setError(`다음 항목을 입력해주세요: ${missing.map((c) => COLUMN_LABELS[c.name] ?? c.name).join(", ")}`)
+      return
+    }
+
     const columnTypes: Record<string, string> = {}
     for (const col of columns) {
       columnTypes[col.name] = col.type
