@@ -1,5 +1,10 @@
 import { AlertTriangle, PackageSearch } from "lucide-react"
-import { getSubmatStockRows, getSubmatCategoryOptions } from "@/lib/supabase/db"
+import {
+  getSubmatStockRows,
+  getSubmatCategoryOptions,
+  getZoneTypeOptions,
+  getSubmatZoneLinks,
+} from "@/lib/supabase/db"
 import { InventoryTable, type InventoryRow } from "@/components/inventory-table"
 import type { SelectOption } from "@/lib/table-config"
 
@@ -12,6 +17,16 @@ export default async function InventorySubmatPage() {
     loadError = e instanceof Error ? e.message : String(e)
   }
   const categoryOptions: SelectOption[] = await getSubmatCategoryOptions().catch(() => [])
+  const [zoneOptions, zoneLinks] = await Promise.all([
+    getZoneTypeOptions().catch(() => [] as SelectOption[]),
+    getSubmatZoneLinks().catch(() => []),
+  ])
+  const zoneTypeIdsBySubmat = new Map<string, string[]>()
+  for (const link of zoneLinks) {
+    const list = zoneTypeIdsBySubmat.get(link.submat_id) ?? []
+    list.push(link.zone_type_id)
+    zoneTypeIdsBySubmat.set(link.submat_id, list)
+  }
 
   const inventoryRows: InventoryRow[] = (rows ?? []).map((r) => ({
     pkValue: r.submat_id,
@@ -20,6 +35,7 @@ export default async function InventorySubmatPage() {
     categoryCode: r.category_code,
     isActive: r.is_active,
     stockQty: r.stock_qty,
+    zoneTypeIds: zoneTypeIdsBySubmat.get(r.submat_id) ?? [],
   }))
 
   return (
@@ -50,9 +66,10 @@ export default async function InventorySubmatPage() {
         <InventoryTable
           rows={inventoryRows}
           categoryOptions={categoryOptions}
+          zoneOptions={zoneOptions}
           tableName="tb_submat_mst"
           pkColumn="submat_id"
-          emptyMessage="해당 카테고리의 포장 부자재가 없습니다."
+          emptyMessage="해당 카테고리/존의 포장 부자재가 없습니다."
         />
       )}
     </div>

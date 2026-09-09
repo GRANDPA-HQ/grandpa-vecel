@@ -18,11 +18,14 @@ export type InventoryRow = {
   isActive: boolean
   stockQty: number
   priceLabel?: string | null
+  // 이 항목이 쓰이는 존유형 목록 — 포장 부자재의 존별 검색에만 쓰인다 (그 외 테이블은 미지정)
+  zoneTypeIds?: string[]
 }
 
 export function InventoryTable({
   rows,
   categoryOptions,
+  zoneOptions,
   tableName,
   pkColumn,
   emptyMessage,
@@ -31,6 +34,8 @@ export function InventoryTable({
 }: {
   rows: InventoryRow[]
   categoryOptions: SelectOption[]
+  // 지정하면 카테고리 선택란 옆에 존 선택 필터가 함께 표시된다 (포장 부자재 전용)
+  zoneOptions?: SelectOption[]
   tableName: string
   pkColumn: string
   emptyMessage: string
@@ -38,24 +43,40 @@ export function InventoryTable({
   inactiveLabel?: string
 }) {
   const [category, setCategory] = useState("")
+  const [zone, setZone] = useState("")
 
   const filteredRows = useMemo(
-    () => (category ? rows.filter((r) => r.categoryCode === category) : rows),
-    [rows, category],
+    () =>
+      rows
+        .filter((r) => !category || r.categoryCode === category)
+        .filter((r) => !zone || r.zoneTypeIds?.includes(zone)),
+    [rows, category, zone],
   )
 
   const showPrice = rows.some((r) => r.priceLabel !== undefined)
 
   return (
     <div className="flex flex-col gap-3">
-      <SearchableSelect
-        className="w-56"
-        value={category}
-        onChange={setCategory}
-        placeholder="전체 카테고리"
-        searchPlaceholder="카테고리 검색..."
-        options={[{ value: "", label: "전체 카테고리" }, ...categoryOptions]}
-      />
+      <div className="flex flex-wrap items-center gap-2">
+        <SearchableSelect
+          className="w-56"
+          value={category}
+          onChange={setCategory}
+          placeholder="전체 카테고리"
+          searchPlaceholder="카테고리 검색..."
+          options={[{ value: "", label: "전체 카테고리" }, ...categoryOptions]}
+        />
+        {zoneOptions && zoneOptions.length > 0 && (
+          <SearchableSelect
+            className="w-40"
+            value={zone}
+            onChange={setZone}
+            placeholder="전체 존"
+            searchPlaceholder="존 검색..."
+            options={[{ value: "", label: "전체 존" }, ...zoneOptions]}
+          />
+        )}
+      </div>
 
       {filteredRows.length === 0 ? (
         <div className="flex flex-col items-center gap-2 rounded-xl border border-border bg-card p-12 text-center text-muted-foreground">
