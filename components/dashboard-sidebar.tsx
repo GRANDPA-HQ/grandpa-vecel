@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
@@ -20,6 +21,8 @@ import {
   ShoppingBag,
   BookOpen,
   Megaphone,
+  ChevronLeft,
+  ChevronRight,
   History,
   type LucideIcon,
 } from "lucide-react"
@@ -28,6 +31,8 @@ import { SignOutButton } from "@/components/sign-out-button"
 import { ChangePasswordButton } from "@/components/change-password-button"
 
 const DATA_TABLE_HREF = "/dashboard/data-table"
+// 사이드바 접힘 상태를 기억해두는 localStorage 키 — 페이지 이동/새로고침에도 유지
+const SIDEBAR_COLLAPSED_KEY = "grandpa-sidebar-collapsed"
 
 type NavGroup = { kind: "group"; label: string }
 type NavLeaf = {
@@ -51,6 +56,21 @@ export function DashboardSidebar({
   userName: string
 }) {
   const pathname = usePathname()
+  const [isCollapsed, setIsCollapsed] = useState(false)
+
+  // 마운트 시 이전에 저장해둔 접힘 상태를 복원
+  useEffect(() => {
+    const stored = window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY)
+    if (stored === "1") setIsCollapsed(true)
+  }, [])
+
+  const toggleCollapsed = () => {
+    setIsCollapsed((prev) => {
+      const next = !prev
+      window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? "1" : "0")
+      return next
+    })
+  }
 
   // 각 leaf 항목에 submenu(하위 메뉴)를 선택적으로 붙일 수 있는 구조.
   // submenu가 있고 현재 경로가 그 항목 하위이면, 해당 항목 바로 아래에 자동으로 펼쳐짐.
@@ -118,25 +138,46 @@ export function DashboardSidebar({
   ]
 
   return (
-    <aside className="flex w-60 shrink-0 flex-col bg-gray-900">
-      {/* 브랜드 로고 */}
-      <Link
-        href="/dashboard"
-        className="flex items-center gap-2.5 border-b border-gray-800 px-5 py-5"
+    <aside
+      className={cn(
+        "flex shrink-0 flex-col bg-gray-900 transition-[width] duration-200",
+        isCollapsed ? "w-16" : "w-60",
+      )}
+    >
+      {/* 브랜드 로고 + 접기/펼치기 토글 */}
+      <div
+        className={cn(
+          "flex items-center border-b border-gray-800 py-5",
+          isCollapsed ? "justify-center px-3" : "justify-between px-5",
+        )}
       >
-        <span className="text-lg font-extrabold tracking-tight text-emerald-400">Granpa-co</span>
-      </Link>
+        {!isCollapsed && (
+          <Link href="/dashboard" className="flex items-center gap-2.5">
+            <span className="text-lg font-extrabold tracking-tight text-emerald-400">Granpa-co</span>
+          </Link>
+        )}
+        <button
+          type="button"
+          onClick={toggleCollapsed}
+          title={isCollapsed ? "사이드바 펼치기" : "사이드바 접기"}
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-800 hover:text-gray-300"
+        >
+          {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+        </button>
+      </div>
 
       {/* 메인 네비게이션 */}
       <nav className="flex flex-1 flex-col overflow-y-auto py-3">
-        <p className="px-5 pb-2 pt-1 text-[10px] font-semibold uppercase tracking-widest text-gray-600">
-          메뉴
-        </p>
+        {!isCollapsed && (
+          <p className="px-5 pb-2 pt-1 text-[10px] font-semibold uppercase tracking-widest text-gray-600">
+            메뉴
+          </p>
+        )}
 
         {navItems
-          .filter((entry) => entry.kind === "group" || entry.visible)
+          .filter((entry) => (entry.kind === "group" ? !isCollapsed : entry.visible))
           .map((entry, i) => {
-            // 섹션 구분 라벨 — 클릭 불가, 이후 항목들을 그룹으로 묶어 보여주는 용도
+            // 섹션 구분 라벨 — 클릭 불가, 이후 항목들을 그룹으로 묶어 보여주는 용도 (접힘 상태에선 숨김)
             if (entry.kind === "group") {
               return (
                 <p
@@ -155,14 +196,21 @@ export function DashboardSidebar({
               return (
                 <div
                   key={`placeholder-${entry.label}`}
-                  title="아직 준비되지 않았습니다"
-                  className="flex cursor-not-allowed items-center gap-3 border-l-2 border-transparent px-5 py-2.5 text-sm text-gray-600"
+                  title={isCollapsed ? `${entry.label} (아직 준비되지 않았습니다)` : "아직 준비되지 않았습니다"}
+                  className={cn(
+                    "flex cursor-not-allowed items-center gap-3 border-l-2 border-transparent py-2.5 text-sm text-gray-600",
+                    isCollapsed ? "justify-center px-0" : "px-5",
+                  )}
                 >
                   <Icon className="h-4 w-4 shrink-0" />
-                  <span className="flex-1">{entry.label}</span>
-                  <span className="rounded-full bg-gray-800 px-1.5 py-0.5 text-[10px] font-medium text-gray-500">
-                    준비중
-                  </span>
+                  {!isCollapsed && (
+                    <>
+                      <span className="flex-1">{entry.label}</span>
+                      <span className="rounded-full bg-gray-800 px-1.5 py-0.5 text-[10px] font-medium text-gray-500">
+                        준비중
+                      </span>
+                    </>
+                  )}
                 </div>
               )
             }
@@ -175,19 +223,21 @@ export function DashboardSidebar({
               <div key={href}>
                 <Link
                   href={href}
+                  title={isCollapsed ? label : undefined}
                   className={cn(
-                    "flex items-center gap-3 border-l-2 px-5 py-2.5 text-sm transition-colors",
+                    "flex items-center gap-3 border-l-2 py-2.5 text-sm transition-colors",
+                    isCollapsed ? "justify-center px-0" : "px-5",
                     isActive
                       ? "border-emerald-500 bg-gray-800 font-medium text-white"
                       : "border-transparent text-gray-400 hover:bg-gray-800 hover:text-gray-200",
                   )}
                 >
                   <Icon className="h-4 w-4 shrink-0" />
-                  {label}
+                  {!isCollapsed && label}
                 </Link>
 
-                {/* 서브메뉴: 이 항목 하위 경로에 있을 때만, 이 항목 바로 아래에 표시 */}
-                {submenu && submenu.length > 0 && isWithinSection && (
+                {/* 서브메뉴: 이 항목 하위 경로에 있을 때만, 이 항목 바로 아래에 표시 (접힘 상태에선 숨김) */}
+                {!isCollapsed && submenu && submenu.length > 0 && isWithinSection && (
                   <div className="bg-gray-950/40 py-1.5">
                     {submenu.map((sub) => {
                       const isSubActive = pathname === sub.href
@@ -216,14 +266,21 @@ export function DashboardSidebar({
 
       {/* 하단: 사용자 + 로그아웃 */}
       <div className="border-t border-gray-800">
-        <div className="flex items-center gap-3 px-5 py-3">
-          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gray-700 text-xs font-bold text-gray-300">
+        <div className={cn("flex items-center gap-3 py-3", isCollapsed ? "justify-center px-2" : "px-5")}>
+          <div
+            title={isCollapsed ? userName : undefined}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gray-700 text-xs font-bold text-gray-300"
+          >
             {userName.charAt(0).toUpperCase()}
           </div>
-          <span className="min-w-0 flex-1 truncate text-sm text-gray-300">{userName}</span>
-          <ChangePasswordButton />
+          {!isCollapsed && (
+            <>
+              <span className="min-w-0 flex-1 truncate text-sm text-gray-300">{userName}</span>
+              <ChangePasswordButton />
+            </>
+          )}
         </div>
-        <SignOutButton />
+        <SignOutButton collapsed={isCollapsed} />
       </div>
     </aside>
   )
