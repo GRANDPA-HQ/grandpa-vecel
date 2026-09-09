@@ -20,6 +20,7 @@ import {
   ShoppingBag,
   BookOpen,
   Megaphone,
+  History,
   type LucideIcon,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -59,6 +60,7 @@ export function DashboardSidebar({
 
     { kind: "group", label: "출퇴근" },
     { kind: "leaf", label: "공지 게시판", href: "/dashboard/attendance/notices", icon: Megaphone, visible: true, exact: true },
+    { kind: "leaf", label: "근태관리", href: "/dashboard/attendance/history", icon: History, visible: isManager },
 
     { kind: "group", label: "운영/생산 일지" },
     { kind: "leaf", label: "SP 운영일지", href: "/dashboard/operation-log", icon: Store, visible: true, exact: true },

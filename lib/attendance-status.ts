@@ -73,3 +73,67 @@ export const CONFIRM_MESSAGE: Record<CheckType, string> = {
   BREAK_END: "휴게를 종료합니다",
   OUT: "퇴근합니다",
 }
+
+// 출퇴근 이력 조회 — 하루치 로그를 순서대로 훑어 출근/퇴근/근무시간/휴게시간을 계산한다.
+// 상태와 마찬가지로 별도 컬럼에 저장하지 않고 로그에서 매번 파생해, 데이터 정합성을 로그 하나로만 관리한다.
+export type BreakPeriod = { start: string; end: string | null }
+
+export type DaySummary = {
+  checkIn: string | null
+  checkOut: string | null
+  workMinutes: number
+  breakMinutes: number
+  breakPeriods: BreakPeriod[]
+  // 근무중/휴게중 로그만 있고 짝이 되는 이벤트가 없는 경우(퇴근 누락 등) — 이력 화면에 "미퇴근" 등으로 표기
+  stillWorking: boolean
+  stillOnBreak: boolean
+}
+
+export function summarizeDay(dayLogs: AttendanceLogRow[]): DaySummary {
+  const sorted = [...dayLogs].sort((a, b) => a.checked_at.localeCompare(b.checked_at))
+
+  let checkIn: string | null = null
+  let checkOut: string | null = null
+  let workMs = 0
+  let breakMs = 0
+  let workingSince: string | null = null
+  let breakSince: string | null = null
+  const breakPeriods: BreakPeriod[] = []
+
+  for (const log of sorted) {
+    if (log.check_type === "IN") {
+      checkIn = checkIn ?? log.checked_at
+      workingSince = log.checked_at
+    } else if (log.check_type === "BREAK_START") {
+      if (workingSince) {
+        workMs += new Date(log.checked_at).getTime() - new Date(workingSince).getTime()
+        workingSince = null
+      }
+      breakSince = log.checked_at
+      breakPeriods.push({ start: log.checked_at, end: null })
+    } else if (log.check_type === "BREAK_END") {
+      if (breakSince) {
+        breakMs += new Date(log.checked_at).getTime() - new Date(breakSince).getTime()
+        breakPeriods[breakPeriods.length - 1].end = log.checked_at
+        breakSince = null
+      }
+      workingSince = log.checked_at
+    } else if (log.check_type === "OUT") {
+      if (workingSince) {
+        workMs += new Date(log.checked_at).getTime() - new Date(workingSince).getTime()
+        workingSince = null
+      }
+      checkOut = log.checked_at
+    }
+  }
+
+  return {
+    checkIn,
+    checkOut,
+    workMinutes: Math.round(workMs / 60000),
+    breakMinutes: Math.round(breakMs / 60000),
+    breakPeriods,
+    stillWorking: workingSince !== null,
+    stillOnBreak: breakSince !== null,
+  }
+}
