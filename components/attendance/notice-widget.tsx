@@ -35,7 +35,7 @@ export function NoticeWidget({
           >
             <span className="flex-1 truncate">{n.title}</span>
             <span className="shrink-0 text-xs font-semibold text-amber-700">
-              미확인 {n.unread}/{n.total}
+              미확인 {n.unread}/{n.totalStaff}
             </span>
             <span className="shrink-0 text-muted-foreground">›</span>
           </button>
