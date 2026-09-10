@@ -42,12 +42,12 @@ function todayRangeIso() {
 }
 
 /**
- * 출퇴근 키오스크 대상은 별도 명단이 아니라 기존 employees 중 SP 파트 소속 직원이다.
+ * 출퇴근 키오스크 대상은 별도 명단이 아니라 기존 employees 중 SP/KP(서비스/키친) 파트 소속 직원이다.
  * parts 테이블은 소규모 고정 마스터라 매번 code로 조회해도 부담이 없다.
  */
-async function getSpPartId(admin: ReturnType<typeof createAdminClient>): Promise<string | null> {
-  const { data } = await admin.from("parts").select("id").eq("code", "SP").maybeSingle()
-  return (data?.id as string | undefined) ?? null
+async function getKioskPartIds(admin: ReturnType<typeof createAdminClient>): Promise<string[]> {
+  const { data } = await admin.from("parts").select("id").in("code", ["SP", "KP"])
+  return (data ?? []).map((row) => row.id as string)
 }
 
 /** PIN이 발급된 employees.id 집합 — tb_sp_staff_auth는 employees 마스터와 분리된 별도 테이블. */
@@ -66,8 +66,8 @@ const kioskStaffTag = (storeId: string) => `kiosk-staff:${storeId}`
 
 async function fetchKioskStaff(storeId: string): Promise<KioskStaff[]> {
   const admin = createAdminClient()
-  const spPartId = await getSpPartId(admin)
-  if (!spPartId) return []
+  const partIds = await getKioskPartIds(admin)
+  if (partIds.length === 0) return []
 
   const { from, to } = todayRangeIso()
 
@@ -76,7 +76,7 @@ async function fetchKioskStaff(storeId: string): Promise<KioskStaff[]> {
       .from("employees")
       .select("id, name, position_id")
       .eq("store_id", storeId)
-      .eq("part_id", spPartId)
+      .in("part_id", partIds)
       .order("name", { ascending: true }),
     admin
       .from("tb_sp_attendance_log")
@@ -178,7 +178,7 @@ export async function checkAttendance(
   if (!isValidPinFormat(pin)) return { error: "PIN은 4자리 숫자입니다." }
 
   const admin = createAdminClient()
-  const spPartId = await getSpPartId(admin)
+  const partIds = await getKioskPartIds(admin)
 
   const [{ data: staffRow, error: staffError }, { data: authRow, error: authError }] = await Promise.all([
     admin.from("employees").select("id, name, store_id, part_id").eq("id", staffId).maybeSingle(),
@@ -187,7 +187,7 @@ export async function checkAttendance(
 
   if (staffError) return { error: staffError.message }
   if (authError) return { error: authError.message }
-  if (!staffRow || staffRow.store_id !== employee.storeId || staffRow.part_id !== spPartId || !authRow) {
+  if (!staffRow || staffRow.store_id !== employee.storeId || !partIds.includes(staffRow.part_id as string) || !authRow) {
     return { error: "직원 정보를 찾을 수 없습니다." }
   }
 
@@ -262,27 +262,27 @@ export type AttendanceMonthlyTotal = {
   breakMinutes: number
 }
 
-/** 대상 직원이 호출자와 같은 매장의 SP 파트 소속인지 확인하고, 없으면 에러를 돌려준다. */
+/** 대상 직원이 호출자와 같은 매장의 SP/KP 파트 소속인지 확인하고, 없으면 에러를 돌려준다. */
 async function resolveSpStaff(
   admin: ReturnType<typeof createAdminClient>,
   employee: NonNullable<Awaited<ReturnType<typeof getCurrentEmployee>>>,
   staffId: string,
 ): Promise<{ staff: { id: string; name: string } } | { error: string }> {
-  const spPartId = await getSpPartId(admin)
+  const partIds = await getKioskPartIds(admin)
   const { data: target, error } = await admin
     .from("employees")
     .select("id, name, store_id, part_id")
     .eq("id", staffId)
     .maybeSingle()
   if (error) return { error: error.message }
-  if (!target || target.store_id !== employee.storeId || target.part_id !== spPartId) {
+  if (!target || target.store_id !== employee.storeId || !partIds.includes(target.part_id as string)) {
     return { error: "직원 정보를 찾을 수 없습니다." }
   }
   return { staff: { id: target.id as string, name: target.name as string } }
 }
 
 /**
- * 매장 SP 직원의 월간 근태 합계를 조회한다. 그 달에 로그가 하나도 없는 직원도 0으로 포함해
+ * 매장 SP/KP 직원의 월간 근태 합계를 조회한다. 그 달에 로그가 하나도 없는 직원도 0으로 포함해
  * "근무 기록 없음"을 구분할 수 있게 한다.
  */
 export async function getAttendanceHistory(
@@ -295,8 +295,8 @@ export async function getAttendanceHistory(
   if (!isValidMonthStr(month)) return { error: "잘못된 월 형식입니다." }
 
   const admin = createAdminClient()
-  const spPartId = await getSpPartId(admin)
-  if (!spPartId) return { month, totals: [] }
+  const partIds = await getKioskPartIds(admin)
+  if (partIds.length === 0) return { month, totals: [] }
 
   const monthStart = `${month}-01`
   const from = kstDateToIso(monthStart)
@@ -307,7 +307,7 @@ export async function getAttendanceHistory(
       .from("employees")
       .select("id, name")
       .eq("store_id", employee.storeId)
-      .eq("part_id", spPartId)
+      .in("part_id", partIds)
       .order("name", { ascending: true }),
     admin
       .from("tb_sp_attendance_log")
@@ -538,7 +538,7 @@ export async function deleteAttendanceDay(
 }
 
 // ── PIN 발급 관리 — 시니어 전용 ─────────────────────────────
-// 대상 직원은 별도 등록이 아니라 해당 매장의 SP 파트 employees 그대로. PIN은 employees 마스터와
+// 대상 직원은 별도 등록이 아니라 해당 매장의 SP/KP 파트 employees 그대로. PIN은 employees 마스터와
 // 분리된 tb_sp_staff_auth에 해시로만 저장되므로, 발급/재발급 시점에만 평문을 반환하고 이후엔 다시 조회할 수 없다.
 
 export type SpEmployeeRow = {
@@ -554,14 +554,14 @@ export async function listSpEligibleEmployees(): Promise<{ staff: SpEmployeeRow[
   if (!employee.storeId) return { error: "소속 매장이 없습니다." }
 
   const admin = createAdminClient()
-  const spPartId = await getSpPartId(admin)
-  if (!spPartId) return { staff: [] }
+  const partIds = await getKioskPartIds(admin)
+  if (partIds.length === 0) return { staff: [] }
 
   const { data, error } = await admin
     .from("employees")
     .select("id, name")
     .eq("store_id", employee.storeId)
-    .eq("part_id", spPartId)
+    .in("part_id", partIds)
     .order("name", { ascending: true })
 
   if (error) return { error: error.message }
@@ -586,7 +586,7 @@ export async function reissuePin(
   if (!employee.storeId) return { error: "소속 매장이 없습니다." }
 
   const admin = createAdminClient()
-  const spPartId = await getSpPartId(admin)
+  const partIds = await getKioskPartIds(admin)
 
   const { data: target, error: targetError } = await admin
     .from("employees")
@@ -595,7 +595,7 @@ export async function reissuePin(
     .maybeSingle()
 
   if (targetError) return { error: targetError.message }
-  if (!target || target.store_id !== employee.storeId || target.part_id !== spPartId) {
+  if (!target || target.store_id !== employee.storeId || !partIds.includes(target.part_id as string)) {
     return { error: "직원 정보를 찾을 수 없습니다." }
   }
 

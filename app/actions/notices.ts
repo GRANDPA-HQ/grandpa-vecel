@@ -26,21 +26,21 @@ export type NoticeSummary = {
 
 type EligibleStaff = { id: string; positionId: string | null }
 
-async function getSpPartId(admin: ReturnType<typeof createAdminClient>): Promise<string | null> {
-  const { data } = await admin.from("parts").select("id").eq("code", "SP").maybeSingle()
-  return (data?.id as string | undefined) ?? null
+async function getKioskPartIds(admin: ReturnType<typeof createAdminClient>): Promise<string[]> {
+  const { data } = await admin.from("parts").select("id").in("code", ["SP", "KP"])
+  return (data ?? []).map((row) => row.id as string)
 }
 
-/** 매장 SP 파트 + PIN 발급 완료 직원 목록(직책 포함) — 공지 대상/미확인수 계산의 기준 모집단. */
+/** 매장 SP/KP 파트 + PIN 발급 완료 직원 목록(직책 포함) — 공지 대상/미확인수 계산의 기준 모집단. */
 async function getEligibleStaff(admin: ReturnType<typeof createAdminClient>, storeId: string): Promise<EligibleStaff[]> {
-  const spPartId = await getSpPartId(admin)
-  if (!spPartId) return []
+  const partIds = await getKioskPartIds(admin)
+  if (partIds.length === 0) return []
 
   const { data: employeeRows } = await admin
     .from("employees")
     .select("id, position_id")
     .eq("store_id", storeId)
-    .eq("part_id", spPartId)
+    .in("part_id", partIds)
 
   const ids = (employeeRows ?? []).map((row) => row.id as string)
   if (ids.length === 0) return []
@@ -260,7 +260,7 @@ export async function ackNotice(
   if (!isValidPinFormat(pin)) return { error: "PIN은 4자리 숫자입니다." }
 
   const admin = createAdminClient()
-  const spPartId = await getSpPartId(admin)
+  const partIds = await getKioskPartIds(admin)
 
   const [{ data: staffRow, error: staffError }, { data: authRow, error: authError }, { data: noticeRow, error: noticeError }] =
     await Promise.all([
@@ -272,7 +272,7 @@ export async function ackNotice(
   if (staffError) return { error: staffError.message }
   if (authError) return { error: authError.message }
   if (noticeError) return { error: noticeError.message }
-  if (!staffRow || staffRow.store_id !== employee.storeId || staffRow.part_id !== spPartId || !authRow) {
+  if (!staffRow || staffRow.store_id !== employee.storeId || !partIds.includes(staffRow.part_id as string) || !authRow) {
     return { error: "직원 정보를 찾을 수 없습니다." }
   }
 
