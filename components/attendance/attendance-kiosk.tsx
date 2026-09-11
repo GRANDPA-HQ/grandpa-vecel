@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { checkAttendance, type KioskStaff } from "@/app/actions/attendance"
-import { ackNotice, type ActiveNotice } from "@/app/actions/notices"
+import { getActiveNotices, type ActiveNotice } from "@/app/actions/notices"
 import {
   ACTION_ALLOWED,
   ACTION_LABEL,
@@ -15,6 +15,8 @@ import { StaffGrid } from "@/components/attendance/staff-grid"
 import { PinPad } from "@/components/attendance/pin-pad"
 import { ConfirmScreen } from "@/components/attendance/confirm-screen"
 import { NoticeWidget } from "@/components/attendance/notice-widget"
+import { NoticeDetailDialog } from "@/components/attendance/notice-detail-dialog"
+import type { PositionOption } from "@/components/attendance/notice-board"
 
 const IDLE_TIMEOUT_MS = 15000
 
@@ -23,19 +25,24 @@ type Screen =
   | { kind: "action-select"; staffId: string }
   | { kind: "pin-attendance"; staffId: string; checkType: CheckType }
   | { kind: "confirm-attendance"; message: string; subMessage: string }
-  | { kind: "notice-select-staff"; noticeId: string; noticeTitle: string; targetPositionId: string | null }
-  | { kind: "pin-notice"; staffId: string; noticeId: string; noticeTitle: string }
-  | { kind: "confirm-notice"; message: string; subMessage: string }
 
 export function AttendanceKiosk({
   initialStaff,
   initialNotices,
+  positionOptions,
 }: {
   initialStaff: KioskStaff[]
   initialNotices: ActiveNotice[]
+  positionOptions: PositionOption[]
 }) {
   const [staff, setStaff] = useState<KioskStaff[]>(initialStaff)
   const [notices, setNotices] = useState<ActiveNotice[]>(initialNotices)
+  // 공지 상세 — "전체 공지함"(NoticeBoard)과 동일하게 NoticeDetailDialog를 그대로 재사용해
+  // 제목 클릭 → 본문 확인 → "공지 확인" → 본인선택 → PIN 순서로 통일한다.
+  // notices(진행중 목록)에서 매번 찾아 쓰지 않고 별도 상태로 들고 있는 이유: PIN 확인 성공 직후
+  // refreshActiveNotices()로 목록을 다시 받아오면 방금 확인한 공지가 목록에서 바로 빠질 수 있는데,
+  // 그때 목록에서 찾는 방식이면 완료 화면을 보여주기도 전에 다이얼로그가 사라져버린다.
+  const [openNotice, setOpenNotice] = useState<ActiveNotice | null>(null)
   const [screen, setScreen] = useState<Screen>({ kind: "grid" })
   const [pinError, setPinError] = useState<string | undefined>(undefined)
   const [pinPending, setPinPending] = useState(false)
@@ -60,9 +67,10 @@ export function AttendanceKiosk({
     idleTimer.current = setTimeout(resetToGrid, IDLE_TIMEOUT_MS)
   }, [resetToGrid])
 
-  // 확인 화면(자체 3초 타이머 보유)과 초기 목록 화면이 아닌 모든 화면에서 15초 무입력 타이머를 돌린다
+  // 확인 화면(자체 3초 타이머 보유)과 초기 목록 화면이 아닌 모든 화면에서 15초 무입력 타이머를 돌린다.
+  // 공지 다이얼로그(openNotice)는 "전체 공지함"과 동일하게 이 타이머 대상이 아니다.
   useEffect(() => {
-    if (screen.kind === "grid" || screen.kind === "confirm-attendance" || screen.kind === "confirm-notice") {
+    if (screen.kind === "grid" || screen.kind === "confirm-attendance") {
       if (idleTimer.current) clearTimeout(idleTimer.current)
       return
     }
@@ -118,38 +126,16 @@ export function AttendanceKiosk({
     bumpIdleTimer()
     const notice = notices.find((n) => n.id === noticeId)
     if (!notice) return
-    setScreen({
-      kind: "notice-select-staff",
-      noticeId,
-      noticeTitle: notice.title,
-      targetPositionId: notice.targetPositionId,
-    })
+    setOpenNotice(notice)
   }
 
-  const selectStaffForNotice = (staffId: string) => {
-    bumpIdleTimer()
-    if (screen.kind !== "notice-select-staff") return
-    setPinError(undefined)
-    setScreen({ kind: "pin-notice", staffId, noticeId: screen.noticeId, noticeTitle: screen.noticeTitle })
-  }
+  const refreshActiveNotices = useCallback(async () => {
+    const result = await getActiveNotices()
+    if ("notices" in result) setNotices(result.notices)
+  }, [])
 
-  const submitNoticePin = async (staffId: string, noticeId: string, noticeTitle: string, pin: string) => {
-    setPinPending(true)
-    setPinError(undefined)
-    const result = await ackNotice(staffId, noticeId, pin)
-    setPinPending(false)
-    if ("error" in result) {
-      setPinError(result.error)
-      return
-    }
-    setNotices((prev) =>
-      prev
-        .map((n) => (n.id === noticeId ? { ...n, unread: Math.max(0, n.unread - 1) } : n))
-        .filter((n) => n.unread > 0),
-    )
-    const staffName = staff.find((s) => s.id === staffId)?.name ?? ""
-    setScreen({ kind: "confirm-notice", message: "공지를 확인했습니다", subMessage: `${staffName}님 · ${noticeTitle}` })
-  }
+  const positionLabel = (id: string | null) =>
+    id ? (positionOptions.find((p) => p.value === id)?.label ?? "알 수 없음") : "전체"
 
   return (
     <div onClick={bumpIdleTimer} className="mx-auto flex w-full max-w-2xl flex-col py-4">
@@ -227,45 +213,14 @@ export function AttendanceKiosk({
         <ConfirmScreen message={screen.message} subMessage={screen.subMessage} onDone={resetToGrid} />
       )}
 
-      {screen.kind === "notice-select-staff" && (
-        <div className="flex flex-col py-4">
-          <p className="mb-4 text-center text-sm font-semibold text-muted-foreground">
-            &ldquo;{screen.noticeTitle}&rdquo; 확인 — 본인을 선택하세요
-          </p>
-          <StaffGrid
-            staff={
-              screen.targetPositionId ? staff.filter((s) => s.positionId === screen.targetPositionId) : staff
-            }
-            showStatusBadge={false}
-            onSelect={selectStaffForNotice}
-          />
-          <button
-            type="button"
-            onClick={resetToGrid}
-            className="mt-4 self-center rounded-xl border border-border px-6 py-2 text-sm font-medium text-muted-foreground"
-          >
-            취소
-          </button>
-        </div>
-      )}
-
-      {screen.kind === "pin-notice" && (
-        <div className="flex justify-center py-8">
-          <PinPad
-            key={`notice-${screen.staffId}-${screen.noticeId}`}
-            headerText="공지 확인 · 본인 확인"
-            subText={staff.find((s) => s.id === screen.staffId)?.name ? `${staff.find((s) => s.id === screen.staffId)?.name}님` : undefined}
-            onSubmit={(pin) => submitNoticePin(screen.staffId, screen.noticeId, screen.noticeTitle, pin)}
-            onCancel={resetToGrid}
-            error={pinError}
-            pending={pinPending}
-            onInteract={bumpIdleTimer}
-          />
-        </div>
-      )}
-
-      {screen.kind === "confirm-notice" && (
-        <ConfirmScreen message={screen.message} subMessage={screen.subMessage} onDone={resetToGrid} />
+      {openNotice && (
+        <NoticeDetailDialog
+          notice={openNotice}
+          staff={staff}
+          positionLabel={positionLabel(openNotice.targetPositionId)}
+          onClose={() => setOpenNotice(null)}
+          onAcked={refreshActiveNotices}
+        />
       )}
     </div>
   )
