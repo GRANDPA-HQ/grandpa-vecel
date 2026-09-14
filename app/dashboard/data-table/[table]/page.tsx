@@ -21,6 +21,7 @@ import { getCurrentEmployee } from "@/lib/permissions"
 import { DataTable } from "@/components/data-table"
 import { AddRowDialog, type ColumnDef } from "@/components/add-row-dialog"
 import { SubmatZoneCell } from "@/components/submat-zone-cell"
+import { StorageAreaLinkButton } from "@/components/storage-area-link-button"
 import {
   PAGE_SIZE,
   TABLE_PK,
@@ -188,8 +189,8 @@ export default async function TablePage({
     }
   }
 
-  // employees: 매장/파트/직책/직급 FK를 이름으로 표시하고 드롭다운으로 편집
-  if (tableName === "employees") {
+  // staff: 매장/파트/직책/직급 FK를 이름으로 표시하고 드롭다운으로 편집
+  if (tableName === "staff") {
     const lookups = await Promise.all(
       EMPLOYEE_FK_LOOKUPS.map((l) =>
         getIdLabelOptions(l.table, l.labelColumn).catch(() => [] as SelectOption[]),
@@ -449,6 +450,35 @@ export default async function TablePage({
                   managePartId={String(row["manage_part_id"] ?? "")}
                 />
               ),
+            ]
+          }),
+        ),
+      }
+    } catch {}
+  }
+
+  // tb_store_mst: 지점별 보관영역 관리 화면으로 가는 버튼 + 활성 보관영역 개수 배지.
+  // 본사 포함 전 지점에 노출한다(설계서 "본사 포함 전 지점 영역 생성 가능").
+  if (tableName === "tb_store_mst") {
+    try {
+      const admin = createAdminClient()
+      const { data: areaRows } = await admin
+        .from("tb_storage_area_mst")
+        .select("store_id")
+        .eq("is_active", true)
+      const countByStore: Record<string, number> = {}
+      for (const r of areaRows ?? []) {
+        const storeId = r.store_id as string
+        countByStore[storeId] = (countByStore[storeId] ?? 0) + 1
+      }
+      extraColumn = {
+        header: "보관영역",
+        cellsByPk: Object.fromEntries(
+          rows.map((row) => {
+            const storeId = String(row["id"] ?? "")
+            return [
+              storeId,
+              <StorageAreaLinkButton key={storeId} storeId={storeId} activeCount={countByStore[storeId] ?? 0} />,
             ]
           }),
         ),

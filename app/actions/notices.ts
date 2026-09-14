@@ -37,7 +37,7 @@ async function getEligibleStaff(admin: ReturnType<typeof createAdminClient>, sto
   if (partIds.length === 0) return []
 
   const { data: employeeRows } = await admin
-    .from("employees")
+    .from("staff")
     .select("id, position_id")
     .eq("store_id", storeId)
     .in("part_id", partIds)
@@ -264,7 +264,7 @@ export async function ackNotice(
 
   const [{ data: staffRow, error: staffError }, { data: authRow, error: authError }, { data: noticeRow, error: noticeError }] =
     await Promise.all([
-      admin.from("employees").select("id, store_id, part_id, position_id").eq("id", staffId).maybeSingle(),
+      admin.from("staff").select("id, store_id, part_id, position_id").eq("id", staffId).maybeSingle(),
       admin.from("tb_sp_staff_auth").select("pin_hash").eq("staff_id", staffId).maybeSingle(),
       admin.from("tb_notice").select("target_position_id").eq("id", noticeId).maybeSingle(),
     ])

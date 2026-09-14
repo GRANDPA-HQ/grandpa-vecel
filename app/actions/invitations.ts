@@ -73,7 +73,7 @@ export type InviteState = {
 
 /**
  * 직원 추가: 계정을 즉시 생성하고 (아이디 = 이메일, 비밀번호 = 무작위 6자리 영숫자)
- * 직원(employees) 테이블에 등록한다. users에도 함께 기록해 작성자 표시 등 기존 기능과 호환.
+ * 직원(staff) 테이블에 등록한다. users에도 함께 기록해 작성자 표시 등 기존 기능과 호환.
  */
 export async function inviteEmployee(
   _prevState: InviteState | undefined,
@@ -90,7 +90,7 @@ export async function inviteEmployee(
 
   // 이미 등록된 직원인지 확인
   const { data: existing } = await admin
-    .from("employees")
+    .from("staff")
     .select("email")
     .eq("email", email)
     .maybeSingle()
@@ -117,7 +117,7 @@ export async function inviteEmployee(
   }
 
   const name = email.split("@")[0]
-  const { error: insertError } = await admin.from("employees").insert({
+  const { error: insertError } = await admin.from("staff").insert({
     id: created.user.id,
     ...defaults,
     name,
@@ -178,7 +178,7 @@ export async function deleteEmployee(employeeId: string): Promise<{ error: strin
   }
 
   // 2) 직원 테이블에서 삭제
-  const { error: rowError } = await admin.from("employees").delete().eq("id", employeeId)
+  const { error: rowError } = await admin.from("staff").delete().eq("id", employeeId)
   if (rowError) return { error: `직원 삭제에 실패했습니다. ${rowError.message}` }
 
   // 3) 레거시 users 행 삭제 (실패해도 무시)
@@ -201,7 +201,7 @@ export async function resetEmployeePassword(employeeId: string): Promise<{ error
   const admin = createAdmin()
 
   const { data: emp } = await admin
-    .from("employees")
+    .from("staff")
     .select("email")
     .eq("id", employeeId)
     .maybeSingle()

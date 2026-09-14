@@ -11,15 +11,15 @@ export type CurrentEmployee = {
   email: string
   // 관리 권한 (직원 관리, 생산 공정 승인/반려 등) — 직급이 시니어 이상
   isSenior: boolean
-  // 소속 매장 (tb_store_mst) — 과거 계정(employees 미등록)은 null
+  // 소속 매장 (tb_store_mst) — 과거 계정(staff 미등록)은 null
   storeId: string | null
   storeName: string | null
 }
 
 /**
  * 로그인한 사용자의 직원 정보와 관리 권한 여부를 조회한다.
- * 권한 기준: employees.rank(직급)의 level이 시니어(30) 이상.
- * employees에 아직 없는 과거 계정은 users의 직책이 점장이면 시니어로 취급한다.
+ * 권한 기준: staff.rank(직급)의 level이 시니어(30) 이상.
+ * staff에 아직 없는 과거 계정은 users의 직책이 점장이면 시니어로 취급한다.
  */
 export async function getCurrentEmployee(): Promise<CurrentEmployee | null> {
   const supabase = await createClient()
@@ -28,7 +28,7 @@ export async function getCurrentEmployee(): Promise<CurrentEmployee | null> {
 
   const admin = createAdminClient()
   const { data } = await admin
-    .from("employees")
+    .from("staff")
     .select("name, email, store_id, ranks(name_ko, level), tb_store_mst(store_name)")
     .eq("id", user.id)
     .maybeSingle()
@@ -45,7 +45,7 @@ export async function getCurrentEmployee(): Promise<CurrentEmployee | null> {
     storeName =
       (data.tb_store_mst as unknown as { store_name: string } | null)?.store_name ?? null
   } else {
-    // 아직 employees로 이전되지 않은 계정 호환 (users + 점장 직책)
+    // 아직 staff로 이전되지 않은 계정 호환 (users + 점장 직책)
     const { data: legacy } = await admin
       .from("users")
       .select("name, positions(name_ko)")

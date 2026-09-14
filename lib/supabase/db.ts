@@ -109,7 +109,7 @@ export async function getTables(): Promise<TableInfo[]> {
         type: col.type ?? "unknown",
         format: col.format ?? "",
         // DB 기본값(default)이 있는 컬럼은 NOT NULL이라도 사용자가 직접 채우지 않아도 되므로
-        // "필수 입력"에서 제외한다 (예: stock_qty default 0, is_active default true).
+        // "필수 입력"에서 제외한다 (예: is_active default true).
         required: (def.required ?? []).includes(colName) && col.default === undefined,
       })),
     }))
@@ -737,6 +737,227 @@ export async function getSubmatZoneLinks(): Promise<SubmatZoneLink[]> {
   return (await res.json()) as SubmatZoneLink[]
 }
 
+// ── 포장부자재 재고관리 (tb_submat_stock_txn / tb_storage_area_mst / tb_submat_storage_area_link) ──
+
+export type SubmatCategoryInfo = { code: string; name: string; sortOrder: number }
+
+/** tb_submat_category_mst 전체 (표시용) — sort_order 순. */
+export async function getSubmatCategoriesFull(): Promise<SubmatCategoryInfo[]> {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/tb_submat_category_mst?select=category_code,category_name,sort_order&order=sort_order`,
+    { headers: authHeaders(), next: { revalidate: 60 } },
+  )
+  if (!res.ok) return []
+  const rows = (await res.json()) as { category_code: string; category_name: string | null; sort_order: number }[]
+  return rows.map((r) => ({ code: r.category_code, name: r.category_name ?? r.category_code, sortOrder: r.sort_order }))
+}
+
+export type StorageAreaInfo = { id: string; name: string; sortOrder: number }
+
+/** 특정 지점의 활성 보관영역 — sort_order 순(실사 동선). 비활성 영역은 제외. */
+export async function getActiveStorageAreas(storeId: string): Promise<StorageAreaInfo[]> {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/tb_storage_area_mst` +
+      `?select=id,area_name,sort_order&store_id=eq.${encodeURIComponent(storeId)}&is_active=eq.true&order=sort_order.asc`,
+    { headers: authHeaders(), cache: "no-store" },
+  )
+  if (!res.ok) return []
+  const rows = (await res.json()) as { id: string; area_name: string; sort_order: number }[]
+  return rows.map((r) => ({ id: r.id, name: r.area_name, sortOrder: r.sort_order }))
+}
+
+export type SubmatAreaLink = { submatId: string; areaId: string }
+
+/** 특정 지점 보관영역들에 걸린 부자재 매핑 전체 (활성·비활성 영역 모두 포함 — 매핑 화면에서 필요). */
+export async function getSubmatAreaLinksByStore(storeId: string): Promise<SubmatAreaLink[]> {
+  const areaRes = await fetch(
+    `${SUPABASE_URL}/rest/v1/tb_storage_area_mst?select=id&store_id=eq.${encodeURIComponent(storeId)}`,
+    { headers: authHeaders(), cache: "no-store" },
+  )
+  const areaIds = areaRes.ok ? ((await areaRes.json()) as { id: string }[]).map((a) => a.id) : []
+  if (areaIds.length === 0) return []
+
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/tb_submat_storage_area_link?select=submat_id,area_id&area_id=in.(${areaIds.join(",")})`,
+    { headers: authHeaders(), cache: "no-store" },
+  )
+  if (!res.ok) return []
+  const rows = (await res.json()) as { submat_id: string; area_id: string }[]
+  return rows.map((r) => ({ submatId: r.submat_id, areaId: r.area_id }))
+}
+
+/** 특정 부자재가 매핑된 보관영역 id 목록(활성·비활성 모두) — 매핑 화면·품목상세에서 사용. */
+export async function getAreaIdsForSubmat(submatId: string): Promise<string[]> {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/tb_submat_storage_area_link?select=area_id&submat_id=eq.${encodeURIComponent(submatId)}`,
+    { headers: authHeaders(), cache: "no-store" },
+  )
+  if (!res.ok) return []
+  const rows = (await res.json()) as { area_id: string }[]
+  return rows.map((r) => r.area_id)
+}
+
+export type SubmatStockMaster = {
+  submatId: string
+  itemName: string
+  categoryCode: string | null
+  spec: string | null
+  managePartId: string | null
+  packsPerBox: number | null
+  minStockPack: number | null
+  parStockPack: number | null
+}
+
+/** 활성 포장부자재 마스터 목록(재고관리용 발췌 컬럼만). */
+export async function getSubmatStockMasters(): Promise<SubmatStockMaster[]> {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/tb_submat_mst` +
+      `?select=submat_id,item_name,category_code,spec,manage_part_id,packs_per_box,min_stock_pack,par_stock_pack` +
+      `&is_active=eq.true&order=item_name.asc`,
+    { headers: authHeaders(), cache: "no-store" },
+  )
+  if (!res.ok) return []
+  const rows = (await res.json()) as {
+    submat_id: string
+    item_name: string
+    category_code: string | null
+    spec: string | null
+    manage_part_id: string | null
+    packs_per_box: number | null
+    min_stock_pack: number | null
+    par_stock_pack: number | null
+  }[]
+  return rows.map((r) => ({
+    submatId: r.submat_id,
+    itemName: r.item_name,
+    categoryCode: r.category_code,
+    spec: r.spec,
+    managePartId: r.manage_part_id,
+    packsPerBox: r.packs_per_box,
+    minStockPack: r.min_stock_pack,
+    parStockPack: r.par_stock_pack,
+  }))
+}
+
+/** 단일 부자재의 현재고(SUM qty)·반품대기(SUM -qty WHERE txn_type=RETURN_HOLD). */
+export async function getSubmatStockFor(
+  storeId: string,
+  submatId: string,
+): Promise<{ stock: number; hold: number }> {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/tb_submat_stock_txn?select=qty,txn_type` +
+      `&store_id=eq.${encodeURIComponent(storeId)}&submat_id=eq.${encodeURIComponent(submatId)}`,
+    { headers: authHeaders(), cache: "no-store" },
+  )
+  if (!res.ok) return { stock: 0, hold: 0 }
+  const rows = (await res.json()) as { qty: number; txn_type: string }[]
+  let stock = 0
+  let hold = 0
+  for (const r of rows) {
+    stock += r.qty
+    if (r.txn_type === "RETURN_HOLD") hold += -r.qty
+  }
+  return { stock, hold }
+}
+
+/** 단일 부자재 마스터(재고관리용 발췌 컬럼). */
+export async function getSubmatStockMaster(submatId: string): Promise<SubmatStockMaster | null> {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/tb_submat_mst` +
+      `?select=submat_id,item_name,category_code,spec,manage_part_id,packs_per_box,min_stock_pack,par_stock_pack` +
+      `&submat_id=eq.${encodeURIComponent(submatId)}`,
+    { headers: authHeaders(), cache: "no-store" },
+  )
+  if (!res.ok) return null
+  const rows = (await res.json()) as {
+    submat_id: string
+    item_name: string
+    category_code: string | null
+    spec: string | null
+    manage_part_id: string | null
+    packs_per_box: number | null
+    min_stock_pack: number | null
+    par_stock_pack: number | null
+  }[]
+  const r = rows[0]
+  if (!r) return null
+  return {
+    submatId: r.submat_id,
+    itemName: r.item_name,
+    categoryCode: r.category_code,
+    spec: r.spec,
+    managePartId: r.manage_part_id,
+    packsPerBox: r.packs_per_box,
+    minStockPack: r.min_stock_pack,
+    parStockPack: r.par_stock_pack,
+  }
+}
+
+/** submat_id별 현재고(SUM qty)·반품대기(SUM -qty WHERE txn_type=RETURN_HOLD) — 지점 단위 합산. */
+export async function getSubmatStockTotals(
+  storeId: string,
+): Promise<{ stockBySubmat: Record<string, number>; holdBySubmat: Record<string, number> }> {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/tb_submat_stock_txn?select=submat_id,qty,txn_type&store_id=eq.${encodeURIComponent(storeId)}`,
+    { headers: authHeaders(), cache: "no-store" },
+  )
+  const stockBySubmat: Record<string, number> = {}
+  const holdBySubmat: Record<string, number> = {}
+  if (!res.ok) return { stockBySubmat, holdBySubmat }
+  const rows = (await res.json()) as { submat_id: string; qty: number; txn_type: string }[]
+  for (const r of rows) {
+    stockBySubmat[r.submat_id] = (stockBySubmat[r.submat_id] ?? 0) + r.qty
+    if (r.txn_type === "RETURN_HOLD") {
+      holdBySubmat[r.submat_id] = (holdBySubmat[r.submat_id] ?? 0) + -r.qty
+    }
+  }
+  return { stockBySubmat, holdBySubmat }
+}
+
+export type SubmatStockTxn = {
+  txnId: string
+  txnType: string
+  qty: number
+  reasonType: string | null
+  reasonMemo: string | null
+  createdByName: string
+  createdAt: string
+}
+
+/** 특정 부자재의 최근 트랜잭션 — 입력자 이름은 staff 테이블 조인. */
+export async function getSubmatRecentTxns(
+  storeId: string,
+  submatId: string,
+  limit = 20,
+): Promise<SubmatStockTxn[]> {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/tb_submat_stock_txn` +
+      `?select=txn_id,txn_type,qty,reason_type,reason_memo,created_at,staff(name)` +
+      `&store_id=eq.${encodeURIComponent(storeId)}&submat_id=eq.${encodeURIComponent(submatId)}` +
+      `&order=created_at.desc&limit=${limit}`,
+    { headers: authHeaders(), cache: "no-store" },
+  )
+  if (!res.ok) return []
+  const rows = (await res.json()) as {
+    txn_id: string
+    txn_type: string
+    qty: number
+    reason_type: string | null
+    reason_memo: string | null
+    created_at: string
+    staff: { name?: string } | null
+  }[]
+  return rows.map((r) => ({
+    txnId: r.txn_id,
+    txnType: r.txn_type,
+    qty: r.qty,
+    reasonType: r.reason_type,
+    reasonMemo: r.reason_memo,
+    createdByName: r.staff?.name ?? "-",
+    createdAt: r.created_at,
+  }))
+}
+
 /**
  * Insert a single row into a table. 감사 로그가 생성된 PK를 남길 수 있도록 삽입된 행을 반환한다
  * (return=representation).
@@ -859,113 +1080,6 @@ export async function getSkuCategories(): Promise<SkuCategoryRecord[]> {
   const res = await fetch(url, { headers: authHeaders(), cache: "no-store" })
   if (!res.ok) return []
   return (await res.json()) as SkuCategoryRecord[]
-}
-
-/**
- * Fetch 판매품(tb_sku_mst) 재고 관리용 목록 — 코드/이름/가격/재고수량.
- */
-export type SkuStockRow = {
-  id: string
-  sku_code: string
-  sku_name: string
-  category_code: string | null
-  sell_price: number | null
-  stock_qty: number
-  is_active: boolean
-}
-
-export async function getSkuStockRows(): Promise<SkuStockRow[] | null> {
-  const url =
-    `${SUPABASE_URL}/rest/v1/tb_sku_mst` +
-    `?select=id,sku_code,sku_name,category_code,sell_price,stock_qty,is_active` +
-    `&order=sku_code.asc`
-
-  const res = await fetch(url, { headers: authHeaders(), cache: "no-store" })
-
-  if (!res.ok) {
-    if (res.status === 404 || res.status === 400) return null
-    throw new Error(`Failed to read SKU stock (${res.status})`)
-  }
-
-  return (await res.json()) as SkuStockRow[]
-}
-
-/**
- * 원재료(tb_raw_mst)/생산품(tb_prod_mst)/포장부자재(tb_submat_mst) 재고 관리용 목록 — 1차 구현.
- * 판매품(getSkuStockRows)과 동일한 패턴: 지점/존 구분 없이 단일 stock_qty 컬럼만 관리한다.
- */
-export type RawStockRow = {
-  id: string
-  raw_code: string
-  raw_name: string
-  category_code: string | null
-  stock_qty: number
-  is_active: boolean
-}
-
-export async function getRawStockRows(): Promise<RawStockRow[] | null> {
-  const url =
-    `${SUPABASE_URL}/rest/v1/tb_raw_mst` +
-    `?select=id,raw_code,raw_name,category_code,stock_qty,is_active` +
-    `&order=raw_code.asc`
-
-  const res = await fetch(url, { headers: authHeaders(), cache: "no-store" })
-
-  if (!res.ok) {
-    if (res.status === 404 || res.status === 400) return null
-    throw new Error(`Failed to read 원재료 stock (${res.status})`)
-  }
-
-  return (await res.json()) as RawStockRow[]
-}
-
-export type ProdStockRow = {
-  id: string
-  prod_code: string
-  prod_name: string
-  category_code: string | null
-  stock_qty: number
-  is_active: boolean
-}
-
-export async function getProdStockRows(): Promise<ProdStockRow[] | null> {
-  const url =
-    `${SUPABASE_URL}/rest/v1/tb_prod_mst` +
-    `?select=id,prod_code,prod_name,category_code,stock_qty,is_active` +
-    `&order=prod_code.asc`
-
-  const res = await fetch(url, { headers: authHeaders(), cache: "no-store" })
-
-  if (!res.ok) {
-    if (res.status === 404 || res.status === 400) return null
-    throw new Error(`Failed to read 생산품 stock (${res.status})`)
-  }
-
-  return (await res.json()) as ProdStockRow[]
-}
-
-export type SubmatStockRow = {
-  submat_id: string
-  item_name: string
-  category_code: string | null
-  stock_qty: number
-  is_active: boolean
-}
-
-export async function getSubmatStockRows(): Promise<SubmatStockRow[] | null> {
-  const url =
-    `${SUPABASE_URL}/rest/v1/tb_submat_mst` +
-    `?select=submat_id,item_name,category_code,stock_qty,is_active` +
-    `&order=submat_id.asc`
-
-  const res = await fetch(url, { headers: authHeaders(), cache: "no-store" })
-
-  if (!res.ok) {
-    if (res.status === 404 || res.status === 400) return null
-    throw new Error(`Failed to read 포장부자재 stock (${res.status})`)
-  }
-
-  return (await res.json()) as SubmatStockRow[]
 }
 
 /**
