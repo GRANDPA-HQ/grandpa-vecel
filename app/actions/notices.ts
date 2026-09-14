@@ -6,14 +6,6 @@ import { getCurrentEmployee } from "@/lib/permissions"
 import { verifyPin } from "@/lib/pin"
 import { isValidPinFormat } from "@/lib/attendance-status"
 
-export type ActiveNotice = {
-  id: string
-  title: string
-  unread: number
-  total: number
-  targetPositionId: string | null
-}
-
 export type NoticeSummary = {
   id: string
   title: string
@@ -23,6 +15,12 @@ export type NoticeSummary = {
   totalStaff: number
   targetPositionId: string | null
 }
+
+// 홈 화면 "매장 공지 현황" 위젯용 — "전체 공지함"(NoticeSummary)과 동일한 필드에 위젯 표시용
+// unread(미확인 인원 수)만 얹은 형태. 위젯에서 클릭한 공지를 그대로 NoticeDetailDialog에 넘겨
+// 상세 내용을 보여줄 수 있도록 body 등 전체 필드를 갖춘다(예전엔 id/title/unread/total뿐이라
+// 홈 화면에서 공지 본문을 보여줄 방법이 없었음).
+export type ActiveNotice = NoticeSummary & { unread: number }
 
 type EligibleStaff = { id: string; positionId: string | null }
 
@@ -37,7 +35,7 @@ async function getEligibleStaff(admin: ReturnType<typeof createAdminClient>, sto
   if (partIds.length === 0) return []
 
   const { data: employeeRows } = await admin
-    .from("employees")
+    .from("staff")
     .select("id, position_id")
     .eq("store_id", storeId)
     .in("part_id", partIds)
@@ -86,7 +84,7 @@ async function fetchActiveNotices(storeId: string): Promise<ActiveNotice[]> {
     getEligibleStaff(admin, storeId),
     admin
       .from("tb_notice")
-      .select("id, title, target_position_id")
+      .select("id, title, body, created_at, target_position_id")
       .eq("store_id", storeId)
       .order("created_at", { ascending: false }),
   ])
@@ -107,12 +105,15 @@ async function fetchActiveNotices(storeId: string): Promise<ActiveNotice[]> {
       return {
         id: n.id as string,
         title: n.title as string,
-        unread: subset.length - acked,
-        total: subset.length,
+        body: n.body as string | null,
+        createdAt: n.created_at as string,
+        ackCount: acked,
+        totalStaff: subset.length,
         targetPositionId,
+        unread: subset.length - acked,
       }
     })
-    .filter((n) => n.total > 0 && n.unread > 0)
+    .filter((n) => n.totalStaff > 0 && n.unread > 0)
 }
 
 async function fetchNoticeList(storeId: string): Promise<NoticeSummary[]> {
@@ -264,7 +265,7 @@ export async function ackNotice(
 
   const [{ data: staffRow, error: staffError }, { data: authRow, error: authError }, { data: noticeRow, error: noticeError }] =
     await Promise.all([
-      admin.from("employees").select("id, store_id, part_id, position_id").eq("id", staffId).maybeSingle(),
+      admin.from("staff").select("id, store_id, part_id, position_id").eq("id", staffId).maybeSingle(),
       admin.from("tb_sp_staff_auth").select("pin_hash").eq("staff_id", staffId).maybeSingle(),
       admin.from("tb_notice").select("target_position_id").eq("id", noticeId).maybeSingle(),
     ])

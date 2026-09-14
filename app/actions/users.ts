@@ -40,11 +40,11 @@ export async function updateUserField(userId: unknown, field: string, value: str
   await patchUser(userId, { [field]: value })
 }
 
-// employees와 users(레거시 호환)가 공유하는 컬럼 — 직원 정보 수정 시 함께 동기화
+// staff와 users(레거시 호환)가 공유하는 컬럼 — 직원 정보 수정 시 함께 동기화
 const USER_SYNC_FIELDS = new Set(["name", "email", "position_id", "status"])
 
 /**
- * 직원(employees) 필드 수정. 빈 문자열은 null로 저장한다.
+ * 직원(staff) 필드 수정. 빈 문자열은 null로 저장한다.
  * 이름/이메일/직책/상태는 작성자 표시 등에 쓰이는 users 테이블에도 함께 반영한다.
  */
 export async function updateEmployeeField(
@@ -56,7 +56,7 @@ export async function updateEmployeeField(
   const payload = { [field]: value === "" ? null : value }
 
   const res = await fetch(
-    `${SUPABASE_URL}/rest/v1/employees?id=eq.${encodeURIComponent(employeeId)}`,
+    `${SUPABASE_URL}/rest/v1/staff?id=eq.${encodeURIComponent(employeeId)}`,
     {
       method: "PATCH",
       headers: {
@@ -105,7 +105,7 @@ export async function updateEmployeeStatus(
   const payload = { status, resigned_at: resignedAt }
 
   const res = await fetch(
-    `${SUPABASE_URL}/rest/v1/employees?id=eq.${encodeURIComponent(employeeId)}`,
+    `${SUPABASE_URL}/rest/v1/staff?id=eq.${encodeURIComponent(employeeId)}`,
     {
       method: "PATCH",
       headers: {

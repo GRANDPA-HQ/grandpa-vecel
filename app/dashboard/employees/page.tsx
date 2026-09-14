@@ -30,7 +30,7 @@ export default async function EmployeesPage({
 
   try {
     const [employeesResult, lookupResults, partOptionsResult, storeScopeResult] = await Promise.all([
-      getTableRows("employees", 1000, 0, {
+      getTableRows("staff", 1000, 0, {
         orderBy: "name",
         orderDir: "asc",
         filters: [
@@ -58,8 +58,8 @@ export default async function EmployeesPage({
   }
 
   // 열 관리(표시 여부·순서) — 계정별이 아니라 테이블 전체 공통 설정, 데이터 테이블 뷰어와 동일한
-  // table_column_prefs를 "employees" 키로 공유한다.
-  const { hiddenColumns: savedHidden, columnOrder: savedOrder } = await getColumnPrefs("employees").catch(
+  // table_column_prefs를 "staff" 키로 공유한다.
+  const { hiddenColumns: savedHidden, columnOrder: savedOrder } = await getColumnPrefs("staff").catch(
     () => ({ hiddenColumns: [] as string[], columnOrder: [] as string[] }),
   )
   let orderedColumns: string[] = [...EMPLOYEE_COLUMNS]
@@ -90,7 +90,7 @@ export default async function EmployeesPage({
           storeScopeMap={storeScopeMap}
         />
         <ColumnSettingsMenu
-          tableName="employees"
+          tableName="staff"
           allColumns={toggleableColumns}
           hiddenColumns={hiddenColumns}
         />

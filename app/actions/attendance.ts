@@ -42,7 +42,7 @@ function todayRangeIso() {
 }
 
 /**
- * 출퇴근 키오스크 대상은 별도 명단이 아니라 기존 employees 중 SP/KP(서비스/키친) 파트 소속 직원이다.
+ * 출퇴근 키오스크 대상은 별도 명단이 아니라 기존 staff 중 SP/KP(서비스/키친) 파트 소속 직원이다.
  * parts 테이블은 소규모 고정 마스터라 매번 code로 조회해도 부담이 없다.
  */
 async function getKioskPartIds(admin: ReturnType<typeof createAdminClient>): Promise<string[]> {
@@ -50,7 +50,7 @@ async function getKioskPartIds(admin: ReturnType<typeof createAdminClient>): Pro
   return (data ?? []).map((row) => row.id as string)
 }
 
-/** PIN이 발급된 employees.id 집합 — tb_sp_staff_auth는 employees 마스터와 분리된 별도 테이블. */
+/** PIN이 발급된 staff.id 집합 — tb_sp_staff_auth는 staff 마스터와 분리된 별도 테이블. */
 async function getIssuedStaffIds(
   admin: ReturnType<typeof createAdminClient>,
   employeeIds: string[],
@@ -73,7 +73,7 @@ async function fetchKioskStaff(storeId: string): Promise<KioskStaff[]> {
 
   const [{ data: employeeRows, error: employeeError }, { data: logRows, error: logError }] = await Promise.all([
     admin
-      .from("employees")
+      .from("staff")
       .select("id, name, position_id")
       .eq("store_id", storeId)
       .in("part_id", partIds)
@@ -181,7 +181,7 @@ export async function checkAttendance(
   const partIds = await getKioskPartIds(admin)
 
   const [{ data: staffRow, error: staffError }, { data: authRow, error: authError }] = await Promise.all([
-    admin.from("employees").select("id, name, store_id, part_id").eq("id", staffId).maybeSingle(),
+    admin.from("staff").select("id, name, store_id, part_id").eq("id", staffId).maybeSingle(),
     admin.from("tb_sp_staff_auth").select("pin_hash").eq("staff_id", staffId).maybeSingle(),
   ])
 
@@ -270,7 +270,7 @@ async function resolveSpStaff(
 ): Promise<{ staff: { id: string; name: string } } | { error: string }> {
   const partIds = await getKioskPartIds(admin)
   const { data: target, error } = await admin
-    .from("employees")
+    .from("staff")
     .select("id, name, store_id, part_id")
     .eq("id", staffId)
     .maybeSingle()
@@ -304,7 +304,7 @@ export async function getAttendanceHistory(
 
   const [{ data: employeeRows, error: employeeError }, { data: logRows, error: logError }] = await Promise.all([
     admin
-      .from("employees")
+      .from("staff")
       .select("id, name")
       .eq("store_id", employee.storeId)
       .in("part_id", partIds)
@@ -538,7 +538,7 @@ export async function deleteAttendanceDay(
 }
 
 // ── PIN 발급 관리 — 시니어 전용 ─────────────────────────────
-// 대상 직원은 별도 등록이 아니라 해당 매장의 SP/KP 파트 employees 그대로. PIN은 employees 마스터와
+// 대상 직원은 별도 등록이 아니라 해당 매장의 SP/KP 파트 staff 그대로. PIN은 staff 마스터와
 // 분리된 tb_sp_staff_auth에 해시로만 저장되므로, 발급/재발급 시점에만 평문을 반환하고 이후엔 다시 조회할 수 없다.
 
 export type SpEmployeeRow = {
@@ -558,7 +558,7 @@ export async function listSpEligibleEmployees(): Promise<{ staff: SpEmployeeRow[
   if (partIds.length === 0) return { staff: [] }
 
   const { data, error } = await admin
-    .from("employees")
+    .from("staff")
     .select("id, name")
     .eq("store_id", employee.storeId)
     .in("part_id", partIds)
@@ -589,7 +589,7 @@ export async function reissuePin(
   const partIds = await getKioskPartIds(admin)
 
   const { data: target, error: targetError } = await admin
-    .from("employees")
+    .from("staff")
     .select("id, store_id, part_id")
     .eq("id", employeeId)
     .maybeSingle()

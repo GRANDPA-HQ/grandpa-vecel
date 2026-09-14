@@ -32,7 +32,7 @@ export function StaffManageTable({ initialStaff }: { initialStaff: SpEmployeeRow
   return (
     <div className="flex flex-col gap-4">
       <p className="text-sm text-muted-foreground">
-        총 {staffList.length}명 · SP 파트 소속 직원(employees) 기준, 별도 등록 없이 자동으로 대상이 됩니다.
+        총 {staffList.length}명 · SP 파트 소속 직원(staff) 기준, 별도 등록 없이 자동으로 대상이 됩니다.
       </p>
 
       {error && <p className="text-sm text-destructive">{error}</p>}

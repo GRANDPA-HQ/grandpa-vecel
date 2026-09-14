@@ -20,10 +20,10 @@ export const TABLE_PK: Record<string, string> = {
 }
 
 // 매장(지점) 스코핑 대상 테이블 → 필터에 쓸 컬럼.
-// 시니어가 아닌 직원은 본인 소속 매장(employees.store_id) 값과 이 컬럼이 일치하는 행만 볼 수 있다.
+// 시니어가 아닌 직원은 본인 소속 매장(staff.store_id) 값과 이 컬럼이 일치하는 행만 볼 수 있다.
 // tb_store_mst는 자기 자신이 매장이라 store_id가 아니라 PK("id")로 스코핑한다.
 export const STORE_SCOPED_TABLES: Record<string, string> = {
-  employees:         "store_id",
+  staff:             "store_id",
   tb_zone_mst:       "store_id",
   tb_store_mst:      "id",
   tb_sp_attendance_log: "store_id",
@@ -60,7 +60,7 @@ export const TABLE_LABELS: Record<string, string> = {
   tb_sku_recipe:         "판매품 레시피",
   tb_prod_recipe:        "생산품 레시피",
   tb_production_process: "생산 공정",
-  employees:             "직원",
+  staff:                 "직원",
   tb_sales_order:        "매출 주문",
   tb_sales_order_item:   "매출 주문 품목",
   tb_sku_platform_alias: "판매품 플랫폼 별칭",
@@ -79,7 +79,7 @@ export const TABLE_LABELS: Record<string, string> = {
 // 뷰어에서 값을 고치거나 지울 수 있으면 신뢰할 수 없게 된다.
 export const READ_ONLY_TABLES = new Set(["tb_audit_log"])
 
-// employees 테이블의 FK 컬럼 → 이름 표시용 조회 설정 (화면·엑셀 추출 공용)
+// staff 테이블의 FK 컬럼 → 이름 표시용 조회 설정 (화면·엑셀 추출 공용)
 // labelOrder: 드롭다운 표시 순서 (없으면 라벨 컬럼 기준 기본 정렬)
 export const EMPLOYEE_FK_LOOKUPS: {
   column: string
@@ -178,10 +178,6 @@ export const TABLE_HIDDEN_COLS: Record<string, Set<string>> = {
   tb_sop_mst:     new Set(["sop_id"]),
   // asset_id: gen_random_uuid() PK — asset_code가 사람이 읽는 코드 역할을 하므로 숨김
   tb_asset_mst:   new Set(["asset_id"]),
-  // purchase_section_id: manage_part_id(관리 파트)와 항상 같은 값을 쓰도록 되어 있었고
-  // 실제로는 모든 행에서 비어 있어(null) 별도로 관리되지 않는 중복 컬럼 — 목록 화면에서 숨김.
-  // (DB 컬럼 자체는 남겨둔다. 나중에 실제로 필요해지면 이 줄만 지우면 다시 노출된다.)
-  tb_submat_mst:  new Set(["purchase_section_id"]),
   // changed_by는 uuid FK — changed_by_name에 당시 이름이 스냅샷으로 이미 있어 목록에서는 숨김
   tb_audit_log:   new Set(["changed_by"]),
 }
@@ -267,7 +263,7 @@ export const TABLE_DEFAULT_SORT: Record<string, { column: string; dir: "asc" | "
   tb_sku_recipe:   { column: "sku_id", dir: "asc" },
   // 같은 생산품에 속한 원자재끼리 모여서 보이도록 생산품 기준 정렬
   tb_prod_recipe:  { column: "prod_id", dir: "asc" },
-  employees:       { column: "name", dir: "asc" },
+  staff:           { column: "name", dir: "asc" },
   tb_sales_order:  { column: "order_datetime", dir: "desc" },
   tb_submat_mst:   { column: "submat_id", dir: "asc" },
   tb_store_mst:    { column: "store_code", dir: "asc" },
@@ -289,8 +285,8 @@ export const TABLE_SEARCH_COLUMNS: Record<string, string[]> = {
   // id 목록으로 변환해 별도로 검색한다 (memo만 텍스트로 직접 검색)
   tb_sku_recipe:   ["memo"],
   tb_prod_recipe:  ["memo"],
-  employees:       ["name", "phone", "email"],
-  tb_submat_mst:   ["submat_id", "item_name", "item_name_short"],
+  staff:           ["name", "phone", "email"],
+  tb_submat_mst:   ["submat_id", "item_name"],
   tb_store_mst:    ["store_code", "store_name", "address"],
   tb_zone_mst:     ["note"],
   tb_sop_mst:      ["sop_code", "sop_title"],
@@ -329,7 +325,7 @@ export const ASSET_GROUP_OPTIONS: SelectOption[] = [
 ]
 
 // 로그인 시 미리 캐싱해도 안전한 테이블 — 매장과 무관하게 전 직원에게 항상 동일한 마스터 데이터.
-// employees/tb_zone_mst/tb_asset_mst 등은 매장별로 보이는 행이 달라(STORE_SCOPED_TABLES 참고)
+// staff/tb_zone_mst/tb_asset_mst 등은 매장별로 보이는 행이 달라(STORE_SCOPED_TABLES 참고)
 // 테이블명만으로 캐시를 공유하면 다른 매장 데이터가 샐 수 있어 대상에서 제외한다.
 export const CACHEABLE_MASTER_TABLES = new Set([
   "tb_raw_mst",

@@ -38,15 +38,12 @@ export const COLUMN_LABELS: Record<string, string> = {
   catgegory_id: "카테고리 코드",
   storage: "보관 방식",
   purchase_unit: "구매 단위",
-  order_pack_unit: "발주 단위",
-  purchase_price: "구매 단가",
   supplier: "거래처",
   shelf_life_days: "보관 기한 (일)",
   std_batch_qty: "표준 배치 수량",
   price: "가격",
   cost: "원가",
   stock: "재고",
-  stock_qty: "재고 수량",
   min_stock: "최소 재고",
   status: "상태",
   note: "비고",
@@ -86,18 +83,13 @@ export const COLUMN_LABELS: Record<string, string> = {
   // 포장 부자재 (tb_submat_mst)
   submat_id: "부자재 ID",
   item_name: "품목명",
-  item_name_short: "품목명 (축약)",
   manage_part_id: "관리 파트",
   usage_note: "사용 메모",
-  qty_per_purchase: "구매당 수량",
-  base_unit: "기본 단위",
-  purchase_supplier: "구매처",
-  purchase_lead_time_day: "구매 리드타임(일)",
-  purchase_moq: "최소 구매 수량(MOQ)",
-  delivery_note: "배송 메모",
-  avg_daily_use_ea: "일평균 사용량(EA)",
-  min_stock_ea: "최소 재고(EA)",
-  par_stock_ea: "기준 재고(EA)",
+  base_unit: "재고 단위",
+  qty_per_pack: "팩당 수량(EA)",
+  packs_per_box: "박스당 팩 수",
+  min_stock_pack: "최소 재고(팩)",
+  par_stock_pack: "적정 재고(팩)",
   remark: "비고",
   spec: "규격",
   // 매출 주문 (tb_sales_order / tb_sales_order_item)
@@ -112,7 +104,7 @@ export const COLUMN_LABELS: Record<string, string> = {
   position: "직책",
   position_id: "직책",
   department: "부서",
-  // 직원 (employees)
+  // 직원 (staff)
   store_id: "지점",
   part_id: "파트",
   rank_id: "직급",
@@ -129,6 +121,8 @@ export const COLUMN_LABELS: Record<string, string> = {
   scope: "지점 구분",
   // 구역 (tb_zone_mst)
   zone_type_id: "구역 유형",
+  // 보관영역 (tb_storage_area_mst)
+  area_name: "영역 이름",
   // 방법서 (tb_sop_mst)
   sop_code: "방법서 코드",
   sop_category: "구분",

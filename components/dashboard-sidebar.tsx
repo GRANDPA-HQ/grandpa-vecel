@@ -15,10 +15,7 @@ import {
   Link2,
   Store,
   ChefHat,
-  Wheat,
   Archive,
-  Factory,
-  ShoppingBag,
   BookOpen,
   Megaphone,
   ChevronLeft,
@@ -87,10 +84,17 @@ export function DashboardSidebar({
     { kind: "leaf", label: "KP 생산일지", href: "/dashboard/production-log", icon: ChefHat, visible: true },
 
     { kind: "group", label: "재고관리" },
-    { kind: "leaf", label: "원재료", href: "/dashboard/inventory-raw", icon: Wheat, visible: true, exact: true },
-    { kind: "leaf", label: "포장부자재", href: "/dashboard/inventory-submat", icon: Archive, visible: true, exact: true },
-    { kind: "leaf", label: "생산품", href: "/dashboard/inventory-prod", icon: Factory, visible: true, exact: true },
-    { kind: "leaf", label: "판매품", href: "/dashboard/inventory", icon: ShoppingBag, visible: true, exact: true },
+    {
+      kind: "leaf",
+      label: "포장부자재 재고",
+      href: "/dashboard/stock",
+      icon: Archive,
+      visible: true,
+      submenu: [
+        { label: "정기실사", href: "/dashboard/stock/count" },
+        { label: "보관영역 매핑", href: "/dashboard/stock/mapping" },
+      ],
+    },
 
     { kind: "leaf", label: "SOP(방법서) 관리", href: `${DATA_TABLE_HREF}/tb_sop_mst`, icon: BookOpen, visible: true, exact: true },
 

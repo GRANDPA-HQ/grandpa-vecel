@@ -118,7 +118,7 @@ export async function GET(
     if (tableName === "tb_prod_mst" || tableName === "tb_raw_mst") {
       columnResolvers["catgegory_id"] = await getCategoryIdMap().catch(() => ({}))
     }
-    if (tableName === "employees") {
+    if (tableName === "staff") {
       const lookups = await Promise.all(
         EMPLOYEE_FK_LOOKUPS.map((l) => getIdLabelOptions(l.table, l.labelColumn).catch(() => [])),
       )

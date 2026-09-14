@@ -53,7 +53,7 @@ export async function signIn(
     await warmMasterTableCaches()
     if (!userId) return
     const admin = createAdmin()
-    const { data: emp } = await admin.from("employees").select("store_id").eq("id", userId).maybeSingle()
+    const { data: emp } = await admin.from("staff").select("store_id").eq("id", userId).maybeSingle()
     const storeId = emp?.store_id as string | undefined
     if (storeId) {
       await Promise.all([warmAttendanceCache(storeId), warmNoticesCache(storeId)])
