@@ -52,6 +52,31 @@ export async function sendInviteEmail(to: string, opts: { password: string }): P
 }
 
 /**
+ * 출퇴근 키오스크 PIN이 발급/재발급됐을 때 새 PIN을 본인 이메일로 발송한다.
+ */
+export async function sendPinIssuedEmail(to: string, opts: { name: string; pin: string }): Promise<void> {
+  const client = getClient()
+  if (!client) throw new Error("RESEND_API_KEY가 설정되지 않았습니다.")
+
+  const { error } = await client.emails.send({
+    from: FROM,
+    to,
+    subject: "[Granpa-co] 출퇴근 키오스크 PIN이 발급되었습니다",
+    html: wrapEmailHtml(
+      "출퇴근 키오스크 PIN이 발급되었습니다",
+      `
+        <p>${opts.name}님, 출퇴근 체크인 키오스크에서 사용할 PIN이 발급되었습니다.</p>
+        <table style="margin: 16px 0; border-collapse: collapse;">
+          <tr><td style="padding: 4px 12px 4px 0; color: #6b7280;">PIN</td><td style="font-family: monospace; font-size: 20px; letter-spacing: 0.2em;">${opts.pin}</td></tr>
+        </table>
+        <p>키오스크 체크인 시 이 PIN을 입력해주세요.</p>
+      `,
+    ),
+  })
+  if (error) throw new Error(error.message)
+}
+
+/**
  * 관리자가 비밀번호를 재설정했을 때 새 비밀번호를 본인 이메일로 발송한다.
  */
 export async function sendPasswordResetEmail(to: string, opts: { password: string }): Promise<void> {
