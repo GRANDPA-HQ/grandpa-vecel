@@ -1045,7 +1045,13 @@ export function DataTable({
         <Table
           ref={tableElRef}
           containerClassName="max-h-[65vh] overflow-y-auto"
-          className="table-fixed"
+          // Tailwind 기본 스타일(Preflight)이 <table>에 border-collapse: collapse를 적용하는데,
+          // border-collapse가 collapse인 표에서는 th/td에 준 sticky(고정 헤더)가 스펙상 무시되어
+          // 브라우저에서 실제로 고정되지 않는 알려진 문제가 있음 (헤더 셀에 sticky 클래스는 있는데
+          // 스크롤해도 화면에 붙어있지 않던 원인). border-separate로 바꿔 sticky가 실제로 동작하게
+          // 하고, border-collapse일 때는 tr의 border-b로 그려지던 줄 구분선을 separate 모드에서는
+          // tr 테두리가 무시되므로 th/td에 직접 그리도록 옮김 (맨 아래 줄은 중복 방지로 생략)
+          className="table-fixed border-separate border-spacing-0 [&_th]:border-b [&_th]:border-border [&_td]:border-b [&_td]:border-border [&_tr:last-child>td]:border-b-0"
           style={{ width: totalTableWidth }}
         >
           <colgroup>

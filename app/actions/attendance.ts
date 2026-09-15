@@ -4,6 +4,7 @@ import { revalidatePath, updateTag, unstable_cache } from "next/cache"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { getCurrentEmployee } from "@/lib/permissions"
 import { hashPin, verifyPin, generatePin } from "@/lib/pin"
+import { sendPinIssuedEmail } from "@/lib/email"
 import {
   deriveStatus,
   summarizeDay,
@@ -582,7 +583,7 @@ export async function listSpEligibleEmployees(): Promise<{ staff: SpEmployeeRow[
 
 export async function reissuePin(
   employeeId: string,
-): Promise<{ success: true; pin: string } | { error: string }> {
+): Promise<{ success: true; pin: string; emailWarning?: string } | { error: string }> {
   const employee = await getCurrentEmployee()
   if (!employee) return { error: "로그인이 필요합니다." }
   if (!employee.isSenior) return { error: "권한이 없습니다." }
@@ -593,7 +594,7 @@ export async function reissuePin(
 
   const { data: target, error: targetError } = await admin
     .from("staff")
-    .select("id, store_id, part_id")
+    .select("id, name, store_id, part_id, email")
     .eq("id", employeeId)
     .maybeSingle()
 
@@ -613,5 +614,18 @@ export async function reissuePin(
   updateTag(kioskStaffTag(employee.storeId))
   revalidatePath("/dashboard/employees/pin")
   revalidatePath("/dashboard")
+
+  // 이메일 발송 — 실패해도 PIN 발급 자체는 이미 끝났으니 되돌리지 않고 경고만 알린다
+  const email = target.email as string | null
+  if (!email) {
+    return { success: true, pin, emailWarning: "직원 이메일이 등록되어 있지 않아 메일을 발송하지 못했습니다." }
+  }
+  try {
+    await sendPinIssuedEmail(email, { name: target.name as string, pin })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "이메일 발송 실패"
+    return { success: true, pin, emailWarning: `PIN은 발급됐지만 안내 메일 발송에 실패했습니다. (${msg})` }
+  }
+
   return { success: true, pin }
 }

@@ -13,6 +13,12 @@ export const COLUMN_LABELS: Record<string, string> = {
   fat_ea: "지방(개당, g)",
   purchase_mode: "구매 방식",
   purchase_section_id: "구매 담당 섹션",
+  // 구매 단위(purchase_unit) 하나(예: 1EA, 1박스) 안에 실제로 들어있는 양 — 제품 포장에
+  // 적힌 "내용량" 표기와 같은 개념. 예: 구매 단위 EA + 내용량 907 + 내용량 단위 g → 1EA에 907g
+  pack_qty: "내용량",
+  pack_unit: "내용량 단위",
+  origin: "원산지",
+  nutrition_source: "영양성분 출처",
   // 생산품 (tb_prod_mst)
   prod_code: "생산품 코드",
   prod_name: "생산품명",

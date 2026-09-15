@@ -80,6 +80,9 @@ export function StaffAttendanceDetail({
     setEditTarget({ date: addDate, checkIn: "", checkOut: "", breaks: [], isNew: true })
   }
 
+  // "기록 추가" 다이얼로그 안에서 날짜를 다시 고를 때, 이미 기록이 있는 날짜인지 알려주기 위함
+  const takenDates = useMemo(() => new Set(days.map((d) => d.date)), [days])
+
   const confirmDelete = (date: string) => {
     startDeleteTransition(async () => {
       const result = await deleteAttendanceDay(staffId, date)
@@ -208,7 +211,9 @@ export function StaffAttendanceDetail({
         <EditAttendanceDialog
           staffId={staffId}
           staffName={staffName}
+          month={month}
           target={editTarget}
+          takenDates={takenDates}
           onClose={() => setEditTarget(null)}
           onSaved={() => {
             setEditTarget(null)
@@ -223,13 +228,17 @@ export function StaffAttendanceDetail({
 function EditAttendanceDialog({
   staffId,
   staffName,
+  month,
   target,
+  takenDates,
   onClose,
   onSaved,
 }: {
   staffId: string
   staffName: string
+  month: string
   target: EditTarget
+  takenDates: Set<string>
   onClose: () => void
   onSaved: () => void
 }) {
@@ -244,6 +253,9 @@ function EditAttendanceDialog({
   const removeBreak = (i: number) => setBreaks((prev) => prev.filter((_, idx) => idx !== i))
   const updateBreak = (i: number, field: "start" | "end", value: string) =>
     setBreaks((prev) => prev.map((b, idx) => (idx === i ? { ...b, [field]: value } : b)))
+
+  // 새로 추가하는 기록인데 이미 그 날짜에 기록이 있으면, 저장 시 그 기록이 통째로 대체된다는 걸 미리 알려준다.
+  const overwritesExisting = target.isNew && date !== target.date && takenDates.has(date)
 
   const save = () => {
     setError(null)
@@ -286,17 +298,26 @@ function EditAttendanceDialog({
 
         <div className="flex flex-col gap-3">
           {target.isNew && (
-            <div className="flex items-center gap-3">
-              <label className="w-16 shrink-0 text-sm text-muted-foreground">날짜</label>
-              <input
-                type="date"
-                value={date}
-                max={todayKst()}
-                onChange={(e) => setDate(e.target.value)}
-                className="rounded-md border border-input bg-background px-2.5 py-1.5 text-sm"
-              />
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-3">
+                <label className="w-16 shrink-0 text-sm text-muted-foreground">날짜</label>
+                <input
+                  type="date"
+                  value={date}
+                  min={`${month}-01`}
+                  max={todayKst()}
+                  onChange={(e) => setDate(e.target.value)}
+                  className="rounded-md border border-input bg-background px-2.5 py-1.5 text-sm"
+                />
+              </div>
+              {overwritesExisting && (
+                <p className="pl-[76px] text-xs text-amber-600">
+                  이미 기록이 있는 날짜예요. 저장하면 그 날짜의 기존 기록이 대체됩니다.
+                </p>
+              )}
             </div>
           )}
+
           <div className="flex items-center gap-3">
             <label className="w-16 shrink-0 text-sm text-muted-foreground">출근</label>
             <input
