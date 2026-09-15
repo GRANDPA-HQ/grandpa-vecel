@@ -14,9 +14,14 @@ export default async function StaffAttendanceHistoryPage({
 }) {
   const employee = await getCurrentEmployee()
   if (!employee) redirect("/login")
-  if (!employee.isSenior) redirect("/dashboard/bug-report")
 
   const { staffId } = await params
+
+  // 본인 근태는 누구나 볼 수 있고, 다른 직원 근태는 매니저 이상만 볼 수 있다.
+  if (!employee.isSenior && employee.id !== staffId) redirect("/dashboard/bug-report")
+  // 수정/삭제는 매니저 이상만 — 본인 근태를 보는 일반 직원에게는 조회만 제공한다.
+  const canEdit = employee.isSenior
+
   const { month: monthParam } = await searchParams
   const month = isValidMonthStr(monthParam) ? monthParam : currentMonthKst()
   const prevMonth = addMonthsKst(`${month}-01`, -1).slice(0, 7)
@@ -27,12 +32,14 @@ export default async function StaffAttendanceHistoryPage({
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <Link
-          href="/dashboard/attendance/history"
-          className="text-sm text-muted-foreground hover:text-foreground"
-        >
-          ← 근태관리로 돌아가기
-        </Link>
+        {canEdit && (
+          <Link
+            href="/dashboard/attendance/history"
+            className="text-sm text-muted-foreground hover:text-foreground"
+          >
+            ← 근태관리로 돌아가기
+          </Link>
+        )}
         <h1 className="mt-1 text-2xl font-semibold tracking-tight">
           {"error" in result ? "일별 근태 기록" : `${result.staffName}님의 일별 근태 기록`}
         </h1>
@@ -59,7 +66,13 @@ export default async function StaffAttendanceHistoryPage({
           {result.error}
         </div>
       ) : (
-        <StaffAttendanceDetail staffId={staffId} staffName={result.staffName} month={month} days={result.days} />
+        <StaffAttendanceDetail
+          staffId={staffId}
+          staffName={result.staffName}
+          month={month}
+          days={result.days}
+          canEdit={canEdit}
+        />
       )}
     </div>
   )
