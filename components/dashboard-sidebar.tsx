@@ -145,7 +145,6 @@ export function DashboardSidebar({
       href: "/dashboard/employees",
       icon: Users,
       visible: isManager,
-      submenu: [{ label: "PIN 발급 관리", href: "/dashboard/employees/pin" }],
     },
     { kind: "leaf", label: "버그 리포트", href: "/dashboard/bug-report", icon: Bug, visible: true },
   ]
