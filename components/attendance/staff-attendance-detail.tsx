@@ -36,6 +36,9 @@ type EditTarget = {
   checkIn: string
   checkOut: string
   breaks: { start: string; end: string }[]
+  // true면 "기록 추가"로 연 다이얼로그 — 이 경우에만 다이얼로그 안에서 날짜를 다시 고를 수 있게 한다.
+  // 기존 기록을 수정하는 중에는 날짜를 바꾸면 원래 날짜의 기록이 그대로 남아 중복되므로 허용하지 않는다.
+  isNew: boolean
 }
 
 export function StaffAttendanceDetail({
@@ -64,13 +67,17 @@ export function StaffAttendanceDetail({
         start: formatTime(bp.start) === "-" ? "" : formatTime(bp.start),
         end: bp.end ? formatTime(bp.end) : "",
       })),
+      isNew: false,
     })
   }
 
   const openAdd = () => {
     if (!addDate) return
-    setEditTarget({ date: addDate, checkIn: "", checkOut: "", breaks: [] })
+    setEditTarget({ date: addDate, checkIn: "", checkOut: "", breaks: [], isNew: true })
   }
+
+  // "기록 추가" 다이얼로그 안에서 날짜를 다시 고를 때, 이미 기록이 있는 날짜인지 알려주기 위함
+  const takenDates = useMemo(() => new Set(days.map((d) => d.date)), [days])
 
   const confirmDelete = (date: string) => {
     startDeleteTransition(async () => {
@@ -196,7 +203,9 @@ export function StaffAttendanceDetail({
         <EditAttendanceDialog
           staffId={staffId}
           staffName={staffName}
+          month={month}
           target={editTarget}
+          takenDates={takenDates}
           onClose={() => setEditTarget(null)}
           onSaved={() => {
             setEditTarget(null)
@@ -211,16 +220,21 @@ export function StaffAttendanceDetail({
 function EditAttendanceDialog({
   staffId,
   staffName,
+  month,
   target,
+  takenDates,
   onClose,
   onSaved,
 }: {
   staffId: string
   staffName: string
+  month: string
   target: EditTarget
+  takenDates: Set<string>
   onClose: () => void
   onSaved: () => void
 }) {
+  const [date, setDate] = useState(target.date)
   const [checkIn, setCheckIn] = useState(target.checkIn)
   const [checkOut, setCheckOut] = useState(target.checkOut)
   const [breaks, setBreaks] = useState(target.breaks)
@@ -232,6 +246,9 @@ function EditAttendanceDialog({
   const updateBreak = (i: number, field: "start" | "end", value: string) =>
     setBreaks((prev) => prev.map((b, idx) => (idx === i ? { ...b, [field]: value } : b)))
 
+  // 새로 추가하는 기록인데 이미 그 날짜에 기록이 있으면, 저장 시 그 기록이 통째로 대체된다는 걸 미리 알려준다.
+  const overwritesExisting = target.isNew && date !== target.date && takenDates.has(date)
+
   const save = () => {
     setError(null)
     const cleanedBreaks: AttendanceBreakInput[] = breaks
@@ -239,7 +256,7 @@ function EditAttendanceDialog({
       .map((b) => ({ start: b.start, end: b.end || null }))
 
     startTransition(async () => {
-      const result = await updateAttendanceDay(staffId, target.date, {
+      const result = await updateAttendanceDay(staffId, date, {
         checkIn: checkIn || null,
         checkOut: checkOut || null,
         breaks: cleanedBreaks,
@@ -257,15 +274,34 @@ function EditAttendanceDialog({
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
       <div className="relative z-10 flex w-full max-w-md flex-col gap-4 rounded-xl border border-border bg-background p-6 shadow-xl">
         <div>
-          <h2 className="text-lg font-semibold">
-            {staffName}님 · {target.date}
-          </h2>
+          <h2 className="text-lg font-semibold">{staffName}님 · {target.isNew ? "기록 추가" : date}</h2>
           <p className="mt-1 text-xs text-muted-foreground">
             해당 날짜의 출근/휴게/퇴근 기록을 통째로 다시 저장합니다. 비워두면 해당 이벤트가 없던 것으로 처리됩니다.
           </p>
         </div>
 
         <div className="flex flex-col gap-3">
+          {target.isNew && (
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-3">
+                <label className="w-16 shrink-0 text-sm text-muted-foreground">날짜</label>
+                <input
+                  type="date"
+                  value={date}
+                  min={`${month}-01`}
+                  max={todayKst()}
+                  onChange={(e) => setDate(e.target.value)}
+                  className="rounded-md border border-input bg-background px-2.5 py-1.5 text-sm"
+                />
+              </div>
+              {overwritesExisting && (
+                <p className="pl-[76px] text-xs text-amber-600">
+                  이미 기록이 있는 날짜예요. 저장하면 그 날짜의 기존 기록이 대체됩니다.
+                </p>
+              )}
+            </div>
+          )}
+
           <div className="flex items-center gap-3">
             <label className="w-16 shrink-0 text-sm text-muted-foreground">출근</label>
             <input
