@@ -5,8 +5,9 @@ import { revalidatePath } from "next/cache"
 import { getCurrentEmployee } from "@/lib/permissions"
 import { sendInviteEmail, sendPasswordResetEmail } from "@/lib/email"
 
-// 사람이 눈으로 구분하기 쉽도록 헷갈리는 문자(0/O, 1/l/I) 제외
-const PASSWORD_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"
+// 소문자+숫자만 사용 — 초기 비밀번호를 직원이 직접 입력하기 쉽게 함(대소문자 섞이면 헷갈려함).
+// 사람이 눈으로 구분하기 쉽도록 헷갈리는 문자(0, 1, l, o)는 제외.
+const PASSWORD_CHARS = "abcdefghjkmnpqrstuvwxyz23456789"
 function generatePassword(length = 10): string {
   let out = ""
   for (let i = 0; i < length; i++) {
@@ -69,28 +70,11 @@ export type InviteState = {
   password?: string
   // 계정 생성은 됐지만 안내 메일 발송에 실패한 경우 (계정 생성 자체는 롤백하지 않는다)
   emailWarning?: string
-  // 이메일 없이(로그인 계정 없이) 등록한 경우 — 다이얼로그가 비밀번호 대신 안내 문구를 보여줄 때 씀
-  noEmail?: boolean
-  name?: string
-}
-
-/**
- * 이메일 없이 등록하는 직원(주로 주방 등 대시보드 로그인이 필요 없는 직원)의 기본값을 조회한다.
- * 매장/직책/직급은 이메일 초대와 동일 로직 재사용, 파트만 호출자가 고른 SP/KP로 지정한다.
- */
-async function getNoEmailDefaults(admin: ReturnType<typeof createAdmin>, partCode: string) {
-  const base = await getInviteDefaults(admin)
-  const { data: part } = await admin.from("parts").select("id").eq("code", partCode).maybeSingle()
-  return { ...base, part_id: (part as Row | null)?.id ?? base.part_id }
 }
 
 /**
  * 직원 추가: 계정을 즉시 생성하고 (아이디 = 이메일, 비밀번호 = 무작위 6자리 영숫자)
  * 직원(staff) 테이블에 등록한다. users에도 함께 기록해 작성자 표시 등 기존 기능과 호환.
- *
- * 이메일이 없는 직원(주방 등, 대시보드에 로그인할 필요가 없고 출퇴근 PIN만 쓰는 경우)은
- * noEmail=1로 넘어오며, 이 경우 로그인 계정(Supabase Auth)을 만들지 않고 staff 행만 생성한다.
- * staff.id는 auth 사용자 id에 종속된 FK가 아니라 독립된 PK라 계정 없이도 문제 없다.
  */
 export async function inviteEmployee(
   _prevState: InviteState | undefined,
@@ -99,39 +83,11 @@ export async function inviteEmployee(
   const auth = await requireSenior()
   if ("error" in auth) return { error: auth.error }
 
-  const noEmail = formData.get("noEmail") === "1"
-  const admin = createAdmin()
-
-  if (noEmail) {
-    const name = String(formData.get("name") ?? "").trim()
-    if (!name) return { error: "이름을 입력해주세요." }
-    const partCode = String(formData.get("partCode") ?? "").trim()
-    if (!["SP", "KP"].includes(partCode)) return { error: "파트를 선택해주세요." }
-
-    const defaults = await getNoEmailDefaults(admin, partCode)
-    if (!defaults.store_id || !defaults.part_id || !defaults.position_id || !defaults.rank_id) {
-      return { error: "매장/파트/직책/직급 기본 데이터가 없어 직원을 등록할 수 없습니다." }
-    }
-
-    const { randomUUID } = await import("node:crypto")
-    const { error: insertError } = await admin.from("staff").insert({
-      id: randomUUID(),
-      ...defaults,
-      name,
-      email: null,
-      employment_type: "파트타임",
-      status: "재직",
-      hired_at: new Date().toISOString().slice(0, 10),
-    })
-    if (insertError) return { error: `직원 등록에 실패했습니다. ${insertError.message}` }
-
-    revalidatePath("/dashboard/employees")
-    return { success: true, noEmail: true, name }
-  }
-
   const email = String(formData.get("email") ?? "").trim().toLowerCase()
   if (!email) return { error: "이메일을 입력해주세요." }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: "올바른 이메일 형식이 아닙니다." }
+
+  const admin = createAdmin()
 
   // 이미 등록된 직원인지 확인
   const { data: existing } = await admin
