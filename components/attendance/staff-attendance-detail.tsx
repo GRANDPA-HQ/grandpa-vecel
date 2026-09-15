@@ -36,6 +36,10 @@ type EditTarget = {
   checkIn: string
   checkOut: string
   breaks: { start: string; end: string }[]
+  // 새 기록 추가인지 여부 — true일 때만 다이얼로그 안에서 날짜를 바꿀 수 있다.
+  // 기존 기록 수정은 그 날짜 값을 그대로 대체하는 동작이라, 날짜까지 바꾸면 다른 날짜의
+  // 기존 기록을 실수로 덮어쓸 수 있어 수정 모드에서는 날짜를 고정해둔다.
+  isNew: boolean
 }
 
 export function StaffAttendanceDetail({
@@ -67,12 +71,13 @@ export function StaffAttendanceDetail({
         start: formatTime(bp.start) === "-" ? "" : formatTime(bp.start),
         end: bp.end ? formatTime(bp.end) : "",
       })),
+      isNew: false,
     })
   }
 
   const openAdd = () => {
     if (!addDate) return
-    setEditTarget({ date: addDate, checkIn: "", checkOut: "", breaks: [] })
+    setEditTarget({ date: addDate, checkIn: "", checkOut: "", breaks: [], isNew: true })
   }
 
   const confirmDelete = (date: string) => {
@@ -228,6 +233,7 @@ function EditAttendanceDialog({
   onClose: () => void
   onSaved: () => void
 }) {
+  const [date, setDate] = useState(target.date)
   const [checkIn, setCheckIn] = useState(target.checkIn)
   const [checkOut, setCheckOut] = useState(target.checkOut)
   const [breaks, setBreaks] = useState(target.breaks)
@@ -241,12 +247,16 @@ function EditAttendanceDialog({
 
   const save = () => {
     setError(null)
+    if (!date) {
+      setError("날짜를 선택해 주세요.")
+      return
+    }
     const cleanedBreaks: AttendanceBreakInput[] = breaks
       .filter((b) => b.start)
       .map((b) => ({ start: b.start, end: b.end || null }))
 
     startTransition(async () => {
-      const result = await updateAttendanceDay(staffId, target.date, {
+      const result = await updateAttendanceDay(staffId, date, {
         checkIn: checkIn || null,
         checkOut: checkOut || null,
         breaks: cleanedBreaks,
@@ -265,14 +275,28 @@ function EditAttendanceDialog({
       <div className="relative z-10 flex w-full max-w-md flex-col gap-4 rounded-xl border border-border bg-background p-6 shadow-xl">
         <div>
           <h2 className="text-lg font-semibold">
-            {staffName}님 · {target.date}
+            {staffName}님{!target.isNew && ` · ${target.date}`}
           </h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            해당 날짜의 출근/휴게/퇴근 기록을 통째로 다시 저장합니다. 비워두면 해당 이벤트가 없던 것으로 처리됩니다.
+            {target.isNew
+              ? "선택한 날짜의 출근/휴게/퇴근 기록을 저장합니다. 이미 그 날짜에 기록이 있으면 덮어씁니다."
+              : "해당 날짜의 출근/휴게/퇴근 기록을 통째로 다시 저장합니다. 비워두면 해당 이벤트가 없던 것으로 처리됩니다."}
           </p>
         </div>
 
         <div className="flex flex-col gap-3">
+          {target.isNew && (
+            <div className="flex items-center gap-3">
+              <label className="w-16 shrink-0 text-sm text-muted-foreground">날짜</label>
+              <input
+                type="date"
+                value={date}
+                max={todayKst()}
+                onChange={(e) => setDate(e.target.value)}
+                className="rounded-md border border-input bg-background px-2.5 py-1.5 text-sm"
+              />
+            </div>
+          )}
           <div className="flex items-center gap-3">
             <label className="w-16 shrink-0 text-sm text-muted-foreground">출근</label>
             <input
