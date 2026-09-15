@@ -43,11 +43,14 @@ export function StaffAttendanceDetail({
   staffName,
   month,
   days,
+  canEdit,
 }: {
   staffId: string
   staffName: string
   month: string
   days: AttendanceDayRow[]
+  /** 근태 기록 추가/수정/삭제 가능 여부 — 매니저 이상만 true. 본인 근태를 조회하는 일반 직원은 false로 조회 전용. */
+  canEdit: boolean
 }) {
   const router = useRouter()
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null)
@@ -106,19 +109,21 @@ export function StaffAttendanceDetail({
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-sm font-semibold text-muted-foreground">일별 기록</h2>
-        <div className="flex items-center gap-2">
-          <input
-            type="date"
-            value={addDate}
-            min={`${month}-01`}
-            max={todayKst()}
-            onChange={(e) => setAddDate(e.target.value)}
-            className="rounded-md border border-input bg-background px-2.5 py-1.5 text-sm"
-          />
-          <Button size="sm" variant="outline" onClick={openAdd} disabled={!addDate}>
-            기록 추가
-          </Button>
-        </div>
+        {canEdit && (
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={addDate}
+              min={`${month}-01`}
+              max={todayKst()}
+              onChange={(e) => setAddDate(e.target.value)}
+              className="rounded-md border border-input bg-background px-2.5 py-1.5 text-sm"
+            />
+            <Button size="sm" variant="outline" onClick={openAdd} disabled={!addDate}>
+              기록 추가
+            </Button>
+          </div>
+        )}
       </div>
 
       <div className="overflow-hidden rounded-lg border border-border">
@@ -130,7 +135,7 @@ export function StaffAttendanceDetail({
               <th className="px-4 py-2 font-medium">퇴근</th>
               <th className="px-4 py-2 font-medium">근무시간</th>
               <th className="px-4 py-2 font-medium">휴게시간</th>
-              <th className="px-4 py-2 font-medium text-right">관리</th>
+              {canEdit && <th className="px-4 py-2 font-medium text-right">관리</th>}
             </tr>
           </thead>
           <tbody>
@@ -147,43 +152,45 @@ export function StaffAttendanceDetail({
                 </td>
                 <td className="px-4 py-2.5">{formatMinutes(row.workMinutes)}</td>
                 <td className="px-4 py-2.5">{formatMinutes(row.breakMinutes)}</td>
-                <td className="px-4 py-2.5 text-right">
-                  {deletingDate === row.date ? (
-                    <div className="flex items-center justify-end gap-2">
-                      <span className="text-xs text-muted-foreground">삭제할까요?</span>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        disabled={deletePending}
-                        onClick={() => confirmDelete(row.date)}
-                      >
-                        삭제
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={deletePending}
-                        onClick={() => setDeletingDate(null)}
-                      >
-                        취소
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-end gap-2">
-                      <Button size="sm" variant="outline" onClick={() => openEdit(row)}>
-                        수정
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={() => setDeletingDate(row.date)}>
-                        삭제
-                      </Button>
-                    </div>
-                  )}
-                </td>
+                {canEdit && (
+                  <td className="px-4 py-2.5 text-right">
+                    {deletingDate === row.date ? (
+                      <div className="flex items-center justify-end gap-2">
+                        <span className="text-xs text-muted-foreground">삭제할까요?</span>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          disabled={deletePending}
+                          onClick={() => confirmDelete(row.date)}
+                        >
+                          삭제
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={deletePending}
+                          onClick={() => setDeletingDate(null)}
+                        >
+                          취소
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-end gap-2">
+                        <Button size="sm" variant="outline" onClick={() => openEdit(row)}>
+                          수정
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => setDeletingDate(row.date)}>
+                          삭제
+                        </Button>
+                      </div>
+                    )}
+                  </td>
+                )}
               </tr>
             ))}
             {days.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-muted-foreground">
+                <td colSpan={canEdit ? 6 : 5} className="px-4 py-6 text-center text-muted-foreground">
                   {month}에 {staffName}님의 출퇴근 기록이 없습니다.
                 </td>
               </tr>
