@@ -246,7 +246,9 @@ export const SKU_MULTI_OPTIONS: Record<string, MultiOption[]> = {
 // 테이블별 등록 폼 입력 순서 (지정 안 한 나머지 컬럼은 기존 순서 그대로 뒤에 붙음)
 export const TABLE_FIELD_ORDER: Record<string, string[]> = {
   tb_sku_mst:  ["category_code", "sku_code"],
-  tb_raw_mst:  ["category_code", "raw_code"],
+  // 필수 입력 항목(카테고리·코드·이름·보관방식·구매단위·내용량)을 맨 앞에 모아서, 뒤쪽의
+  // 선택 입력 항목(구매처·브랜드·원산지 등) 사이에 섞여 있어 놓치기 쉬웠던 문제를 해결함
+  tb_raw_mst:  ["category_code", "raw_code", "raw_name", "storage", "purchase_unit", "pack_qty", "pack_unit", "usage_unit"],
   tb_prod_mst: ["category_code", "prod_code"],
   // 지점을 먼저 고른 뒤 그 지점의 구역 유형을 고르는 흐름
   tb_zone_mst: ["store_id", "zone_type_id"],
