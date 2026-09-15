@@ -295,8 +295,8 @@ function EmployeeRow({
           <div className="flex items-center gap-1">
             <button
               onClick={handleResetPassword}
-              disabled={isPending}
-              title="비밀번호 재설정 (새 비밀번호를 본인 이메일로 발송)"
+              disabled={isPending || !values.email}
+              title={values.email ? "비밀번호 재설정 (새 비밀번호를 본인 이메일로 발송)" : "이메일 없이 등록된 직원 — 로그인 계정이 없어 비밀번호가 없습니다"}
               className={cn(
                 "rounded p-1 transition-colors disabled:cursor-not-allowed disabled:opacity-50",
                 resetDone

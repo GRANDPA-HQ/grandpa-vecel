@@ -114,6 +114,12 @@ export function StaffAttendanceDetail({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-sm font-semibold text-muted-foreground">일별 기록</h2>
         <div className="flex items-center gap-2">
+          <a
+            href={`/api/export/attendance/${staffId}?month=${month}`}
+            className="inline-flex h-8 items-center rounded-md border border-input px-3 text-sm hover:bg-muted"
+          >
+            엑셀 다운로드
+          </a>
           <input
             type="date"
             value={addDate}
