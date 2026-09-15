@@ -1,4 +1,5 @@
 import "server-only"
+import { cache } from "react"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 
@@ -20,8 +21,13 @@ export type CurrentEmployee = {
  * 로그인한 사용자의 직원 정보와 관리 권한 여부를 조회한다.
  * 권한 기준: staff.rank(직급)의 level이 시니어(30) 이상.
  * staff에 아직 없는 과거 계정은 users의 직책이 점장이면 시니어로 취급한다.
+ *
+ * React cache()로 감싸서 같은 요청 안에서 여러 번 불려도(레이아웃 + 페이지 + 여러 서버 액션이
+ * 각자 이 함수를 호출하는 경우) 실제 로그인 확인(Supabase Auth 호출 + staff 조회)은 한 번만
+ * 나가고 나머지는 그 결과를 재사용한다. 지금은 이 함수 하나가 페이지마다 여러 번 중복 호출되고
+ * 있어 화면 하나 열 때마다 불필요한 인증 요청이 여러 번 쌓이는 게 체감 속도 저하의 큰 원인이었다.
  */
-export async function getCurrentEmployee(): Promise<CurrentEmployee | null> {
+export const getCurrentEmployee = cache(async (): Promise<CurrentEmployee | null> => {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
@@ -64,4 +70,4 @@ export async function getCurrentEmployee(): Promise<CurrentEmployee | null> {
     storeId,
     storeName,
   }
-}
+})
