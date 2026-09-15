@@ -14,7 +14,7 @@ export default async function DashboardLayout({
 
   return (
     <div className="flex h-svh bg-background text-foreground">
-      <DashboardSidebar isManager={employee.isSenior} userName={employee.name} />
+      <DashboardSidebar isManager={employee.isSenior} userName={employee.name} employeeId={employee.id} />
       <div className="flex flex-1 flex-col overflow-hidden">
         {employee.storeName && (
           <header className="flex items-center justify-end border-b border-border px-6 py-2.5">

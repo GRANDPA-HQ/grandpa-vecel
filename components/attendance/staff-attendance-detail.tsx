@@ -36,8 +36,9 @@ type EditTarget = {
   checkIn: string
   checkOut: string
   breaks: { start: string; end: string }[]
-  // true면 "기록 추가"로 연 다이얼로그 — 이 경우에만 다이얼로그 안에서 날짜를 다시 고를 수 있게 한다.
-  // 기존 기록을 수정하는 중에는 날짜를 바꾸면 원래 날짜의 기록이 그대로 남아 중복되므로 허용하지 않는다.
+  // 새 기록 추가인지 여부 — true일 때만 다이얼로그 안에서 날짜를 바꿀 수 있다.
+  // 기존 기록 수정은 그 날짜 값을 그대로 대체하는 동작이라, 날짜까지 바꾸면 다른 날짜의
+  // 기존 기록을 실수로 덮어쓸 수 있어 수정 모드에서는 날짜를 고정해둔다.
   isNew: boolean
 }
 
@@ -46,11 +47,14 @@ export function StaffAttendanceDetail({
   staffName,
   month,
   days,
+  canEdit,
 }: {
   staffId: string
   staffName: string
   month: string
   days: AttendanceDayRow[]
+  /** 근태 기록 추가/수정/삭제 가능 여부 — 매니저 이상만 true. 본인 근태를 조회하는 일반 직원은 false로 조회 전용. */
+  canEdit: boolean
 }) {
   const router = useRouter()
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null)
@@ -113,19 +117,21 @@ export function StaffAttendanceDetail({
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-sm font-semibold text-muted-foreground">일별 기록</h2>
-        <div className="flex items-center gap-2">
-          <input
-            type="date"
-            value={addDate}
-            min={`${month}-01`}
-            max={todayKst()}
-            onChange={(e) => setAddDate(e.target.value)}
-            className="rounded-md border border-input bg-background px-2.5 py-1.5 text-sm"
-          />
-          <Button size="sm" variant="outline" onClick={openAdd} disabled={!addDate}>
-            기록 추가
-          </Button>
-        </div>
+        {canEdit && (
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={addDate}
+              min={`${month}-01`}
+              max={todayKst()}
+              onChange={(e) => setAddDate(e.target.value)}
+              className="rounded-md border border-input bg-background px-2.5 py-1.5 text-sm"
+            />
+            <Button size="sm" variant="outline" onClick={openAdd} disabled={!addDate}>
+              기록 추가
+            </Button>
+          </div>
+        )}
       </div>
 
       <div className="overflow-hidden rounded-lg border border-border">
@@ -137,7 +143,7 @@ export function StaffAttendanceDetail({
               <th className="px-4 py-2 font-medium">퇴근</th>
               <th className="px-4 py-2 font-medium">근무시간</th>
               <th className="px-4 py-2 font-medium">휴게시간</th>
-              <th className="px-4 py-2 font-medium text-right">관리</th>
+              {canEdit && <th className="px-4 py-2 font-medium text-right">관리</th>}
             </tr>
           </thead>
           <tbody>
@@ -154,43 +160,45 @@ export function StaffAttendanceDetail({
                 </td>
                 <td className="px-4 py-2.5">{formatMinutes(row.workMinutes)}</td>
                 <td className="px-4 py-2.5">{formatMinutes(row.breakMinutes)}</td>
-                <td className="px-4 py-2.5 text-right">
-                  {deletingDate === row.date ? (
-                    <div className="flex items-center justify-end gap-2">
-                      <span className="text-xs text-muted-foreground">삭제할까요?</span>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        disabled={deletePending}
-                        onClick={() => confirmDelete(row.date)}
-                      >
-                        삭제
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={deletePending}
-                        onClick={() => setDeletingDate(null)}
-                      >
-                        취소
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-end gap-2">
-                      <Button size="sm" variant="outline" onClick={() => openEdit(row)}>
-                        수정
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={() => setDeletingDate(row.date)}>
-                        삭제
-                      </Button>
-                    </div>
-                  )}
-                </td>
+                {canEdit && (
+                  <td className="px-4 py-2.5 text-right">
+                    {deletingDate === row.date ? (
+                      <div className="flex items-center justify-end gap-2">
+                        <span className="text-xs text-muted-foreground">삭제할까요?</span>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          disabled={deletePending}
+                          onClick={() => confirmDelete(row.date)}
+                        >
+                          삭제
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={deletePending}
+                          onClick={() => setDeletingDate(null)}
+                        >
+                          취소
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-end gap-2">
+                        <Button size="sm" variant="outline" onClick={() => openEdit(row)}>
+                          수정
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => setDeletingDate(row.date)}>
+                          삭제
+                        </Button>
+                      </div>
+                    )}
+                  </td>
+                )}
               </tr>
             ))}
             {days.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-muted-foreground">
+                <td colSpan={canEdit ? 6 : 5} className="px-4 py-6 text-center text-muted-foreground">
                   {month}에 {staffName}님의 출퇴근 기록이 없습니다.
                 </td>
               </tr>
@@ -251,6 +259,10 @@ function EditAttendanceDialog({
 
   const save = () => {
     setError(null)
+    if (!date) {
+      setError("날짜를 선택해 주세요.")
+      return
+    }
     const cleanedBreaks: AttendanceBreakInput[] = breaks
       .filter((b) => b.start)
       .map((b) => ({ start: b.start, end: b.end || null }))
@@ -274,9 +286,13 @@ function EditAttendanceDialog({
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
       <div className="relative z-10 flex w-full max-w-md flex-col gap-4 rounded-xl border border-border bg-background p-6 shadow-xl">
         <div>
-          <h2 className="text-lg font-semibold">{staffName}님 · {target.isNew ? "기록 추가" : date}</h2>
+          <h2 className="text-lg font-semibold">
+            {staffName}님{!target.isNew && ` · ${target.date}`}
+          </h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            해당 날짜의 출근/휴게/퇴근 기록을 통째로 다시 저장합니다. 비워두면 해당 이벤트가 없던 것으로 처리됩니다.
+            {target.isNew
+              ? "선택한 날짜의 출근/휴게/퇴근 기록을 저장합니다. 이미 그 날짜에 기록이 있으면 덮어씁니다."
+              : "해당 날짜의 출근/휴게/퇴근 기록을 통째로 다시 저장합니다. 비워두면 해당 이벤트가 없던 것으로 처리됩니다."}
           </p>
         </div>
 

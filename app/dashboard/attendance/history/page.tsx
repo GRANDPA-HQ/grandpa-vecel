@@ -12,7 +12,9 @@ export default async function AttendanceHistoryPage({
 }) {
   const employee = await getCurrentEmployee()
   if (!employee) redirect("/login")
-  if (!employee.isSenior) redirect("/dashboard/bug-report")
+  // 매장 전체 직원의 근태를 한눈에 보는 화면은 매니저 이상만 접근 가능.
+  // 일반 직원은 본인 근태만 볼 수 있으므로 본인 상세 페이지로 보낸다.
+  if (!employee.isSenior) redirect(`/dashboard/attendance/history/${employee.id}`)
 
   const { month: monthParam } = await searchParams
   const month = isValidMonthStr(monthParam) ? monthParam : currentMonthKst()

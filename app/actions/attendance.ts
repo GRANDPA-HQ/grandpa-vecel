@@ -368,14 +368,17 @@ export async function getAttendanceHistory(
   return { month, totals }
 }
 
-/** 특정 직원의 월간 일별 근태 내역을 조회한다 (직원 클릭 시 이동하는 상세 페이지용). */
+/**
+ * 특정 직원의 월간 일별 근태 내역을 조회한다 (직원 클릭 시 이동하는 상세 페이지용).
+ * 시니어(매니저 이상)는 매장 내 누구든 조회할 수 있고, 그 외 직원은 본인 것만 조회할 수 있다.
+ */
 export async function getStaffAttendanceMonth(
   staffId: string,
   month: string,
 ): Promise<{ staffName: string; month: string; days: AttendanceDayRow[] } | { error: string }> {
   const employee = await getCurrentEmployee()
   if (!employee) return { error: "로그인이 필요합니다." }
-  if (!employee.isSenior) return { error: "권한이 없습니다." }
+  if (!employee.isSenior && employee.id !== staffId) return { error: "권한이 없습니다." }
   if (!employee.storeId) return { error: "소속 매장이 없습니다." }
   if (!isValidMonthStr(month)) return { error: "잘못된 월 형식입니다." }
 
