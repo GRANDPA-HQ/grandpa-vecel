@@ -7,7 +7,9 @@ import { Badge } from "@/components/ui/badge"
 
 export function StaffManageTable({ initialStaff }: { initialStaff: SpEmployeeRow[] }) {
   const [staffList, setStaffList] = useState<SpEmployeeRow[]>(initialStaff)
-  const [issuedFor, setIssuedFor] = useState<{ id: string; name: string; pin: string } | null>(null)
+  const [issuedFor, setIssuedFor] = useState<{ id: string; name: string; pin: string; emailWarning?: string } | null>(
+    null,
+  )
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
 
@@ -24,7 +26,7 @@ export function StaffManageTable({ initialStaff }: { initialStaff: SpEmployeeRow
         setError(result.error)
         return
       }
-      setIssuedFor({ id: row.id, name: row.name, pin: result.pin })
+      setIssuedFor({ id: row.id, name: row.name, pin: result.pin, emailWarning: result.emailWarning })
       refresh()
     })
   }
@@ -77,6 +79,7 @@ export function StaffManageTable({ initialStaff }: { initialStaff: SpEmployeeRow
         <IssuedPinDialog
           name={issuedFor.name}
           pin={issuedFor.pin}
+          emailWarning={issuedFor.emailWarning}
           onClose={() => setIssuedFor(null)}
         />
       )}
@@ -84,7 +87,17 @@ export function StaffManageTable({ initialStaff }: { initialStaff: SpEmployeeRow
   )
 }
 
-function IssuedPinDialog({ name, pin, onClose }: { name: string; pin: string; onClose: () => void }) {
+function IssuedPinDialog({
+  name,
+  pin,
+  emailWarning,
+  onClose,
+}: {
+  name: string
+  pin: string
+  emailWarning?: string
+  onClose: () => void
+}) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
@@ -94,6 +107,11 @@ function IssuedPinDialog({ name, pin, onClose }: { name: string; pin: string; on
           이 화면을 벗어나면 다시 볼 수 없습니다 — 지금 바로 직원분께 전달해 주세요.
         </p>
         <p className="mt-4 text-4xl font-bold tracking-[0.3em]">{pin}</p>
+        {emailWarning ? (
+          <p className="mt-4 text-sm text-destructive">{emailWarning}</p>
+        ) : (
+          <p className="mt-4 text-sm text-muted-foreground">직원 이메일로도 PIN을 발송했습니다.</p>
+        )}
         <Button className="mt-6 w-full" onClick={onClose}>
           확인했습니다
         </Button>
