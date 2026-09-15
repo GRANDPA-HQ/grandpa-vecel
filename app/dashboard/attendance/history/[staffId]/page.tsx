@@ -18,7 +18,7 @@ export default async function StaffAttendanceHistoryPage({
   const { staffId } = await params
 
   // 본인 근태는 누구나 볼 수 있고, 다른 직원 근태는 매니저 이상만 볼 수 있다.
-  if (!employee.isSenior && employee.id !== staffId) redirect("/dashboard/bug-report")
+  if (!employee.isSenior && employee.id !== staffId) redirect("/dashboard/forbidden")
   // 수정/삭제는 매니저 이상만 — 본인 근태를 보는 일반 직원에게는 조회만 제공한다.
   const canEdit = employee.isSenior
 

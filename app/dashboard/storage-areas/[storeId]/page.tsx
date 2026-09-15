@@ -14,7 +14,7 @@ export default async function StorageAreasPage({
 
   const employee = await getCurrentEmployee()
   if (!employee) redirect("/login")
-  if (!employee.isSenior) redirect("/dashboard/bug-report")
+  if (!employee.isSenior) redirect("/dashboard/forbidden")
 
   const admin = createAdminClient()
 
