@@ -15,7 +15,7 @@ export default async function EmployeesPage({
   // 시니어 직급만 접근 가능
   const employee = await getCurrentEmployee()
   if (!employee) redirect("/login")
-  if (!employee.isSenior) redirect("/dashboard/bug-report")
+  if (!employee.isSenior) redirect("/dashboard/forbidden")
 
   const { store, part } = await searchParams
   const storeValue = store?.trim() ?? ""

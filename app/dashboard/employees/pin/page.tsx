@@ -6,7 +6,7 @@ import { StaffManageTable } from "@/components/attendance/staff-manage-table"
 export default async function EmployeesPinPage() {
   const employee = await getCurrentEmployee()
   if (!employee) redirect("/login")
-  if (!employee.isSenior) redirect("/dashboard/bug-report")
+  if (!employee.isSenior) redirect("/dashboard/forbidden")
 
   const result = await listSpEligibleEmployees()
 
