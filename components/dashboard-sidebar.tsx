@@ -236,6 +236,11 @@ export function DashboardSidebar({
               <div key={href}>
                 <Link
                   href={href}
+                  // 사이드바 메뉴가 18개 안팎이라, 기본 prefetch(뷰포트에 보이면 자동 미리 불러오기)를 켜두면
+                  // 대시보드를 열 때마다 로그인 안 한 화면들까지 전부 백그라운드로 미리 렌더링되면서
+                  // Supabase 인증 확인 요청이 한꺼번에 몰려 사이트가 느려지는 원인이 된다. 실제 클릭할 때만
+                  // 불러오도록 끔.
+                  prefetch={false}
                   title={isCollapsed ? label : undefined}
                   className={cn(
                     "flex items-center gap-3 border-l-2 py-2.5 text-sm transition-colors",
@@ -258,6 +263,7 @@ export function DashboardSidebar({
                         <Link
                           key={sub.href}
                           href={sub.href}
+                          prefetch={false}
                           className={cn(
                             "flex items-center gap-2 border-l-2 py-2 pl-9 pr-5 text-sm transition-colors",
                             isSubActive
