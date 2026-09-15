@@ -350,7 +350,7 @@ export function AddRowDialog({
                             onChange={(e) =>
                               setValues((v) => ({ ...v, [col.name]: e.target.value }))
                             }
-                            placeholder={`${col.name} 입력`}
+                            placeholder={`${COLUMN_LABELS[col.name] ?? col.name} 입력`}
                             step={col.type === "number" ? "any" : undefined}
                           />
                         )}
