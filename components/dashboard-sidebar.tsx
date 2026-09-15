@@ -48,9 +48,11 @@ type NavEntry = NavGroup | NavLeaf | NavPlaceholder
 export function DashboardSidebar({
   isManager,
   userName,
+  employeeId,
 }: {
   isManager: boolean
   userName: string
+  employeeId: string
 }) {
   const pathname = usePathname()
   const [isCollapsed, setIsCollapsed] = useState(false)
@@ -77,7 +79,14 @@ export function DashboardSidebar({
 
     { kind: "group", label: "출퇴근" },
     { kind: "leaf", label: "공지 게시판", href: "/dashboard/attendance/notices", icon: Megaphone, visible: true, exact: true },
-    { kind: "leaf", label: "근태관리", href: "/dashboard/attendance/history", icon: History, visible: isManager },
+    // 매니저 이상은 매장 전체 근태관리 화면으로, 일반 직원은 본인 근태 조회 화면으로 연결한다.
+    {
+      kind: "leaf",
+      label: isManager ? "근태관리" : "내 근태",
+      href: isManager ? "/dashboard/attendance/history" : `/dashboard/attendance/history/${employeeId}`,
+      icon: History,
+      visible: true,
+    },
 
     { kind: "group", label: "운영/생산 일지" },
     { kind: "leaf", label: "SP 운영일지", href: "/dashboard/operation-log", icon: Store, visible: true, exact: true },
