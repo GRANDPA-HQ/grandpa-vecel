@@ -1,9 +1,11 @@
 "use client"
 
 import { useState, useTransition } from "react"
-import { Trash2, KeyRound, Check } from "lucide-react"
+import { Trash2, KeyRound, Check, Fingerprint } from "lucide-react"
 import { updateEmployeeField, updateEmployeeStatus } from "@/app/actions/users"
 import { deleteEmployee, resetEmployeePassword } from "@/app/actions/invitations"
+import { reissuePin } from "@/app/actions/attendance"
+import { IssuedPinDialog } from "@/components/attendance/issued-pin-dialog"
 import { COLUMN_LABELS } from "@/lib/column-labels"
 import { todayKst } from "@/lib/date-kst"
 import { EMPLOYEE_COLUMNS, PART_CODES_BY_STORE_SCOPE } from "@/lib/table-config"
@@ -34,6 +36,7 @@ export function EmployeeTable({
   columns = EMPLOYEE_COLUMNS as unknown as string[],
   partOptions,
   storeScopeMap,
+  pinStatus = {},
 }: {
   employees: Record<string, unknown>[]
   lookupOptions: Record<string, Option[]>
@@ -42,6 +45,8 @@ export function EmployeeTable({
   columns?: string[]
   partOptions: PartOption[]
   storeScopeMap: Record<string, string>
+  // 출퇴근 PIN 발급 대상(SP/KP 파트) 직원의 id → PIN 발급 여부. 키가 없는 직원은 PIN 버튼을 노출하지 않는다.
+  pinStatus?: Record<string, boolean>
 }) {
   if (employees.length === 0) {
     return <p className="text-sm text-muted-foreground">조건에 맞는 직원이 없습니다.</p>
@@ -73,6 +78,7 @@ export function EmployeeTable({
               columns={columns}
               partOptions={partOptions}
               storeScopeMap={storeScopeMap}
+              hasPin={pinStatus[String(emp.id ?? "")]}
             />
           ))}
         </tbody>
@@ -88,6 +94,7 @@ function EmployeeRow({
   columns,
   partOptions,
   storeScopeMap,
+  hasPin,
 }: {
   employee: Record<string, unknown>
   lookupOptions: Record<string, Option[]>
@@ -95,6 +102,8 @@ function EmployeeRow({
   columns: string[]
   partOptions: PartOption[]
   storeScopeMap: Record<string, string>
+  // undefined면 PIN 발급 대상이 아닌 직원(SP/KP 파트가 아님) — 버튼 자체를 숨긴다.
+  hasPin?: boolean
 }) {
   const [values, setValues] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {}
@@ -106,6 +115,7 @@ function EmployeeRow({
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [resetDone, setResetDone] = useState(false)
+  const [issuedPin, setIssuedPin] = useState<{ pin: string; emailWarning?: string } | null>(null)
 
   const employeeId = String(employee.id ?? "")
 
@@ -210,6 +220,21 @@ function EmployeeRow({
     })
   }
 
+  function handleIssuePin() {
+    const label = values.name || "이 직원"
+    const verb = hasPin ? "재발급" : "발급"
+    if (!window.confirm(`${label}님의 PIN을 ${verb}하시겠습니까?`)) return
+    setError(null)
+    startTransition(async () => {
+      const result = await reissuePin(employeeId)
+      if ("error" in result) {
+        setError(result.error)
+        return
+      }
+      setIssuedPin({ pin: result.pin, emailWarning: result.emailWarning })
+    })
+  }
+
   const selectClass = cn(
     "rounded-md border border-border bg-background px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-ring",
     isPending && "cursor-not-allowed opacity-50",
@@ -293,6 +318,21 @@ function EmployeeRow({
         ))}
         <td className="px-3 py-2">
           <div className="flex items-center gap-1">
+            {hasPin !== undefined && (
+              <button
+                onClick={handleIssuePin}
+                disabled={isPending}
+                title={hasPin ? "PIN 재발급 (출퇴근 키오스크용)" : "PIN 발급 (출퇴근 키오스크용)"}
+                className={cn(
+                  "rounded p-1 transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+                  hasPin
+                    ? "text-muted-foreground hover:bg-accent hover:text-foreground"
+                    : "text-amber-600 hover:bg-amber-50 hover:text-amber-700",
+                )}
+              >
+                <Fingerprint className="h-4 w-4" />
+              </button>
+            )}
             <button
               onClick={handleResetPassword}
               disabled={isPending}
@@ -325,6 +365,14 @@ function EmployeeRow({
             {error}
           </td>
         </tr>
+      )}
+      {issuedPin && (
+        <IssuedPinDialog
+          name={values.name || "직원"}
+          pin={issuedPin.pin}
+          emailWarning={issuedPin.emailWarning}
+          onClose={() => setIssuedPin(null)}
+        />
       )}
     </>
   )

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation"
 import { getTableRows, getIdLabelOptions, getColumnPrefs, getPartOptionsWithCode, getStoreScopeMap } from "@/lib/supabase/db"
 import { getCurrentEmployee } from "@/lib/permissions"
+import { getPinStatusMap } from "@/app/actions/attendance"
 import { EMPLOYEE_FK_LOOKUPS, EMPLOYEE_COLUMNS, sortOptionsByLabelOrder } from "@/lib/table-config"
 import { EmployeeTable } from "@/components/employee-table"
 import { EmployeeFilters } from "@/components/employee-filters"
@@ -57,6 +58,22 @@ export default async function EmployeesPage({
     error = e instanceof Error ? e.message : "직원 정보를 불러오지 못했습니다."
   }
 
+  // PIN 발급 버튼은 출퇴근 키오스크 대상(SP/KP 파트) 직원에게만 노출한다. 대상 여부는 part_id의
+  // 코드로 판별하고, PIN 상태는 한 번에 조회해 각 행 버튼 문구("PIN 발급"/"PIN 재발급")에 쓴다.
+  const partCodeById = new Map(partOptions.map((o) => [o.value, o.code]))
+  const pinEligibleIds = employees
+    .filter((e) => {
+      const code = partCodeById.get(String(e.part_id ?? ""))
+      return code === "SP" || code === "KP"
+    })
+    .map((e) => String(e.id ?? ""))
+    .filter(Boolean)
+  let pinStatus: Record<string, boolean> = {}
+  if (pinEligibleIds.length > 0) {
+    const pinResult = await getPinStatusMap(pinEligibleIds).catch(() => ({}) as Record<string, boolean>)
+    if (!("error" in pinResult)) pinStatus = pinResult
+  }
+
   // 열 관리(표시 여부·순서) — 계정별이 아니라 테이블 전체 공통 설정, 데이터 테이블 뷰어와 동일한
   // table_column_prefs를 "staff" 키로 공유한다.
   const { hiddenColumns: savedHidden, columnOrder: savedOrder } = await getColumnPrefs("staff").catch(
@@ -108,6 +125,7 @@ export default async function EmployeesPage({
           columns={visibleColumns}
           partOptions={partOptions}
           storeScopeMap={storeScopeMap}
+          pinStatus={pinStatus}
         />
       )}
     </div>
