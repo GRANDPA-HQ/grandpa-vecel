@@ -551,6 +551,23 @@ export type SpEmployeeRow = {
   hasPin: boolean
 }
 
+/**
+ * 여러 직원의 PIN 발급 여부를 한 번에 조회한다 — 직원 관리 페이지에서 SP/KP 파트 직원마다
+ * "PIN 발급"/"PIN 재발급" 버튼 문구를 결정하는 데 사용한다.
+ */
+export async function getPinStatusMap(employeeIds: string[]): Promise<Record<string, boolean> | { error: string }> {
+  const employee = await getCurrentEmployee()
+  if (!employee) return { error: "로그인이 필요합니다." }
+  if (!employee.isSenior) return { error: "권한이 없습니다." }
+  if (employeeIds.length === 0) return {}
+
+  const admin = createAdminClient()
+  const issuedIds = await getIssuedStaffIds(admin, employeeIds)
+  const map: Record<string, boolean> = {}
+  for (const id of employeeIds) map[id] = issuedIds.has(id)
+  return map
+}
+
 export async function listSpEligibleEmployees(): Promise<{ staff: SpEmployeeRow[] } | { error: string }> {
   const employee = await getCurrentEmployee()
   if (!employee) return { error: "로그인이 필요합니다." }
@@ -610,9 +627,9 @@ export async function reissuePin(
     .upsert({ staff_id: employeeId, pin_hash, updated_at: new Date().toISOString() }, { onConflict: "staff_id" })
   if (error) return { error: error.message }
 
-  // 새로 PIN이 발급되면 키오스크 목록에 바로 나타나야 하므로 캐시를 즉시 무효화한다.
+  // 새로 PIN이 발급되면 키오스크 목록과 직원 관리 페이지의 PIN 상태에 바로 반영돼야 하므로 캐시를 즉시 무효화한다.
   updateTag(kioskStaffTag(employee.storeId))
-  revalidatePath("/dashboard/employees/pin")
+  revalidatePath("/dashboard/employees")
   revalidatePath("/dashboard")
 
   // 이메일 발송 — 실패해도 PIN 발급 자체는 이미 끝났으니 되돌리지 않고 경고만 알린다
