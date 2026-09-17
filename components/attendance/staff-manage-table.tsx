@@ -1,5 +1,10 @@
 "use client"
 
+// ⚠️ 더 이상 사용되지 않음(unused) — PIN 발급/재발급 UI가 components/employee-table.tsx
+// (직원 관리 페이지의 각 행)로 옮겨졌다. 이 파일을 쓰던 app/dashboard/employees/pin/page.tsx는
+// 이제 리다이렉트 스텁이다. 이 도구는 GitHub 파일 삭제 API를 호출할 수 없어 지우지 못했으니,
+// 리뷰 시 이 파일과 이 폴더의 issued-pin-dialog.tsx 사용 여부만 확인 후 삭제해도 안전하다.
+
 import { useState, useTransition } from "react"
 import { listSpEligibleEmployees, reissuePin, type SpEmployeeRow } from "@/app/actions/attendance"
 import { Button } from "@/components/ui/button"
