@@ -82,7 +82,7 @@ export function CycleCount({ areas, items }: { areas: StorageAreaInfo[]; items: 
   return (
     <div className="flex flex-col gap-4 pb-24">
       <div>
-        <h1 className="text-lg font-extrabold">정기실사 · 영역 기준</h1>
+        <h1 className="text-lg font-extrabold">재고 실사 · 영역 기준</h1>
         <p className="text-xs text-muted-foreground">포장부자재 · 미개봉 팩 기준</p>
       </div>
 

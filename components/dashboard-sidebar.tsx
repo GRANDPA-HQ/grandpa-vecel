@@ -100,7 +100,7 @@ export function DashboardSidebar({
       icon: Archive,
       visible: true,
       submenu: [
-        { label: "정기실사", href: "/dashboard/stock/count" },
+        { label: "재고 실사", href: "/dashboard/stock/count" },
         { label: "보관영역 매핑", href: "/dashboard/stock/mapping" },
       ],
     },
@@ -145,7 +145,6 @@ export function DashboardSidebar({
       href: "/dashboard/employees",
       icon: Users,
       visible: isManager,
-      submenu: [{ label: "PIN 발급 관리", href: "/dashboard/employees/pin" }],
     },
     { kind: "leaf", label: "버그 리포트", href: "/dashboard/bug-report", icon: Bug, visible: true },
   ]

@@ -108,7 +108,7 @@ export function StockList({
               href="/dashboard/stock/count"
               className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-emerald-800 hover:bg-emerald-50"
             >
-              📋 정기실사
+              📋 재고 실사
             </Link>
             <Link
               href="/dashboard/stock/mapping"

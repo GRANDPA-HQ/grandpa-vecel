@@ -5,8 +5,9 @@ import { revalidatePath } from "next/cache"
 import { getCurrentEmployee } from "@/lib/permissions"
 import { sendInviteEmail, sendPasswordResetEmail } from "@/lib/email"
 
-// 사람이 눈으로 구분하기 쉽도록 헷갈리는 문자(0/O, 1/l/I) 제외
-const PASSWORD_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"
+// 소문자+숫자만 사용 — 초기 비밀번호를 직원이 직접 입력하기 쉽게 함(대소문자 섞이면 헷갈려함).
+// 사람이 눈으로 구분하기 쉽도록 헷갈리는 문자(0, 1, l, o)는 제외.
+const PASSWORD_CHARS = "abcdefghjkmnpqrstuvwxyz23456789"
 function generatePassword(length = 10): string {
   let out = ""
   for (let i = 0; i < length; i++) {

@@ -108,8 +108,16 @@ function deriveImageSrc(code: string, extIdx: number): string | null {
   return withBasePath(`/api/images/${parsed.category}/${parsed.category}-${parsed.num}.${IMAGE_EXTS[extIdx]}`)
 }
 
-function PhotoCell({ row }: { row: Record<string, unknown> }) {
-  const code = String(row["raw_code"] ?? row["prod_code"] ?? "")
+// "photo_urls" 컬럼에 실제 URL 대신 raw_code/submat_id 같은 코드로 사진을 찾아 보여주는 테이블 →
+// 그 코드가 담긴 컬럼 이름. 화면(CellContent)과 canEdit 판단에서 함께 사용한다.
+const PHOTO_CODE_COLUMN: Record<string, string> = {
+  tb_raw_mst: "raw_code",
+  tb_submat_mst: "submat_id",
+}
+
+function PhotoCell({ row, tableName }: { row: Record<string, unknown>; tableName: string }) {
+  const codeColumn = PHOTO_CODE_COLUMN[tableName] ?? "raw_code"
+  const code = String(row[codeColumn] ?? "")
   const [extIdx, setExtIdx] = useState(0)
   const [failed, setFailed] = useState(false)
 
@@ -168,12 +176,13 @@ function CodeImageCell({ code }: { code: string }) {
 }
 
 // 이미지를 표시하지 않을 컬럼 목록.
-// - raw_code: tb_raw_mst의 실제 "photo_urls" 컬럼(PhotoCell)이 이미 같은 사진을 보여주므로 중복 렌더링 방지.
+// - raw_code, submat_id: 각각 tb_raw_mst/tb_submat_mst의 실제 "photo_urls" 컬럼(PhotoCell)이
+//   이미 같은 사진을 보여주므로, id/코드 컬럼 쪽에서 또 렌더링되는 중복을 막는다.
 // - prod_code: 원재료(RAW-*)와 생산품(PROD-*) 코드가 같은 카테고리-번호 체계를 공유해서
 //   (예: RAW-BEV-001 / PROD-BEV-001) images/BEV/BEV-001.* 파일을 함께 가리킨다. 생산품 사진은
 //   따로 관리되는 적이 없어서, 이 컬럼에 이미지 추측을 켜두면 전혀 무관한 원재료 사진이 우연히
 //   같은 카테고리-번호라는 이유만으로 생산품 사진인 것처럼 잘못 뜬다 — 그래서 아예 꺼둔다.
-const NO_IMAGE_COLS = new Set(["raw_code", "sku_code", "prod_code"])
+const NO_IMAGE_COLS = new Set(["raw_code", "sku_code", "prod_code", "submat_id"])
 
 // 길어져도 잘라내지 않고 행이 커지면서 전체 내용을 보여줄 컬럼 (설명/메모류)
 const LONG_TEXT_COLS = new Set(["description", "description_en", "memo", "note"])
@@ -212,9 +221,10 @@ function CellContent({
   columnResolvers?: Record<string, Record<string, string>>
   tableName?: string
 }) {
-  // tb_raw_mst.photo_urls만 raw_code 기반 코드-이미지 조회(PhotoCell)를 쓴다 — 값 자체는 무시하고
-  // raw_code로 파일을 찾는 예전 방식이라, 실제 URL 배열을 담는 다른 테이블의 동명 컬럼과는 다르게 취급해야 한다.
-  if (col === "photo_urls" && tableName === "tb_raw_mst") return <PhotoCell row={row} />
+  // tb_raw_mst/tb_submat_mst의 photo_urls만 코드 기반 이미지 조회(PhotoCell)를 쓴다 — 값 자체는 무시하고
+  // raw_code/submat_id로 파일을 찾는 방식이라, 실제 URL 배열을 담는 다른 테이블의 동명 컬럼과는 다르게 취급해야 한다.
+  if (col === "photo_urls" && tableName && PHOTO_CODE_COLUMN[tableName])
+    return <PhotoCell row={row} tableName={tableName} />
   // 가격 컬럼: 천 단위 쉼표 표시 (예: 10,000)
   if (isPriceColumn(col)) {
     const n =
@@ -350,7 +360,7 @@ function EditableCell({
   }, [editing, editStr])
 
   const pkValue = String(row[pkColumn] ?? "")
-  const canEdit = col !== pkColumn && !(col === "photo_urls" && tableName === "tb_raw_mst")
+  const canEdit = col !== pkColumn && !(col === "photo_urls" && !!PHOTO_CODE_COLUMN[tableName])
   const originalStr = formatCell(value)
 
   const enumKey = `${tableName}.${col}`

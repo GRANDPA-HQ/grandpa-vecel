@@ -14,7 +14,7 @@ export default async function CycleCountPage() {
   if (!employee.storeId) {
     return (
       <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
-        소속 매장이 없어 정기실사를 진행할 수 없습니다.
+        소속 매장이 없어 재고 실사를 진행할 수 없습니다.
       </div>
     )
   }

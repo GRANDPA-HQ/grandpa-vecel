@@ -1,8 +1,10 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
+import { FileSpreadsheet } from "lucide-react"
 import { getCurrentEmployee } from "@/lib/permissions"
 import { getAttendanceHistory } from "@/app/actions/attendance"
 import { addMonthsKst, currentMonthKst, isValidMonthStr } from "@/lib/date-kst"
+import { withBasePath } from "@/lib/base-path"
 import { AttendanceHistoryTable } from "@/components/attendance/attendance-history-table"
 
 export default async function AttendanceHistoryPage({
@@ -25,11 +27,21 @@ export default async function AttendanceHistoryPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">근태관리</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          SP 파트 직원의 월별 근무 합계입니다. 직원을 클릭하면 그 달의 일별 출퇴근 기록을 볼 수 있습니다.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">근태관리</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            SP 파트 직원의 월별 근무 합계입니다. 직원을 클릭하면 그 달의 일별 출퇴근 기록을 볼 수 있습니다.
+          </p>
+        </div>
+        <a
+          href={withBasePath(`/api/export/attendance?month=${month}`)}
+          title={`${month} 근태 기록을 엑셀로 저장`}
+          className="inline-flex items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-100"
+        >
+          <FileSpreadsheet className="h-3.5 w-3.5" />
+          엑셀 다운로드
+        </a>
       </div>
 
       <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-4">

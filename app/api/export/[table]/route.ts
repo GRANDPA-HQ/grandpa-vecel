@@ -36,6 +36,7 @@ import { resolveImageByCode } from "@/lib/photo-resolve"
 // NO_IMAGE_COLS와 동일한 이유).
 const PHOTO_CONFIG: Record<string, { sourceColumn: string; existingPhotoColumn?: string }> = {
   tb_raw_mst: { sourceColumn: "raw_code", existingPhotoColumn: "photo" },
+  tb_submat_mst: { sourceColumn: "submat_id", existingPhotoColumn: "photo_urls" },
 }
 
 // ExcelJS가 임베드 지원하는 이미지 형식 (jpg는 jpeg로, webp는 미지원이라 건너뜀)

@@ -159,4 +159,112 @@ export const COLUMN_LABELS: Record<string, string> = {
   new_value: "새 값",
   changed_by_name: "작업자",
   changed_at: "작업 시각",
+  changed_by: "작업자 ID",
+
+  // 공통 시스템 필드
+  id: "ID",
+  created_at: "생성일시",
+  updated_at: "수정일시",
+  title: "제목",
+  content: "내용",
+  category: "카테고리",
+  level: "레벨",
+  name_ko: "이름(국문)",
+
+  // 시설/설비 상세 (tb_asset_type_mst, asset_fn/fc/eq_details 등)
+  asset_id: "시설",
+  asset_type: "자산 유형",
+  asset_type_code: "시설 유형 코드",
+  asset_type_name: "시설 유형명",
+  facility_category: "시설 분류",
+  depth_mm: "깊이(mm)",
+  height_mm: "높이(mm)",
+  width_mm: "너비(mm)",
+  weight_kg: "무게(kg)",
+  material: "재질",
+  standard_name: "표준명",
+  manufacturer: "제조사",
+  model_no: "모델번호",
+  vendor: "업체",
+  utility: "유틸리티",
+  requires_temp_check: "온도 점검 필요 여부",
+  purchase_date: "구매일",
+  construction_date: "준공일",
+  inspect_cycle: "점검 주기",
+  last_inspected_at: "최근 점검일",
+  next_inspect_at: "다음 점검 예정일",
+  quantity: "수량",
+
+  // 근태 (tb_sp_attendance_log, tb_sp_staff_auth)
+  check_type: "출퇴근 구분",
+  checked_at: "출퇴근 시각",
+  staff_id: "직원",
+  pin_hash: "PIN 해시",
+
+  // 생산 공정 (tb_production_process, tb_production_process_step)
+  approved_at: "승인일시",
+  process_id: "공정",
+  item: "품목",
+
+  // 원재료/생산품 추가
+  purchase_price: "구매 단가",
+  owner_part: "담당 파트",
+  yield_rate: "수율",
+
+  // 매출 주문 (tb_sales_order, tb_sales_order_item)
+  commission_amount: "수수료 금액",
+  discount_amount: "할인 금액",
+  external_order_id: "외부 주문 ID",
+  order_number: "주문 번호",
+  raw: "원본 데이터",
+  order_id: "주문",
+  is_canceled: "취소 여부",
+  options: "옵션",
+  unit_price: "단가",
+  subtotal: "소계",
+
+  // 카테고리 부가 정보
+  emoji: "이모지",
+  category_emoji: "이모지",
+
+  // 보관영역/구역
+  area_id: "보관영역",
+  zone_function: "구역 기능",
+  zone_group: "구역 그룹",
+  zone_type_code: "구역 유형 코드",
+  zone_type_name: "구역 유형명",
+
+  // 공지
+  target_position_id: "대상 직책",
+  notice_id: "공지",
+  acked_at: "확인일시",
+
+  // 포장 부자재 재고 트랜잭션 (tb_submat_stock_txn)
+  input_box: "입고 박스 수",
+  input_pack: "입고 팩 수",
+  qty: "수량",
+  reason_memo: "사유 메모",
+  reason_type: "사유 구분",
+  txn_id: "거래 ID",
+  txn_type: "거래 유형",
+
+  // 방법서 상세(sop_steps) · 구 방법서(sop_mst)
+  caution: "주의사항",
+  instruction: "작업 지시",
+  qc_standard: "품질 기준",
+  shelf_hours: "보관 가능 시간",
+  step_name: "단계명",
+  step_no: "단계 번호",
+  sop_id: "방법서 ID",
+  sop_name: "방법서명",
+
+  // 열 순서/숨김 설정 저장(table_column_prefs)
+  column_order: "열 순서",
+  hidden_columns: "숨긴 열",
+
+  // 초대/섹션 배정
+  invited_at: "초대일시",
+  section_id: "섹션",
+  assigned_at: "배정일시",
+  is_primary: "주 담당 여부",
 }
