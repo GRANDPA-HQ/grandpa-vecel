@@ -84,7 +84,7 @@ export function AddRowDialog({
   const draftKey = `add-row-draft:${tableName}`
   const [draftNoticeVisible, setDraftNoticeVisible] = useState(false)
 
-  const orderedColumns = fieldOrder
+  const baseOrderedColumns = fieldOrder
     ? [
         ...fieldOrder
           .map((name) => columns.find((c) => c.name === name))
@@ -92,6 +92,11 @@ export function AddRowDialog({
         ...columns.filter((c) => !fieldOrder.includes(c.name)),
       ]
     : columns
+  // 필수 입력 항목을 항상 맨 위로 — 각 그룹 안에서는 위 순서(fieldOrder 등)를 그대로 유지
+  const orderedColumns = [
+    ...baseOrderedColumns.filter((c) => c.required),
+    ...baseOrderedColumns.filter((c) => !c.required),
+  ]
 
   // 카테고리 선택 시 해당 카테고리의 다음 코드(sku_code / raw_code / prod_code)를 자동 채움
   const autoCodeConfig = AUTO_CODE_CONFIG[tableName]

@@ -1,8 +1,10 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
+import { FileSpreadsheet } from "lucide-react"
 import { getCurrentEmployee } from "@/lib/permissions"
 import { getStaffAttendanceMonth } from "@/app/actions/attendance"
 import { addMonthsKst, currentMonthKst, isValidMonthStr } from "@/lib/date-kst"
+import { withBasePath } from "@/lib/base-path"
 import { StaffAttendanceDetail } from "@/components/attendance/staff-attendance-detail"
 
 export default async function StaffAttendanceHistoryPage({
@@ -31,18 +33,30 @@ export default async function StaffAttendanceHistoryPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        {canEdit && (
-          <Link
-            href="/dashboard/attendance/history"
-            className="text-sm text-muted-foreground hover:text-foreground"
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          {canEdit && (
+            <Link
+              href="/dashboard/attendance/history"
+              className="text-sm text-muted-foreground hover:text-foreground"
+            >
+              ← 근태관리로 돌아가기
+            </Link>
+          )}
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight">
+            {"error" in result ? "일별 근태 기록" : `${result.staffName}님의 일별 근태 기록`}
+          </h1>
+        </div>
+        {!("error" in result) && (
+          <a
+            href={withBasePath(`/api/export/attendance/${staffId}?month=${month}`)}
+            title={`${month} 근태 기록을 엑셀로 저장`}
+            className="inline-flex items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-100"
           >
-            ← 근태관리로 돌아가기
-          </Link>
+            <FileSpreadsheet className="h-3.5 w-3.5" />
+            엑셀 다운로드
+          </a>
         )}
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight">
-          {"error" in result ? "일별 근태 기록" : `${result.staffName}님의 일별 근태 기록`}
-        </h1>
       </div>
 
       <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-4">

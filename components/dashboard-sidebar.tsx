@@ -100,7 +100,7 @@ export function DashboardSidebar({
       icon: Archive,
       visible: true,
       submenu: [
-        { label: "정기실사", href: "/dashboard/stock/count" },
+        { label: "재고 실사", href: "/dashboard/stock/count" },
         { label: "보관영역 매핑", href: "/dashboard/stock/mapping" },
       ],
     },

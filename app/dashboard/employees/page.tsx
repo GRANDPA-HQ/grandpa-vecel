@@ -7,6 +7,7 @@ import { EmployeeTable } from "@/components/employee-table"
 import { EmployeeFilters } from "@/components/employee-filters"
 import { ColumnSettingsMenu } from "@/components/column-settings-menu"
 import { InviteButton } from "@/components/invite-button"
+import { PinIssueButton } from "@/components/pin-issue-button"
 
 export default async function EmployeesPage({
   searchParams,
@@ -97,7 +98,10 @@ export default async function EmployeesPage({
             {total !== null ? `총 ${total}명의 직원` : "직원 목록"}
           </p>
         </div>
-        <InviteButton />
+        <div className="flex items-center gap-2">
+          <PinIssueButton />
+          <InviteButton />
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2">
