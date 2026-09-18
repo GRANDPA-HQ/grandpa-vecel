@@ -70,6 +70,14 @@ export function isoToKstWeekday(iso: string): number {
   return (jsDay + 6) % 7 // 0=월 ... 6=일
 }
 
+const WEEKDAY_LABELS_KO = ["일", "월", "화", "수", "목", "금", "토"]
+
+/** KST 기준 "YYYY-MM-DD" 날짜 문자열을 한글 요일 한 글자로 변환 (예: "화") — 근태 기록 등 날짜 옆 요일 표기용 */
+export function dateStrToKoreanWeekday(dateStr: string): string {
+  const jsDay = new Date(`${dateStr}T00:00:00Z`).getUTCDay() // 0=일 ... 6=토
+  return WEEKDAY_LABELS_KO[jsDay]
+}
+
 const KST_TIME_FORMATTER = new Intl.DateTimeFormat("en-US", {
   timeZone: "Asia/Seoul",
   hour: "2-digit",
