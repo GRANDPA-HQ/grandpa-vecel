@@ -13,6 +13,8 @@ export type RowCursor = {
 export const TABLE_PK: Record<string, string> = {
   tb_sku_recipe:  "input_id",
   tb_prod_recipe: "input_id",
+  tb_prod_recipe_h: "recipe_h_id",
+  tb_prod_recipe_i: "recipe_i_id",
   tb_submat_mst:  "submat_id",
   tb_zone_mst:    "zone_id",
   tb_sop_mst:     "sop_id",
@@ -60,6 +62,8 @@ export const TABLE_LABELS: Record<string, string> = {
   tb_sku_mst:            "판매품",
   tb_sku_recipe:         "판매품 레시피",
   tb_prod_recipe:        "생산품 레시피",
+  tb_prod_recipe_h:      "생산품 레시피 (헤더)",
+  tb_prod_recipe_i:      "생산품 레시피 (투입)",
   tb_production_process: "생산 공정",
   staff:                 "직원",
   tb_sales_order:        "매출 주문",
@@ -171,6 +175,8 @@ export const TABLE_HIDDEN_COLS: Record<string, Set<string>> = {
   // sort_order: 작성 화면의 드래그 순서 저장용 내부 컬럼
   tb_sku_recipe:  new Set(["input_id", "sort_order"]),
   tb_prod_recipe: new Set(["input_id", "sort_order"]),
+  tb_prod_recipe_h: new Set(["recipe_h_id"]),
+  tb_prod_recipe_i: new Set(["recipe_i_id"]),
   // raw: 원본 플랫폼 JSON 전체 — 목록 화면에서는 숨기고 필요 시 상세 조회로만 확인
   tb_sales_order: new Set(["raw"]),
   // zone_id: gen_random_uuid() PK — 사람이 읽을 수 있는 코드가 없어 목록 화면에서는 숨김
@@ -265,6 +271,8 @@ export const TABLE_DEFAULT_SORT: Record<string, { column: string; dir: "asc" | "
   tb_sku_category_mst: { column: "sort_order", dir: "asc" },
   // 같은 SKU에 속한 재료끼리 뒤섞이지 않고 모여서 보이도록 SKU 기준 정렬
   tb_sku_recipe:   { column: "sku_id", dir: "asc" },
+  tb_prod_recipe_h: { column: "prod_id", dir: "asc" },
+  tb_prod_recipe_i: { column: "recipe_h_id", dir: "asc" },
   // 같은 생산품에 속한 원자재끼리 모여서 보이도록 생산품 기준 정렬
   tb_prod_recipe:  { column: "prod_id", dir: "asc" },
   staff:           { column: "name", dir: "asc" },
@@ -290,6 +298,8 @@ export const TABLE_SEARCH_COLUMNS: Record<string, string[]> = {
   // id 목록으로 변환해 별도로 검색한다 (memo만 텍스트로 직접 검색)
   tb_sku_recipe:   ["memo"],
   tb_prod_recipe:  ["memo"],
+  tb_prod_recipe_h: ["memo"],
+  tb_prod_recipe_i: ["memo"],
   staff:           ["name", "phone", "email"],
   tb_submat_mst:   ["submat_id", "item_name"],
   tb_store_mst:    ["store_code", "store_name", "address"],

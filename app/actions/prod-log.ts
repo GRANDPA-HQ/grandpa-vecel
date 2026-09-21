@@ -24,6 +24,7 @@ export type ProdLogEntry = {
   outputQty: number
   laborMin: number
   memo?: string
+  recipeHId?: string
 }
 
 /**
@@ -49,6 +50,7 @@ export async function saveProdLog(entries: ProdLogEntry[]): Promise<Result> {
       .insert({
         store_id: auth.storeId,
         prod_code: entry.prodCode,
+        recipe_h_id: entry.recipeHId ?? null,
         worker_id: entry.workerId,
         output_qty: entry.outputQty,
         labor_min: entry.laborMin,

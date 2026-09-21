@@ -3,6 +3,7 @@ import { getTables, getCategoryOptions } from "@/lib/supabase/db"
 import {
   ProdRecipeForm,
   type InitialProdRecipe,
+  type InitialRecipeHeader,
   type RawNutrition,
 } from "@/components/prod-recipe-form"
 import { AddRowDialog, type ColumnDef } from "@/components/add-row-dialog"
@@ -20,49 +21,24 @@ export default async function ProdRecipeWritePage() {
   // 원재료·생산품은 둘 다 카테고리 유형 "RAW"를 쓴다 (판매품은 "SKU"로 별도)
   const categoryOptions = await getCategoryOptions("RAW").catch(() => [])
 
-  const [prodRes, rawRes] = await Promise.all([
+  const [prodRes, rawRes, recipeRes] = await Promise.all([
     admin.from("tb_prod_mst").select("id,prod_code,prod_name,unit").order("prod_code"),
     admin
       .from("tb_raw_mst")
       .select(
-        "id,raw_code,raw_name,usage_unit,kcal_100g,carb_100g,protein_100g,fat_100g,kcal_ea,carb_ea,protein_ea,fat_ea",
+        "id,raw_code,raw_name,usage_unit,avg_weight,kcal_100g,carb_100g,protein_100g,fat_100g,kcal_ea,carb_ea,protein_ea,fat_ea",
       )
       .order("raw_code"),
+    // 활성 버전(is_active=true)만 — tb_prod_recipe_h(헤더)+tb_prod_recipe_i(투입 라인, created_at 순).
+    // 투입 라인은 sort_order 없이 created_at을 표시 순서로 쓴다(설계서 결정).
+    admin
+      .from("tb_prod_recipe_h")
+      .select(
+        "recipe_h_id,prod_id,std_batch_qty,yield_rate,std_labor_min,tb_prod_recipe_i(input_type,raw_id,prod_id,input_qty,input_unit,memo,created_at)",
+      )
+      .eq("is_active", true)
+      .order("created_at", { referencedTable: "tb_prod_recipe_i", ascending: true }),
   ])
-
-  // 드래그로 정한 행 순서(sort_order)·구성 재료가 생산품인 경우(ingredient_prod_id)·
-  // ea 단위 평균 무게(avg_weight)까지 함께 조회 — 아직 마이그레이션 전인 DB에서도
-  // 저장은 되도록 단계적으로 폴백한다
-  // (폴백마다 select 컬럼 구성이 달라 엄격한 응답 타입 추론과 충돌하므로 any로 둔다)
-  let recipeRes: any = await admin
-    .from("tb_prod_recipe")
-    .select("prod_id,raw_id,ingredient_prod_id,amount,unit,avg_weight,memo")
-    .order("sort_order")
-  if (recipeRes.error) {
-    recipeRes = await admin
-      .from("tb_prod_recipe")
-      .select("prod_id,raw_id,ingredient_prod_id,amount,unit,avg_weight,memo")
-  }
-  if (recipeRes.error) {
-    recipeRes = await admin
-      .from("tb_prod_recipe")
-      .select("prod_id,raw_id,ingredient_prod_id,amount,unit,memo")
-      .order("sort_order")
-  }
-  if (recipeRes.error) {
-    recipeRes = await admin
-      .from("tb_prod_recipe")
-      .select("prod_id,raw_id,ingredient_prod_id,amount,unit,memo")
-  }
-  if (recipeRes.error) {
-    recipeRes = await admin
-      .from("tb_prod_recipe")
-      .select("prod_id,raw_id,amount,unit,memo")
-      .order("sort_order")
-  }
-  if (recipeRes.error) {
-    recipeRes = await admin.from("tb_prod_recipe").select("prod_id,raw_id,amount,unit,memo")
-  }
 
   const prodOptions = (prodRes.data ?? []).map((r) => ({
     value: r.id as string,
@@ -102,13 +78,32 @@ export default async function ProdRecipeWritePage() {
     ]),
   ) as Record<string, RawNutrition>
 
-  // 테이블이 아직 없으면(recipeRes.error) 빈 목록으로 시작 — 저장 시점에 에러가 표시된다
-  // ingredient_prod_id 폴백 조회분은 해당 필드가 없으므로 null로 채워 형태를 맞춘다
-  const initialRecipes = ((recipeRes.data ?? []) as Record<string, unknown>[]).map((r) => ({
-    ...r,
-    ingredient_prod_id: (r.ingredient_prod_id as string | null | undefined) ?? null,
-    avg_weight: (r.avg_weight as number | null | undefined) ?? null,
-  })) as InitialProdRecipe[]
+  // ea 단위 원재료의 개당 평균 무게(g) — avg_weight 정본은 tb_raw_mst 단일
+  const rawAvgWeightById = Object.fromEntries(
+    (rawRes.data ?? []).map((r) => [r.id as string, (r.avg_weight as number | null) ?? null]),
+  ) as Record<string, number | null>
+
+  type RecipeIRow = { input_type: string; raw_id: string | null; prod_id: string | null; input_qty: number; input_unit: string; memo: string | null }
+  type RecipeHRow = { recipe_h_id: string; prod_id: string; std_batch_qty: number | null; yield_rate: number | null; std_labor_min: number | null; tb_prod_recipe_i: RecipeIRow[] }
+  const recipeHeaders = (recipeRes.data ?? []) as unknown as RecipeHRow[]
+
+  const initialRecipes: InitialProdRecipe[] = recipeHeaders.flatMap((h) =>
+    h.tb_prod_recipe_i.map((line) => ({
+      prod_id: h.prod_id,
+      raw_id: line.input_type === "RAW" ? line.raw_id : null,
+      ingredient_prod_id: line.input_type === "PROD" ? line.prod_id : null,
+      amount: line.input_qty,
+      unit: line.input_unit,
+      memo: line.memo,
+    })),
+  )
+
+  const initialHeaders: Record<string, InitialRecipeHeader> = Object.fromEntries(
+    recipeHeaders.map((h) => [
+      h.prod_id,
+      { stdBatchQty: h.std_batch_qty, yieldRate: h.yield_rate, stdLaborMin: h.std_labor_min },
+    ]),
+  )
 
   // 생산품/원재료 등록 다이얼로그용 컬럼 정의 (데이터 테이블의 등록 폼과 동일 구성)
   let prodInsertColumns: ColumnDef[] = []
@@ -172,7 +167,9 @@ export default async function ProdRecipeWritePage() {
         rawUnitById={rawUnitById}
         prodUnitById={prodUnitById}
         rawNutritionById={rawNutritionById}
+        rawAvgWeightById={rawAvgWeightById}
         initialRecipes={initialRecipes}
+        initialHeaders={initialHeaders}
       />
     </div>
   )

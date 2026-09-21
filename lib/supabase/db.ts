@@ -1132,16 +1132,21 @@ export type ProdLogItem = {
   unit: string
   prodStage: string | null
   hasRecipe: boolean
+  recipeHId: string | null
+  stdLaborMin: number | null
 }
 
-/** 활성 생산품 목록(생산 기록 화면용) + tb_prod_recipe 등록 여부("레시피 미등록" 배지 판정). */
+/** 활성 생산품 목록(생산 기록 화면용) + 활성 레시피(tb_prod_recipe_h, is_active=true) 존재 여부·적정 작업시간. */
 export async function getProdLogItems(): Promise<ProdLogItem[]> {
   const [prodRes, recipeRes] = await Promise.all([
     fetch(
       `${SUPABASE_URL}/rest/v1/tb_prod_mst?select=id,prod_code,prod_name,category_code,unit,prod_stage&is_active=eq.true&order=prod_name.asc`,
       { headers: authHeaders(), cache: "no-store" },
     ),
-    fetch(`${SUPABASE_URL}/rest/v1/tb_prod_recipe?select=prod_id`, { headers: authHeaders(), cache: "no-store" }),
+    fetch(`${SUPABASE_URL}/rest/v1/tb_prod_recipe_h?select=recipe_h_id,prod_id,std_labor_min&is_active=eq.true`, {
+      headers: authHeaders(),
+      cache: "no-store",
+    }),
   ])
   if (!prodRes.ok) return []
   const rows = (await prodRes.json()) as {
@@ -1152,18 +1157,28 @@ export async function getProdLogItems(): Promise<ProdLogItem[]> {
     unit: string
     prod_stage: string | null
   }[]
-  const recipeProdIds = recipeRes.ok
-    ? new Set(((await recipeRes.json()) as { prod_id: string }[]).map((r) => r.prod_id))
-    : new Set<string>()
-  return rows.map((r) => ({
-    prodId: r.id,
-    prodCode: r.prod_code,
-    prodName: r.prod_name,
-    categoryCode: r.category_code,
-    unit: r.unit,
-    prodStage: r.prod_stage,
-    hasRecipe: recipeProdIds.has(r.id),
-  }))
+  const recipeByProdId = recipeRes.ok
+    ? new Map(
+        ((await recipeRes.json()) as { recipe_h_id: string; prod_id: string; std_labor_min: number | null }[]).map((r) => [
+          r.prod_id,
+          { recipeHId: r.recipe_h_id, stdLaborMin: r.std_labor_min },
+        ]),
+      )
+    : new Map<string, { recipeHId: string; stdLaborMin: number | null }>()
+  return rows.map((r) => {
+    const recipe = recipeByProdId.get(r.id)
+    return {
+      prodId: r.id,
+      prodCode: r.prod_code,
+      prodName: r.prod_name,
+      categoryCode: r.category_code,
+      unit: r.unit,
+      prodStage: r.prod_stage,
+      hasRecipe: !!recipe,
+      recipeHId: recipe?.recipeHId ?? null,
+      stdLaborMin: recipe?.stdLaborMin ?? null,
+    }
+  })
 }
 
 /**

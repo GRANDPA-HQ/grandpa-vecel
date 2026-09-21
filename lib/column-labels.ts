@@ -273,6 +273,16 @@ export const COLUMN_LABELS: Record<string, string> = {
   output_qty: "생산 산출량",
   labor_min: "작업 시간(분)",
 
+  // 생산품 레시피 Header/Input (tb_prod_recipe_h / tb_prod_recipe_i)
+  recipe_i_id: "레시피 투입 ID",
+  input_type: "투입 유형",
+  input_qty: "투입 수량",
+  input_unit: "투입 단위",
+  lead_time_days: "리드타임(일)",
+  lead_time_hours: "리드타임(시간)",
+  lead_time_minutes: "리드타임(분)",
+  std_labor_min: "적정 작업시간(분)",
+
   // 방법서 상세(sop_steps) · 구 방법서(sop_mst)
   caution: "주의사항",
   instruction: "작업 지시",
