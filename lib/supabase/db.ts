@@ -472,25 +472,21 @@ export async function getCategoryIdMap(): Promise<Record<string, string>> {
   return Object.fromEntries(rows.map((r) => [String(r.id), r.category_code]))
 }
 
-// category_code는 카테고리 유형(RAW/SKU)별로 중복될 수 있다 (예: SDS가 원재료·생산품
-// 분류와 판매품 분류에 각각 다른 이름으로 존재) — 반드시 유형으로 구분해서 조회해야 한다.
-// tb_raw_mst·tb_prod_mst는 DB상 category_type="RAW & PROD" 값을 공유해서 쓰고
-// (원재료와 생산품이 같은 카테고리 코드 체계를 쓰기 때문), tb_sku_mst는 "SKU" 유형을 쓴다.
-// 호출부는 읽기 쉬운 "RAW"만 넘기고, 실제 DB에 저장된 문자열로 여기서 변환한다.
+// 재료분류(원재료·생산품)와 판매품 메뉴분류는 서로 다른 축이라 별도 테이블로 분리돼 있다
+// (과거엔 tb_category_mst 하나에 category_type으로만 구분했으나, BEV/FLR/SDS 같은 코드가
+// 두 축에서 서로 다른 의미로 중복돼 데이터 무결성 위험이 있어 분리함 — 2026-09-21f 마이그레이션).
+// tb_raw_mst·tb_prod_mst는 tb_category_mst(category_type="RAW & PROD")를 공유해서 쓰고,
+// tb_sku_mst는 전용 테이블 tb_sku_category_mst를 쓴다.
+// 호출부는 읽기 쉬운 "RAW"/"SKU"만 넘기고, 실제 조회 대상 테이블은 여기서 분기한다.
 // 옵션 라벨에 "코드 : 명칭"을 함께 보여주고, 원문 설명은 description으로 함께 내려준다.
-const CATEGORY_TYPE_DB_VALUE: Record<"RAW" | "SKU", string> = {
-  RAW: "RAW & PROD",
-  SKU: "SKU",
-}
-
 export async function getCategoryOptions(
   categoryType: "RAW" | "SKU",
 ): Promise<{ value: string; label: string; description?: string }[]> {
-  const dbCategoryType = CATEGORY_TYPE_DB_VALUE[categoryType]
-  const res = await fetch(
-    `${SUPABASE_URL}/rest/v1/tb_category_mst?select=category_code,category_name_kr,description&category_type=eq.${encodeURIComponent(dbCategoryType)}&order=sort_order`,
-    { headers: authHeaders(), next: { revalidate: 60 } },
-  )
+  const url =
+    categoryType === "RAW"
+      ? `${SUPABASE_URL}/rest/v1/tb_category_mst?select=category_code,category_name_kr,description&category_type=eq.${encodeURIComponent("RAW & PROD")}&order=sort_order`
+      : `${SUPABASE_URL}/rest/v1/tb_sku_category_mst?select=category_code,category_name_kr,description&order=sort_order`
+  const res = await fetch(url, { headers: authHeaders(), next: { revalidate: 60 } })
   if (!res.ok) return []
   const rows = (await res.json()) as {
     category_code: string
@@ -955,6 +951,218 @@ export async function getSubmatRecentTxns(
     reasonMemo: r.reason_memo,
     createdByName: r.staff?.name ?? "-",
     createdAt: r.created_at,
+  }))
+}
+
+// ── 원재료 재고관리 (tb_raw_stock_txn / tb_raw_mst) ──
+
+export type RawCategoryInfo = { code: string; name: string; emoji: string; sortOrder: number }
+
+/** tb_category_mst 중 원재료·생산품 공용(category_type='RAW & PROD') 카테고리 — sort_order 순. */
+export async function getRawCategoriesFull(): Promise<RawCategoryInfo[]> {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/tb_category_mst` +
+      `?select=category_code,category_name_kr,emoji,sort_order&category_type=eq.${encodeURIComponent("RAW & PROD")}&order=sort_order`,
+    { headers: authHeaders(), next: { revalidate: 60 } },
+  )
+  if (!res.ok) return []
+  const rows = (await res.json()) as { category_code: string; category_name_kr: string | null; emoji: string | null; sort_order: number }[]
+  return rows.map((r) => ({
+    code: r.category_code,
+    name: r.category_name_kr ?? r.category_code,
+    emoji: r.emoji ?? "📦",
+    sortOrder: r.sort_order,
+  }))
+}
+
+export type RawStockMaster = {
+  rawCode: string
+  rawName: string
+  categoryCode: string | null
+  storage: string | null
+  managePartId: string | null
+  countSize: number | null
+  countUnit: string | null
+  minStock: number | null
+  parStock: number | null
+  photoUrls: string | null
+}
+
+const RAW_STOCK_MASTER_SELECT =
+  "raw_code,raw_name,category_code,storage,manage_part_id,count_size,count_unit,min_stock,par_stock,photo_urls"
+
+type RawStockMasterRow = {
+  raw_code: string
+  raw_name: string
+  category_code: string | null
+  storage: string | null
+  manage_part_id: string | null
+  count_size: number | null
+  count_unit: string | null
+  min_stock: number | null
+  par_stock: number | null
+  photo_urls: string | null
+}
+
+function mapRawStockMaster(r: RawStockMasterRow): RawStockMaster {
+  return {
+    rawCode: r.raw_code,
+    rawName: r.raw_name,
+    categoryCode: r.category_code,
+    storage: r.storage,
+    managePartId: r.manage_part_id,
+    countSize: r.count_size,
+    countUnit: r.count_unit,
+    minStock: r.min_stock,
+    parStock: r.par_stock,
+    photoUrls: r.photo_urls,
+  }
+}
+
+/** 활성 원재료 마스터 목록(재고관리용 발췌 컬럼만). */
+export async function getRawStockMasters(): Promise<RawStockMaster[]> {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/tb_raw_mst?select=${RAW_STOCK_MASTER_SELECT}&is_active=eq.true&order=raw_name.asc`,
+    { headers: authHeaders(), cache: "no-store" },
+  )
+  if (!res.ok) return []
+  const rows = (await res.json()) as RawStockMasterRow[]
+  return rows.map(mapRawStockMaster)
+}
+
+/** 단일 원재료 마스터(재고관리용 발췌 컬럼). */
+export async function getRawStockMaster(rawCode: string): Promise<RawStockMaster | null> {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/tb_raw_mst?select=${RAW_STOCK_MASTER_SELECT}&raw_code=eq.${encodeURIComponent(rawCode)}`,
+    { headers: authHeaders(), cache: "no-store" },
+  )
+  if (!res.ok) return null
+  const rows = (await res.json()) as RawStockMasterRow[]
+  const r = rows[0]
+  return r ? mapRawStockMaster(r) : null
+}
+
+/** raw_code별 현재고(SUM qty, IN/CONSUME/ADJ/WASTE)·반품대기(SUM qty WHERE txn_type=RETURN_HOLD) — 지점 단위 합산. */
+export async function getRawStockTotals(
+  storeId: string,
+): Promise<{ stockByRaw: Record<string, number>; holdByRaw: Record<string, number> }> {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/tb_raw_stock_txn?select=raw_code,qty,txn_type&store_id=eq.${encodeURIComponent(storeId)}`,
+    { headers: authHeaders(), cache: "no-store" },
+  )
+  const stockByRaw: Record<string, number> = {}
+  const holdByRaw: Record<string, number> = {}
+  if (!res.ok) return { stockByRaw, holdByRaw }
+  const rows = (await res.json()) as { raw_code: string; qty: number; txn_type: string }[]
+  for (const r of rows) {
+    if (r.txn_type === "RETURN_HOLD") {
+      holdByRaw[r.raw_code] = (holdByRaw[r.raw_code] ?? 0) + r.qty
+    } else {
+      stockByRaw[r.raw_code] = (stockByRaw[r.raw_code] ?? 0) + r.qty
+    }
+  }
+  return { stockByRaw, holdByRaw }
+}
+
+/** 단일 원재료의 현재고(SUM qty)·반품대기(SUM qty WHERE txn_type=RETURN_HOLD). */
+export async function getRawStockFor(storeId: string, rawCode: string): Promise<{ stock: number; hold: number }> {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/tb_raw_stock_txn?select=qty,txn_type` +
+      `&store_id=eq.${encodeURIComponent(storeId)}&raw_code=eq.${encodeURIComponent(rawCode)}`,
+    { headers: authHeaders(), cache: "no-store" },
+  )
+  if (!res.ok) return { stock: 0, hold: 0 }
+  const rows = (await res.json()) as { qty: number; txn_type: string }[]
+  let stock = 0
+  let hold = 0
+  for (const r of rows) {
+    if (r.txn_type === "RETURN_HOLD") hold += r.qty
+    else stock += r.qty
+  }
+  return { stock, hold }
+}
+
+export type RawStockTxn = {
+  txnId: string
+  txnType: string
+  qty: number
+  reasonCode: string | null
+  reasonMemo: string | null
+  createdByName: string
+  createdAt: string
+}
+
+/** 특정 원재료의 최근 트랜잭션 — 입력자 이름은 staff 테이블 조인. */
+export async function getRawRecentTxns(storeId: string, rawCode: string, limit = 20): Promise<RawStockTxn[]> {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/tb_raw_stock_txn` +
+      `?select=txn_id,txn_type,qty,reason_code,reason_memo,created_at,staff(name)` +
+      `&store_id=eq.${encodeURIComponent(storeId)}&raw_code=eq.${encodeURIComponent(rawCode)}` +
+      `&order=created_at.desc&limit=${limit}`,
+    { headers: authHeaders(), cache: "no-store" },
+  )
+  if (!res.ok) return []
+  const rows = (await res.json()) as {
+    txn_id: string
+    txn_type: string
+    qty: number
+    reason_code: string | null
+    reason_memo: string | null
+    created_at: string
+    staff: { name?: string } | null
+  }[]
+  return rows.map((r) => ({
+    txnId: r.txn_id,
+    txnType: r.txn_type,
+    qty: r.qty,
+    reasonCode: r.reason_code,
+    reasonMemo: r.reason_memo,
+    createdByName: r.staff?.name ?? "-",
+    createdAt: r.created_at,
+  }))
+}
+
+// ── 생산 기록 (tb_prod_log / tb_prod_mst) ──
+
+export type ProdLogItem = {
+  prodId: string
+  prodCode: string
+  prodName: string
+  categoryCode: string | null
+  unit: string
+  prodStage: string | null
+  hasRecipe: boolean
+}
+
+/** 활성 생산품 목록(생산 기록 화면용) + tb_prod_recipe 등록 여부("레시피 미등록" 배지 판정). */
+export async function getProdLogItems(): Promise<ProdLogItem[]> {
+  const [prodRes, recipeRes] = await Promise.all([
+    fetch(
+      `${SUPABASE_URL}/rest/v1/tb_prod_mst?select=id,prod_code,prod_name,category_code,unit,prod_stage&is_active=eq.true&order=prod_name.asc`,
+      { headers: authHeaders(), cache: "no-store" },
+    ),
+    fetch(`${SUPABASE_URL}/rest/v1/tb_prod_recipe?select=prod_id`, { headers: authHeaders(), cache: "no-store" }),
+  ])
+  if (!prodRes.ok) return []
+  const rows = (await prodRes.json()) as {
+    id: string
+    prod_code: string
+    prod_name: string
+    category_code: string | null
+    unit: string
+    prod_stage: string | null
+  }[]
+  const recipeProdIds = recipeRes.ok
+    ? new Set(((await recipeRes.json()) as { prod_id: string }[]).map((r) => r.prod_id))
+    : new Set<string>()
+  return rows.map((r) => ({
+    prodId: r.id,
+    prodCode: r.prod_code,
+    prodName: r.prod_name,
+    categoryCode: r.category_code,
+    unit: r.unit,
+    prodStage: r.prod_stage,
+    hasRecipe: recipeProdIds.has(r.id),
   }))
 }
 

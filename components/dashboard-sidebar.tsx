@@ -90,9 +90,18 @@ export function DashboardSidebar({
 
     { kind: "group", label: "운영/생산 일지" },
     { kind: "leaf", label: "SP 운영일지", href: "/dashboard/operation-log", icon: Store, visible: true, exact: true },
+    { kind: "leaf", label: "생산 기록", href: "/dashboard/production-record", icon: ChefHat, visible: true, exact: true },
     { kind: "leaf", label: "KP 생산일지", href: "/dashboard/production-log", icon: ChefHat, visible: true },
 
     { kind: "group", label: "재고관리" },
+    {
+      kind: "leaf",
+      label: "원재료 재고",
+      href: "/dashboard/raw-stock",
+      icon: Archive,
+      visible: true,
+      submenu: [{ label: "재고 실사", href: "/dashboard/raw-stock/audit" }],
+    },
     {
       kind: "leaf",
       label: "포장부자재 재고",

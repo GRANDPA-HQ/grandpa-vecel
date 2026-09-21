@@ -11,6 +11,10 @@ export const COLUMN_LABELS: Record<string, string> = {
   carb_ea: "탄수화물(개당, g)",
   protein_ea: "단백질(개당, g)",
   fat_ea: "지방(개당, g)",
+  tracking_level: "관리 수준",
+  count_size: "규격(개당 g)",
+  count_unit: "규격 라벨",
+  par_stock: "목표 재고",
   purchase_mode: "구매 방식",
   purchase_section_id: "구매 담당 섹션",
   // 구매 단위(purchase_unit) 하나(예: 1EA, 1박스) 안에 실제로 들어있는 양 — 제품 포장에
@@ -22,6 +26,12 @@ export const COLUMN_LABELS: Record<string, string> = {
   // 생산품 (tb_prod_mst)
   prod_code: "생산품 코드",
   prod_name: "생산품명",
+  prod_stage: "생산 단계",
+  storage_type: "보관 방식",
+  stock_form: "저장 형태",
+  unit_size: "규격(내용량)",
+  unit_size_uom: "규격 단위",
+  default_storage_asset_id: "기본 보관 시설",
   avg_daily_usage: "일평균 사용량",
   batch_qty: "배치 수량",
   min_stock_qty: "최소 재고 수량",
@@ -247,6 +257,21 @@ export const COLUMN_LABELS: Record<string, string> = {
   reason_type: "사유 구분",
   txn_id: "거래 ID",
   txn_type: "거래 유형",
+
+  // 원재료·생산품 재고 트랜잭션 (tb_raw_stock_txn / tb_prod_stock_txn)
+  input_count: "입력 개수",
+  input_g: "입력 무게(g)",
+  reason_code: "사유 코드",
+  ref_type: "출처 유형",
+  ref_id: "출처 ID",
+  audit_batch_id: "실사 묶음 ID",
+
+  // 생산 로그 (tb_prod_log)
+  log_id: "생산 로그 ID",
+  recipe_h_id: "적용 레시피",
+  worker_id: "작업자",
+  output_qty: "생산 산출량",
+  labor_min: "작업 시간(분)",
 
   // 방법서 상세(sop_steps) · 구 방법서(sop_mst)
   caution: "주의사항",

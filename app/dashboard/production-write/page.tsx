@@ -22,7 +22,7 @@ export default async function ProductionWritePage({
 
   const [skuRes, prodRes, rawRes, prodCategoryOptions, skuCategoryOptions] = await Promise.all([
     admin.from("tb_sku_mst").select("id,sku_code,sku_name").order("sku_code"),
-    admin.from("tb_prod_mst").select("id,prod_code,prod_name,status,unit").order("prod_code"),
+    admin.from("tb_prod_mst").select("id,prod_code,prod_name,prod_stage,unit").order("prod_code"),
     admin.from("tb_raw_mst").select("id,kcal_100g,carb_100g,protein_100g,fat_100g"),
     // 생산품은 카테고리 유형 "RAW", 판매품은 "SKU" — category_code가 유형별로 중복될 수 있어 구분 필요
     getCategoryOptions("RAW").catch(() => []),
@@ -81,7 +81,7 @@ export default async function ProductionWritePage({
   // (UNPROC은 무가공 원물로, SKU→PROD→RAW 알레르기 체인의 참조 노드 전용이라
   // 판매품 레시피에 직접 들어갈 수 있어야 한다 — SEMI는 계속 제외)
   const prodOptions = allProds
-    .filter((r) => r.status === "PREP" || r.status === "COOK" || r.status === "UNPROC")
+    .filter((r) => r.prod_stage === "PREP" || r.prod_stage === "COOK" || r.prod_stage === "UNPROC")
     .map((r) => ({
       value: r.id as string,
       label: [r.prod_code, r.prod_name].filter(Boolean).join(" · "),
@@ -96,7 +96,7 @@ export default async function ProductionWritePage({
   const prodLabelById = Object.fromEntries(
     allProds.map((r) => [
       r.id as string,
-      [r.prod_code, r.prod_name].filter(Boolean).join(" · ") + (r.status ? ` [${r.status}]` : ""),
+      [r.prod_code, r.prod_name].filter(Boolean).join(" · ") + (r.prod_stage ? ` [${r.prod_stage}]` : ""),
     ]),
   ) as Record<string, string>
 
@@ -234,8 +234,8 @@ export default async function ProductionWritePage({
               columns={prodInsertColumns}
               columnOptions={{
                 category_code: prodCategoryOptions,
-                storage: STORAGE_OPTIONS,
-                status: STATUS_OPTIONS,
+                storage_type: STORAGE_OPTIONS,
+                prod_stage: STATUS_OPTIONS,
                 unit: UNIT_OPTIONS,
               }}
               fieldOrder={TABLE_FIELD_ORDER["tb_prod_mst"]}

@@ -54,6 +54,7 @@ export const STORE_SCOPED_VIA_ZONE_TABLES: Record<string, string> = {
 export const TABLE_LABELS: Record<string, string> = {
   tb_raw_mst:            "원재료",
   tb_category_mst:       "카테고리",
+  tb_sku_category_mst:   "판매품 카테고리",
   tb_prod_mst:           "생산품",
   users:                 "유저",
   tb_sku_mst:            "판매품",
@@ -164,7 +165,7 @@ export const HIDDEN_COLS = new Set(["id", "created_at", "updated_at"])
 
 // 테이블별 추가 숨김 컬럼
 export const TABLE_HIDDEN_COLS: Record<string, Set<string>> = {
-  tb_prod_mst:   new Set(["is_active", "owner", "owner_part", "part", "yield_rate"]),
+  tb_prod_mst:   new Set(["is_active", "owner", "part", "yield_rate"]),
   // photo_urls: 더 이상 사용하지 않아 목록 화면에서 숨김
   tb_sku_mst:     new Set(["is_active", "photo_urls"]),
   // sort_order: 작성 화면의 드래그 순서 저장용 내부 컬럼
@@ -261,6 +262,7 @@ export const TABLE_DEFAULT_SORT: Record<string, { column: string; dir: "asc" | "
   tb_raw_mst:      { column: "raw_code", dir: "asc" },
   tb_prod_mst:     { column: "prod_code", dir: "asc" },
   tb_category_mst: { column: "category_code", dir: "asc" },
+  tb_sku_category_mst: { column: "sort_order", dir: "asc" },
   // 같은 SKU에 속한 재료끼리 뒤섞이지 않고 모여서 보이도록 SKU 기준 정렬
   tb_sku_recipe:   { column: "sku_id", dir: "asc" },
   // 같은 생산품에 속한 원자재끼리 모여서 보이도록 생산품 기준 정렬
@@ -282,6 +284,7 @@ export const TABLE_SEARCH_COLUMNS: Record<string, string[]> = {
   tb_raw_mst:      ["raw_code", "raw_name"],
   tb_prod_mst:     ["prod_code", "prod_name"],
   tb_category_mst: ["category_code", "category_name_kr", "category_name_en"],
+  tb_sku_category_mst: ["category_code", "category_name_kr", "category_name_en"],
   users:           ["email"],
   // sku_id/prod_id는 UUID라 직접 검색이 안 되므로, SKU/생산품 코드·이름은
   // id 목록으로 변환해 별도로 검색한다 (memo만 텍스트로 직접 검색)
@@ -335,6 +338,7 @@ export const CACHEABLE_MASTER_TABLES = new Set([
   "tb_sku_mst",
   "tb_submat_mst",
   "tb_category_mst",
+  "tb_sku_category_mst",
   "tb_sop_mst",
   "tb_store_mst",
 ])
