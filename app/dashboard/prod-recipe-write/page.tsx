@@ -154,8 +154,8 @@ export default async function ProdRecipeWritePage() {
               columns={prodInsertColumns}
               columnOptions={{
                 category_code: categoryOptions,
-                storage: STORAGE_OPTIONS,
-                status: STATUS_OPTIONS,
+                storage_type: STORAGE_OPTIONS,
+                prod_stage: STATUS_OPTIONS,
                 unit: UNIT_OPTIONS,
               }}
               fieldOrder={TABLE_FIELD_ORDER["tb_prod_mst"]}

@@ -39,7 +39,7 @@ const ENUM_COLUMNS: Record<string, { value: string; label: string; className: st
     { value: "approved", label: "승인됨",      className: "bg-emerald-100 text-emerald-700 border-emerald-200" },
     { value: "rejected", label: "반려됨",      className: "bg-red-100 text-red-700 border-red-200" },
   ],
-  "tb_prod_mst.status": [
+  "tb_prod_mst.prod_stage": [
     { value: "SEMI", label: "SEMI", className: "bg-blue-100 text-blue-700 border-blue-200" },
     { value: "PREP", label: "PREP", className: "bg-yellow-100 text-yellow-700 border-yellow-200" },
     { value: "COOK", label: "COOK", className: "bg-orange-100 text-orange-700 border-orange-200" },
@@ -60,10 +60,18 @@ const ENUM_COLUMNS: Record<string, { value: string; label: string; className: st
     { value: "ml", label: "ml", className: "bg-blue-100 text-blue-700 border-blue-200" },
     { value: "ea", label: "ea", className: "bg-gray-100 text-gray-700 border-gray-200" },
   ],
-  "tb_prod_mst.storage": [
+  "tb_prod_mst.storage_type": [
     { value: "냉장", label: "냉장", className: "bg-blue-100 text-blue-700 border-blue-200" },
     { value: "냉동", label: "냉동", className: "bg-sky-100 text-sky-700 border-sky-200" },
     { value: "상온", label: "상온", className: "bg-amber-100 text-amber-700 border-amber-200" },
+  ],
+  "tb_prod_mst.stock_form": [
+    { value: "통", label: "통", className: "bg-blue-100 text-blue-700 border-blue-200" },
+    { value: "팩", label: "팩", className: "bg-purple-100 text-purple-700 border-purple-200" },
+  ],
+  "tb_prod_mst.unit_size_uom": [
+    { value: "g", label: "g", className: "bg-green-100 text-green-700 border-green-200" },
+    { value: "개", label: "개", className: "bg-gray-100 text-gray-700 border-gray-200" },
   ],
   // 직원 (CHECK 제약 허용 값)
   "staff.employment_type": [
