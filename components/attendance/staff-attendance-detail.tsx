@@ -8,7 +8,7 @@ import {
   type AttendanceDayRow,
   type AttendanceBreakInput,
 } from "@/app/actions/attendance"
-import { isoToKstTime, todayKst } from "@/lib/date-kst"
+import { isoToKstTime, todayKst, dateStrToKoreanWeekday } from "@/lib/date-kst"
 import { Button } from "@/components/ui/button"
 import { SimpleTrendChart } from "@/components/simple-trend-chart"
 
@@ -29,6 +29,11 @@ function formatMinutes(minutes: number): string {
 
 function formatTime(iso: string | null): string {
   return iso ? isoToKstTime(iso) : "-"
+}
+
+/** "YYYY-MM-DD"를 "YYYY-MM-DD (요일)" 형태로 표시 — 일별 기록 표에서 날짜만으로는 요일을 가늠하기 어려워서 */
+function formatDateWithWeekday(dateStr: string): string {
+  return `${dateStr} (${dateStrToKoreanWeekday(dateStr)})`
 }
 
 type EditTarget = {
@@ -156,7 +161,7 @@ export function StaffAttendanceDetail({
           <tbody>
             {days.map((row) => (
               <tr key={row.date} className="border-t border-border">
-                <td className="px-4 py-2.5">{row.date}</td>
+                <td className="px-4 py-2.5">{formatDateWithWeekday(row.date)}</td>
                 <td className="px-4 py-2.5">{formatTime(row.checkIn)}</td>
                 <td className="px-4 py-2.5">
                   {row.stillWorking || row.stillOnBreak ? (
