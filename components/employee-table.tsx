@@ -317,7 +317,7 @@ function EmployeeRow({
           </td>
         ))}
         <td className="px-3 py-2">
-          <div className="flex items-center gap-1">
+          <div className="flex w-full items-center justify-end gap-1">
             {hasPin !== undefined && (
               <button
                 onClick={handleIssuePin}
