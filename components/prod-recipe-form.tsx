@@ -20,9 +20,6 @@ type RecipeRow = {
   ingredientId: string
   amount: string
   unit: "g" | "ml" | "ea"
-  // "개(ea)" 단위일 때 개당 평균 무게(g) — 개당 영양정보(kcal_ea 등)가 미등록된 원재료도
-  // 100g 기준 영양정보 × 환산 중량으로 합계에 반영할 수 있게 한다
-  avgWeight: string
   memo: string
 }
 
@@ -32,8 +29,14 @@ export type InitialProdRecipe = {
   ingredient_prod_id: string | null
   amount: number
   unit: string
-  avg_weight: number | null
   memo: string | null
+}
+
+// 생산품별 레시피 헤더(tb_prod_recipe_h) — 표준배치량·기준수율·적정 작업시간은 레시피 버전 단위 관리
+export type InitialRecipeHeader = {
+  stdBatchQty: number | null
+  yieldRate: number | null
+  stdLaborMin: number | null
 }
 
 // 원자재 영양성분 (null = 미등록) — g/ml 단위는 100g 기준, ea 단위는 개당 기준
@@ -52,6 +55,9 @@ type ProdTab = {
   localId: string
   prodId: string
   rows: RecipeRow[]
+  stdBatchQty: string
+  yieldRate: string
+  stdLaborMin: string
 }
 
 // 작성 중인 내용을 브라우저(localStorage)에 자동 임시저장하는 키
@@ -90,13 +96,25 @@ function createRow(): RecipeRow {
     ingredientId: "",
     amount: "",
     unit: "g",
-    avgWeight: "",
     memo: "",
   }
 }
 
+function emptyHeader(): Pick<ProdTab, "stdBatchQty" | "yieldRate" | "stdLaborMin"> {
+  return { stdBatchQty: "", yieldRate: "", stdLaborMin: "" }
+}
+
+function headerToTab(h: InitialRecipeHeader | undefined): Pick<ProdTab, "stdBatchQty" | "yieldRate" | "stdLaborMin"> {
+  if (!h) return emptyHeader()
+  return {
+    stdBatchQty: h.stdBatchQty !== null ? String(h.stdBatchQty) : "",
+    yieldRate: h.yieldRate !== null ? String(h.yieldRate) : "",
+    stdLaborMin: h.stdLaborMin !== null ? String(h.stdLaborMin) : "",
+  }
+}
+
 function createTab(): ProdTab {
-  return { localId: crypto.randomUUID(), prodId: "", rows: [createRow()] }
+  return { localId: crypto.randomUUID(), prodId: "", rows: [createRow()], ...emptyHeader() }
 }
 
 function toRows(recipes: InitialProdRecipe[]): RecipeRow[] {
@@ -106,7 +124,6 @@ function toRows(recipes: InitialProdRecipe[]): RecipeRow[] {
     ingredientId: r.ingredient_prod_id ?? r.raw_id ?? "",
     amount: String(r.amount),
     unit: r.unit as "g" | "ml" | "ea",
-    avgWeight: r.avg_weight !== null && r.avg_weight !== undefined ? String(r.avg_weight) : "",
     memo: r.memo ?? "",
   }))
 }
@@ -122,7 +139,9 @@ export function ProdRecipeForm({
   rawUnitById,
   prodUnitById,
   rawNutritionById,
+  rawAvgWeightById,
   initialRecipes,
+  initialHeaders,
 }: {
   prodOptions: SelectOption[]
   rawOptions: SelectOption[]
@@ -131,7 +150,10 @@ export function ProdRecipeForm({
   // 생산품에 등록된 단위 — 다른 생산품을 재료로 선택했을 때 행의 단위를 자동으로 맞춘다
   prodUnitById?: Record<string, string>
   rawNutritionById: Record<string, RawNutrition>
+  // ea 단위 원재료의 개당 평균 무게(g) — avg_weight 정본은 tb_raw_mst 단일(레시피 행에 더 이상 안 둠)
+  rawAvgWeightById: Record<string, number | null>
   initialRecipes: InitialProdRecipe[]
+  initialHeaders: Record<string, InitialRecipeHeader>
 }) {
   const [isPending, startTransition] = useTransition()
   const [tabs, setTabs] = useState<ProdTab[]>([createTab()])
@@ -232,10 +254,11 @@ export function ProdRecipeForm({
           counted++
           continue
         }
-        // 개당 영양정보가 없으면 개당 평균 무게(g) 입력값으로 중량 환산해 100g 기준 영양정보를 사용
-        const avgWeight = parseFloat(row.avgWeight)
+        // 개당 영양정보가 없으면 마스터(tb_raw_mst.avg_weight)의 개당 평균 무게(g)로 중량
+        // 환산해 100g 기준 영양정보를 사용
+        const avgWeight = rawAvgWeightById[row.ingredientId] ?? null
         const hasGramData = n && (n.kcal !== null || n.carb !== null || n.protein !== null || n.fat !== null)
-        if (Number.isFinite(avgWeight) && avgWeight > 0 && hasGramData) {
+        if (avgWeight !== null && avgWeight > 0 && hasGramData) {
           const effectiveGrams = amount * avgWeight
           grams += effectiveGrams
           const factor = effectiveGrams / 100
@@ -266,7 +289,7 @@ export function ProdRecipeForm({
     }
 
     return { grams, kcal, carb, protein, fat, counted, eaExcluded, noDataExcluded }
-  }, [active, rawNutritionById])
+  }, [active, rawNutritionById, rawAvgWeightById])
 
   // ── 탭 조작 ──────────────────────────────────────────
   function addTab() {
@@ -307,9 +330,18 @@ export function ProdRecipeForm({
       prev.map((t) =>
         t.localId !== active.localId
           ? t
-          : { ...t, prodId, rows: existing.length > 0 ? toRows(existing) : [createRow()] },
+          : {
+              ...t,
+              prodId,
+              rows: existing.length > 0 ? toRows(existing) : [createRow()],
+              ...headerToTab(initialHeaders[prodId]),
+            },
       ),
     )
+  }
+
+  function updateHeaderField(field: "stdBatchQty" | "yieldRate" | "stdLaborMin", value: string) {
+    setTabs((prev) => prev.map((t) => (t.localId !== activeId ? t : { ...t, [field]: value })))
   }
 
   // ── 행 조작 ──────────────────────────────────────────
@@ -399,8 +431,8 @@ export function ProdRecipeForm({
     if (!n) return null
     if (row.unit === "ea") {
       if (n.kcalEa !== null) return n.kcalEa * amount
-      const avgWeight = parseFloat(row.avgWeight)
-      if (n.kcal !== null && Number.isFinite(avgWeight) && avgWeight > 0) {
+      const avgWeight = rawAvgWeightById[row.ingredientId] ?? null
+      if (n.kcal !== null && avgWeight !== null && avgWeight > 0) {
         return (n.kcal * amount * avgWeight) / 100
       }
       return null
@@ -420,19 +452,23 @@ export function ProdRecipeForm({
       const results = await Promise.all(
         toSave.map((t) => {
           const valid = t.rows.filter((r) => r.ingredientId && r.amount !== "")
+          const stdBatchQty = parseFloat(t.stdBatchQty)
+          const yieldRate = parseFloat(t.yieldRate)
+          const stdLaborMin = parseFloat(t.stdLaborMin)
           return saveProdRecipe(
             t.prodId,
-            valid.map((r) => {
-              const avgWeight = parseFloat(r.avgWeight)
-              return {
-                ingredientType: r.ingredientType,
-                ingredientId: r.ingredientId,
-                amount: parseFloat(r.amount),
-                unit: r.unit,
-                avgWeight: Number.isFinite(avgWeight) && avgWeight > 0 ? avgWeight : null,
-                memo: r.memo,
-              }
-            }),
+            valid.map((r) => ({
+              ingredientType: r.ingredientType,
+              ingredientId: r.ingredientId,
+              amount: parseFloat(r.amount),
+              unit: r.unit,
+              memo: r.memo,
+            })),
+            {
+              stdBatchQty: Number.isFinite(stdBatchQty) ? stdBatchQty : null,
+              yieldRate: Number.isFinite(yieldRate) ? yieldRate : null,
+              stdLaborMin: Number.isFinite(stdLaborMin) ? stdLaborMin : null,
+            },
           )
         }),
       )
@@ -585,6 +621,46 @@ export function ProdRecipeForm({
             )}
           </div>
 
+          {/* 레시피 헤더 — 버전 단위로 관리(tb_prod_recipe_h) */}
+          <div className="flex flex-wrap items-end gap-4 rounded-xl border border-border bg-muted/20 p-4">
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">표준 배치량</label>
+              <Input
+                type="number"
+                min="0"
+                step="any"
+                value={active.stdBatchQty}
+                onChange={(e) => updateHeaderField("stdBatchQty", e.target.value)}
+                placeholder="1회 표준 생산량"
+                className="h-8 w-36"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">기준수율(%)</label>
+              <Input
+                type="number"
+                min="0"
+                step="any"
+                value={active.yieldRate}
+                onChange={(e) => updateHeaderField("yieldRate", e.target.value)}
+                placeholder="목표 수율"
+                className="h-8 w-28"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">적정 작업시간(분)</label>
+              <Input
+                type="number"
+                min="0"
+                step="any"
+                value={active.stdLaborMin}
+                onChange={(e) => updateHeaderField("stdLaborMin", e.target.value)}
+                placeholder="표준 노동시간"
+                className="h-8 w-32"
+              />
+            </div>
+          </div>
+
           {/* 레시피 행 테이블 */}
           <div className="overflow-hidden rounded-xl border border-border">
             <table className="w-full text-sm">
@@ -594,7 +670,6 @@ export function ProdRecipeForm({
                   <th className="px-4 py-3">원재료 / 생산품</th>
                   <th className="w-32 px-4 py-3">수량</th>
                   <th className="w-24 px-4 py-3">단위</th>
-                  <th className="w-28 px-4 py-3">평균 무게(g)</th>
                   <th className="w-24 px-4 py-3 text-right">열량</th>
                   <th className="px-4 py-3">메모</th>
                   <th className="w-10 px-2 py-3" />
@@ -690,23 +765,6 @@ export function ProdRecipeForm({
                         </select>
                       </td>
 
-                      <td className="px-4 py-2">
-                        {row.unit === "ea" ? (
-                          <Input
-                            type="number"
-                            min="0"
-                            step="any"
-                            value={row.avgWeight}
-                            onChange={(e) => updateRow(row.localId, "avgWeight", e.target.value)}
-                            placeholder="개당 g"
-                            title="개당 평균 무게(g) — 영양성분 합계 계산에 사용됩니다"
-                            className="h-8 border-none bg-transparent shadow-none focus-visible:ring-1 focus-visible:ring-indigo-500/40"
-                          />
-                        ) : (
-                          <span className="block px-1 text-xs text-muted-foreground/40">-</span>
-                        )}
-                      </td>
-
                       <td className="px-4 py-2 text-right font-mono text-xs text-muted-foreground">
                         {kcal !== null ? `${fmt(kcal)} kcal` : "-"}
                       </td>
@@ -788,7 +846,7 @@ export function ProdRecipeForm({
 
             {(nutrition.eaExcluded > 0 || nutrition.noDataExcluded > 0) && (
               <p className="mt-2 text-xs text-amber-600">
-                {nutrition.eaExcluded > 0 && `ea 단위 ${nutrition.eaExcluded}건은 개당 영양정보와 평균 무게가 모두 미입력되어 합계에서 제외됐습니다. 평균 무게(g)를 입력하면 합계에 반영됩니다.`}
+                {nutrition.eaExcluded > 0 && `ea 단위 ${nutrition.eaExcluded}건은 개당 영양정보와 평균 무게(원재료 마스터)가 모두 미입력되어 합계에서 제외됐습니다. 원재료 마스터에 평균 무게(g)를 입력하면 합계에 반영됩니다.`}
                 {nutrition.eaExcluded > 0 && nutrition.noDataExcluded > 0 && " "}
                 {nutrition.noDataExcluded > 0 && `영양정보 미등록 원재료·생산품 재료 ${nutrition.noDataExcluded}건은 중량만 합산됐습니다.`}
               </p>

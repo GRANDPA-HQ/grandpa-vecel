@@ -22,8 +22,8 @@ export default async function ProductionWritePage({
 
   const [skuRes, prodRes, rawRes, prodCategoryOptions, skuCategoryOptions] = await Promise.all([
     admin.from("tb_sku_mst").select("id,sku_code,sku_name").order("sku_code"),
-    admin.from("tb_prod_mst").select("id,prod_code,prod_name,prod_stage,unit").order("prod_code"),
-    admin.from("tb_raw_mst").select("id,kcal_100g,carb_100g,protein_100g,fat_100g"),
+    admin.from("tb_prod_mst").select("id,prod_code,prod_name,prod_stage,unit,avg_weight").order("prod_code"),
+    admin.from("tb_raw_mst").select("id,kcal_100g,carb_100g,protein_100g,fat_100g,avg_weight"),
     // 생산품은 카테고리 유형 "RAW", 판매품은 "SKU" — category_code가 유형별로 중복될 수 있어 구분 필요
     getCategoryOptions("RAW").catch(() => []),
     getCategoryOptions("SKU").catch(() => []),
@@ -31,23 +31,12 @@ export default async function ProductionWritePage({
 
   // 생산품별 재료 구성 — 생산품 100g당 영양성분 계산용. 재료는 원재료뿐 아니라 다른
   // 생산품일 수도 있다(예: 요거트랜치믹스를 만들어두고 그걸 재료로 요거트랜치드레싱을 만드는 경우)
-  // ea 단위 재료는 avg_weight(개당 평균 무게)로 중량 환산해 반영한다.
-  // ingredient_prod_id/avg_weight 컬럼이 아직 없는 DB에서는 단계적으로 폴백한다
-  // (폴백마다 select 컬럼 구성이 달라 엄격한 응답 타입 추론과 충돌하므로 any로 둔다)
-  let prodRecipeRes: any = await admin
-    .from("tb_prod_recipe")
-    .select("prod_id,raw_id,ingredient_prod_id,amount,unit,avg_weight")
-  if (prodRecipeRes.error) {
-    prodRecipeRes = await admin
-      .from("tb_prod_recipe")
-      .select("prod_id,raw_id,ingredient_prod_id,amount,unit")
-  }
-  if (prodRecipeRes.error) {
-    prodRecipeRes = await admin.from("tb_prod_recipe").select("prod_id,raw_id,amount,unit,avg_weight")
-  }
-  if (prodRecipeRes.error) {
-    prodRecipeRes = await admin.from("tb_prod_recipe").select("prod_id,raw_id,amount,unit")
-  }
+  // ea 단위 재료는 avg_weight(개당 평균 무게, 마스터 정본)로 중량 환산해 반영한다.
+  // 활성 버전(is_active=true)의 tb_prod_recipe_h+tb_prod_recipe_i만 조회한다.
+  const prodRecipeRes = await admin
+    .from("tb_prod_recipe_h")
+    .select("prod_id,tb_prod_recipe_i(input_type,raw_id,prod_id,input_qty,input_unit)")
+    .eq("is_active", true)
 
   // 드래그로 정한 행 순서(sort_order)대로 조회 — 컬럼이 아직 없는 DB에서는 기존 방식 폴백
   // (폴백마다 select 컬럼 구성이 달라 엄격한 응답 타입 추론과 충돌하므로 any로 둔다)
@@ -106,8 +95,9 @@ export default async function ProductionWritePage({
   })) as InitialRecipe[]
 
   // 생산품 100g당 영양성분 — 생산품 레시피의 재료 영양정보(100g 기준) × 투입량으로 계산.
-  // ea 단위 재료는 avg_weight(개당 평균 무게, g)로 중량 환산해 반영하며(미입력 시 제외),
-  // 프로덕트 레시피 합계 방식과 동일한 근사(ml≈1g)를 쓴다.
+  // ea 단위 재료는 avg_weight(개당 평균 무게, g — 마스터 정본: 원재료면 tb_raw_mst, 생산품이면
+  // tb_prod_mst)로 중량 환산해 반영하며(미입력 시 제외), 프로덕트 레시피 합계 방식과 동일한
+  // 근사(ml≈1g)를 쓴다.
   const rawNutritionMap = new Map(
     (rawRes.data ?? []).map((r) => [
       r.id as string,
@@ -119,27 +109,27 @@ export default async function ProductionWritePage({
       },
     ]),
   )
+  const rawAvgWeightMap = new Map((rawRes.data ?? []).map((r) => [r.id as string, (r.avg_weight as number | null) ?? null]))
+  const prodAvgWeightMap = new Map(allProds.map((r) => [r.id as string, (r.avg_weight as number | null) ?? null]))
 
   type RecipeRow = {
     rawId: string | null
     ingredientProdId: string | null
     amount: number
     unit: string
-    avgWeight: number | null
   }
   const recipeRowsByProd = new Map<string, RecipeRow[]>()
-  for (const r of prodRecipeRes.data ?? []) {
-    const prodId = r.prod_id as string | null
-    if (!prodId) continue
-    const rows = recipeRowsByProd.get(prodId) ?? []
-    rows.push({
-      rawId: (r.raw_id as string | null) ?? null,
-      ingredientProdId: (r as { ingredient_prod_id?: string | null }).ingredient_prod_id ?? null,
-      amount: Number(r.amount),
-      unit: String(r.unit ?? "").toLowerCase(),
-      avgWeight: (r as { avg_weight?: number | null }).avg_weight ?? null,
-    })
-    recipeRowsByProd.set(prodId, rows)
+  for (const h of (prodRecipeRes.data ?? []) as { prod_id: string; tb_prod_recipe_i: { input_type: string; raw_id: string | null; prod_id: string | null; input_qty: number; input_unit: string }[] }[]) {
+    const rows = recipeRowsByProd.get(h.prod_id) ?? []
+    for (const line of h.tb_prod_recipe_i) {
+      rows.push({
+        rawId: line.input_type === "RAW" ? line.raw_id : null,
+        ingredientProdId: line.input_type === "PROD" ? line.prod_id : null,
+        amount: Number(line.input_qty),
+        unit: String(line.input_unit ?? "").toLowerCase(),
+      })
+    }
+    recipeRowsByProd.set(h.prod_id, rows)
   }
 
   // 재료로 다른 생산품을 쓰는 다단계 레시피(예: 요거트랜치믹스를 만들어두고 그걸 재료로
@@ -160,11 +150,12 @@ export default async function ProductionWritePage({
     let hasData = false
     for (const row of recipeRowsByProd.get(prodId) ?? []) {
       if (!Number.isFinite(row.amount) || row.amount <= 0) continue
-      // ea 단위는 개당 평균 무게(avg_weight)를 곱해 중량으로 환산 — 미입력 행은 계산에서 제외
+      // ea 단위는 개당 평균 무게(마스터 avg_weight)를 곱해 중량으로 환산 — 미입력 행은 계산에서 제외
+      const avgWeight = row.rawId ? rawAvgWeightMap.get(row.rawId) : row.ingredientProdId ? prodAvgWeightMap.get(row.ingredientProdId) : null
       const effectiveGrams =
         row.unit === "ea"
-          ? row.avgWeight && row.avgWeight > 0
-            ? row.amount * row.avgWeight
+          ? avgWeight && avgWeight > 0
+            ? row.amount * avgWeight
             : null
           : row.amount
       if (effectiveGrams === null) continue

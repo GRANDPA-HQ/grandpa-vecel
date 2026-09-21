@@ -22,6 +22,7 @@ type CartLine = {
   prodCode: string
   prodName: string
   hasRecipe: boolean
+  recipeHId: string | null
   workerId: string
   workerName: string
   outputQty: number
@@ -100,6 +101,7 @@ export function ProductionRecord({
         outputQty: l.outputQty,
         laborMin: l.laborMin,
         memo: l.memo || undefined,
+        recipeHId: l.recipeHId ?? undefined,
       }))
       const result = await saveProdLog(entries)
       if (result.error) {
@@ -329,6 +331,7 @@ function ProductSheet({
         prodCode: product.prodCode,
         prodName: product.prodName,
         hasRecipe: product.hasRecipe,
+        recipeHId: product.recipeHId,
         workerId: id,
         workerName: worker?.name ?? "-",
         outputQty: qty,
@@ -355,10 +358,16 @@ function ProductSheet({
           <span>·</span>
           <span>관리단위 {product.unit}</span>
         </div>
-        {!product.hasRecipe && (
-          <div className="mt-3 rounded-lg bg-muted p-2.5 text-xs text-muted-foreground">
-            레시피가 아직 등록되지 않은 품목이에요. 생산품 재고는 정확히 쌓이고, 원재료 자동 차감은 레시피가 등록되면 켜져요.
+        {product.hasRecipe && product.stdLaborMin ? (
+          <div className="mt-3 rounded-lg bg-emerald-50 p-2.5 text-xs text-emerald-800">
+            적정 작업시간 · <b>약 {product.stdLaborMin}분</b> <span className="text-emerald-700/70">(참고용)</span>
           </div>
+        ) : (
+          !product.hasRecipe && (
+            <div className="mt-3 rounded-lg bg-muted p-2.5 text-xs text-muted-foreground">
+              레시피가 아직 등록되지 않은 품목이에요. 생산품 재고는 정확히 쌓이고, 원재료 자동 차감은 레시피가 등록되면 켜져요.
+            </div>
+          )
         )}
 
         <div className="mt-4">
