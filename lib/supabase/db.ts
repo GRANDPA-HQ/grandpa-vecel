@@ -11,6 +11,7 @@ import {
   type RowCursor,
 } from "@/lib/table-config"
 import { COLUMN_LABELS } from "@/lib/column-labels"
+import { todayKst, addDaysKst, kstDateToIso } from "@/lib/date-kst"
 
 // CACHEABLE_MASTER_TABLES에 속한 테이블의 캐시 태그 — 쓰기 시 updateTag로 이 태그만 즉시 무효화한다.
 // (updateTag는 revalidateTag와 달리 Server Action 안에서 바로 최신 데이터를 읽게 해준다 — "read-your-own-writes")
@@ -1377,6 +1378,96 @@ export async function getRecentSkuRecipes(limit = 3): Promise<RecentSkuRecipe[]>
         unit: r.unit,
         memo: r.memo,
       })),
+  }))
+}
+
+// ── 판매 외 소진 (tb_sku_nonsale_log / tb_sku_mst) ──
+
+export type SkuNonsaleItem = {
+  skuId: string
+  skuCode: string
+  skuName: string
+  categoryCode: string | null
+  hasRecipe: boolean
+}
+
+/** 활성 판매품 목록(판매 외 소진 화면용) + 판매 레시피(tb_sku_recipe) 존재 여부. */
+export async function getSkuNonsaleItems(): Promise<SkuNonsaleItem[]> {
+  const [skuRes, recipeRes] = await Promise.all([
+    fetch(`${SUPABASE_URL}/rest/v1/tb_sku_mst?select=id,sku_code,sku_name,category_code&is_active=eq.true&order=sku_name.asc`, {
+      headers: authHeaders(),
+      cache: "no-store",
+    }),
+    fetch(`${SUPABASE_URL}/rest/v1/tb_sku_recipe?select=sku_id`, { headers: authHeaders(), cache: "no-store" }),
+  ])
+  if (!skuRes.ok) return []
+  const rows = (await skuRes.json()) as { id: string; sku_code: string; sku_name: string; category_code: string | null }[]
+  const recipeSkuIds = recipeRes.ok
+    ? new Set(((await recipeRes.json()) as { sku_id: string }[]).map((r) => r.sku_id))
+    : new Set<string>()
+  return rows.map((r) => ({
+    skuId: r.id,
+    skuCode: r.sku_code,
+    skuName: r.sku_name,
+    categoryCode: r.category_code,
+    hasRecipe: recipeSkuIds.has(r.id),
+  }))
+}
+
+export type NonsaleLogRow = {
+  logId: string
+  skuId: string
+  skuName: string
+  qty: number
+  reasonCode: string
+  reasonMemo: string | null
+  createdAt: string
+  voided: boolean
+}
+
+/** 오늘(KST) [store_id, created_by] 본인이 남긴 원 기록(취소 행 제외) — "오늘 내 기록" 탭용. */
+export async function getMyTodayNonsaleLogs(storeId: string, staffId: string): Promise<NonsaleLogRow[]> {
+  const from = kstDateToIso(todayKst())
+  const to = kstDateToIso(addDaysKst(todayKst(), 1))
+
+  const [logsRes, cancelsRes] = await Promise.all([
+    fetch(
+      `${SUPABASE_URL}/rest/v1/tb_sku_nonsale_log` +
+        `?select=log_id,sku_id,qty,reason_code,reason_memo,created_at,tb_sku_mst(sku_name)` +
+        `&store_id=eq.${encodeURIComponent(storeId)}&created_by=eq.${encodeURIComponent(staffId)}` +
+        `&cancel_of=is.null&created_at=gte.${encodeURIComponent(from)}&created_at=lt.${encodeURIComponent(to)}` +
+        `&order=created_at.desc`,
+      { headers: authHeaders(), cache: "no-store" },
+    ),
+    fetch(
+      `${SUPABASE_URL}/rest/v1/tb_sku_nonsale_log?select=cancel_of&cancel_of=not.is.null` +
+        `&created_by=eq.${encodeURIComponent(staffId)}`,
+      { headers: authHeaders(), cache: "no-store" },
+    ),
+  ])
+  if (!logsRes.ok) return []
+  const rows = (await logsRes.json()) as {
+    log_id: string
+    sku_id: string
+    qty: number
+    reason_code: string
+    reason_memo: string | null
+    created_at: string
+    tb_sku_mst: { sku_name: string } | null
+  }[]
+  const voidedIds = cancelsRes.ok
+    ? new Set(((await cancelsRes.json()) as { cancel_of: string }[]).map((r) => r.cancel_of))
+    : new Set<string>()
+
+  return rows.map((r) => ({
+    logId: r.log_id,
+    skuId: r.sku_id,
+    skuName: r.tb_sku_mst?.sku_name ?? "(알 수 없음)",
+    qty: r.qty,
+    reasonCode: r.reason_code,
+    reasonMemo: r.reason_memo,
+    createdAt: r.created_at,
+    voided: voidedIds.has(r.log_id),
   }))
 }
 

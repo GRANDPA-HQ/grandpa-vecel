@@ -58,6 +58,15 @@ export const ACTION_LABEL: Record<CheckType, string> = {
   BREAK_END: "휴게 종료",
 }
 
+// 액션 선택 화면 버튼 색상 — 같은 화면에 동시에 뜨는 휴게 시작/퇴근(WORKING 상태)이
+// 한눈에 구분되도록 액션별로 다른 색을 쓴다(기존엔 전부 bg-primary라 구분이 안 됐음).
+export const ACTION_BUTTON_COLOR: Record<CheckType, string> = {
+  IN: "bg-emerald-600 hover:bg-emerald-700 text-white",
+  BREAK_START: "bg-amber-500 hover:bg-amber-600 text-white",
+  BREAK_END: "bg-sky-600 hover:bg-sky-700 text-white",
+  OUT: "bg-slate-700 hover:bg-slate-800 text-white",
+}
+
 // PIN 화면 헤더 문구 (액션별 4종, 컴포넌트는 1개 재사용)
 export const PIN_PROMPT: Record<CheckType, string> = {
   IN: "출근하려면 본인을 확인하세요",

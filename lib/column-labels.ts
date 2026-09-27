@@ -15,13 +15,10 @@ export const COLUMN_LABELS: Record<string, string> = {
   count_size: "규격(개당 g)",
   count_unit: "규격 라벨",
   par_stock: "목표 재고",
-  purchase_mode: "구매 방식",
-  purchase_section_id: "구매 담당 섹션",
   // 구매 단위(purchase_unit) 하나(예: 1EA, 1박스) 안에 실제로 들어있는 양 — 제품 포장에
   // 적힌 "내용량" 표기와 같은 개념. 예: 구매 단위 EA + 내용량 907 + 내용량 단위 g → 1EA에 907g
   pack_qty: "내용량",
   pack_unit: "내용량 단위",
-  origin: "원산지",
   nutrition_source: "영양성분 출처",
   // 생산품 (tb_prod_mst)
   prod_code: "생산품 코드",
@@ -54,7 +51,6 @@ export const COLUMN_LABELS: Record<string, string> = {
   catgegory_id: "카테고리 코드",
   storage: "보관 방식",
   purchase_unit: "구매 단위",
-  supplier: "거래처",
   shelf_life_days: "보관 기한 (일)",
   std_batch_qty: "표준 배치 수량",
   price: "가격",
@@ -69,8 +65,6 @@ export const COLUMN_LABELS: Record<string, string> = {
   created_by: "생성자",
   updated_by: "수정자",
   barcode: "바코드",
-  buy_link: "구매 링크",
-  brand: "브랜드",
   sell_price: "판매가",
   concept_tags: "식사 컨셉 태그",
   meal_time_tags: "식사 타이밍 태그",
@@ -217,8 +211,6 @@ export const COLUMN_LABELS: Record<string, string> = {
   item: "품목",
 
   // 원재료/생산품 추가
-  purchase_price: "구매 단가",
-  owner_part: "담당 파트",
   yield_rate: "수율",
 
   // 매출 주문 (tb_sales_order, tb_sales_order_item)
