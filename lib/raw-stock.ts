@@ -78,17 +78,26 @@ export const WASTE_REASON_OPTIONS: { code: WasteReasonCode; label: string }[] = 
   { code: "OTHER", label: "기타" },
 ]
 
-// ── 반품대기(RETURN_HOLD) 사유 — 시스템운영규칙 §6 ──
-export type ReturnReasonCode = "신선도불량" | "파손" | "수량부족" | "오배송" | "기타"
+// ── 반품대기(RETURN_HOLD) 사유 — 시스템운영규칙 §6. 영문 코드로 통일(구매발주 스키마 2026-09-26) ──
+export type ReturnReasonCode = "FRESH" | "DAMAGE" | "QTY_SHORT" | "WRONG_ITEM" | "OTHER"
 export const RETURN_REASON_OPTIONS: { code: ReturnReasonCode; label: string }[] = [
-  { code: "신선도불량", label: "신선도불량" },
-  { code: "파손", label: "파손" },
-  { code: "수량부족", label: "수량부족" },
-  { code: "오배송", label: "오배송" },
-  { code: "기타", label: "기타" },
+  { code: "FRESH", label: "신선도불량" },
+  { code: "DAMAGE", label: "파손" },
+  { code: "QTY_SHORT", label: "수량부족" },
+  { code: "WRONG_ITEM", label: "오배송" },
+  { code: "OTHER", label: "기타" },
 ]
 
-/** 사유코드가 '기타'류(OTHER/기타)면 reason_memo 입력이 필수다. */
+/** 사유코드가 '기타'류(OTHER)면 reason_memo 입력이 필수다. */
 export function reasonMemoRequired(reasonCode: string): boolean {
-  return reasonCode === "OTHER" || reasonCode === "기타"
+  return reasonCode === "OTHER"
+}
+
+/** 최근 입출 기록에 표시할 사유 한글 라벨 — WASTE/RETURN_HOLD 코드를 모두 찾아본다. */
+export function reasonCodeLabel(reasonCode: string): string {
+  return (
+    WASTE_REASON_OPTIONS.find((r) => r.code === reasonCode)?.label ??
+    RETURN_REASON_OPTIONS.find((r) => r.code === reasonCode)?.label ??
+    reasonCode
+  )
 }

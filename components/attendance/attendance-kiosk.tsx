@@ -5,11 +5,13 @@ import { checkAttendance, type KioskStaff } from "@/app/actions/attendance"
 import { getActiveNotices, type ActiveNotice } from "@/app/actions/notices"
 import {
   ACTION_ALLOWED,
+  ACTION_BUTTON_COLOR,
   ACTION_LABEL,
   PIN_PROMPT,
   STATUS_LABEL,
   type CheckType,
 } from "@/lib/attendance-status"
+import { cn } from "@/lib/utils"
 import { isoToKstTime, nowKstTime } from "@/lib/date-kst"
 import { StaffGrid } from "@/components/attendance/staff-grid"
 import { PinPad } from "@/components/attendance/pin-pad"
@@ -177,7 +179,7 @@ export function AttendanceKiosk({
                   key={action}
                   type="button"
                   onClick={() => chooseAction(s.id, action)}
-                  className="rounded-xl bg-primary py-4 text-base font-bold text-primary-foreground active:opacity-80"
+                  className={cn("rounded-xl py-4 text-base font-bold active:opacity-80", ACTION_BUTTON_COLOR[action])}
                 >
                   {ACTION_LABEL[action]}
                 </button>

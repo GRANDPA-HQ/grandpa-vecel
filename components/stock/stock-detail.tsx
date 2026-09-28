@@ -24,14 +24,12 @@ export function StockDetail({
   master,
   categoryName,
   stock,
-  hold,
   mappedAreaNames,
   recentTxns,
 }: {
   master: SubmatStockMaster
   categoryName: string
   stock: number
-  hold: number
   mappedAreaNames: string[]
   recentTxns: SubmatStockTxn[]
 }) {
@@ -42,7 +40,6 @@ export function StockDetail({
       master={master}
       categoryName={categoryName}
       stock={stock}
-      hold={hold}
       mappedAreaNames={mappedAreaNames}
       recentTxns={recentTxns}
       onReceive={() => setScreen("receive")}
@@ -56,7 +53,6 @@ function DetailScreen({
   master,
   categoryName,
   stock,
-  hold,
   mappedAreaNames,
   recentTxns,
   onReceive,
@@ -64,7 +60,6 @@ function DetailScreen({
   master: SubmatStockMaster
   categoryName: string
   stock: number
-  hold: number
   mappedAreaNames: string[]
   recentTxns: SubmatStockTxn[]
   onReceive: () => void
@@ -92,7 +87,7 @@ function DetailScreen({
             <Pill>{master.submatId}</Pill>
             <Pill>단위 · 팩</Pill>
             {master.packsPerBox && <Pill>입수 · {master.packsPerBox}팩/박스</Pill>}
-            {master.managePartId && <Pill accent>{master.managePartId} 파트</Pill>}
+            {master.managePartCode && <Pill accent>{master.managePartCode} 파트</Pill>}
           </div>
         </div>
       </section>
@@ -117,9 +112,6 @@ function DetailScreen({
           <div className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
             <span className="inline-block h-3.5 w-0.5 rounded-full bg-foreground" /> 발주기준 {master.minStockPack}팩
           </div>
-        )}
-        {hold > 0 && (
-          <div className="mt-2 text-xs font-bold text-violet-700">↩ 반품대기 {hold}팩 (정상재고와 별개)</div>
         )}
       </section>
 
@@ -263,7 +255,7 @@ function ReceiveScreen({
           <div className="mt-1 flex flex-wrap gap-1.5">
             <Pill>{master.submatId}</Pill>
             {master.packsPerBox && <Pill>{master.packsPerBox}팩/박스</Pill>}
-            {master.managePartId && <Pill accent>{master.managePartId} 파트</Pill>}
+            {master.managePartCode && <Pill accent>{master.managePartCode} 파트</Pill>}
           </div>
         </div>
       </section>

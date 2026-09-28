@@ -11,6 +11,7 @@ import {
   type RowCursor,
 } from "@/lib/table-config"
 import { COLUMN_LABELS } from "@/lib/column-labels"
+import { todayKst, addDaysKst, kstDateToIso } from "@/lib/date-kst"
 
 // CACHEABLE_MASTER_TABLES에 속한 테이블의 캐시 태그 — 쓰기 시 updateTag로 이 태그만 즉시 무효화한다.
 // (updateTag는 revalidateTag와 달리 Server Action 안에서 바로 최신 데이터를 읽게 해준다 — "read-your-own-writes")
@@ -799,115 +800,90 @@ export type SubmatStockMaster = {
   categoryCode: string | null
   spec: string | null
   managePartId: string | null
+  // 담당 파트 코드(SP/KP) — manage_part_id(uuid, parts FK) 조인 결과. 화면 표시용.
+  managePartCode: string | null
   packsPerBox: number | null
   minStockPack: number | null
-  parStockPack: number | null
+  purchaseLotPack: number | null
 }
 
-/** 활성 포장부자재 마스터 목록(재고관리용 발췌 컬럼만). */
-export async function getSubmatStockMasters(): Promise<SubmatStockMaster[]> {
-  const res = await fetch(
-    `${SUPABASE_URL}/rest/v1/tb_submat_mst` +
-      `?select=submat_id,item_name,category_code,spec,manage_part_id,packs_per_box,min_stock_pack,par_stock_pack` +
-      `&is_active=eq.true&order=item_name.asc`,
-    { headers: authHeaders(), cache: "no-store" },
-  )
-  if (!res.ok) return []
-  const rows = (await res.json()) as {
-    submat_id: string
-    item_name: string
-    category_code: string | null
-    spec: string | null
-    manage_part_id: string | null
-    packs_per_box: number | null
-    min_stock_pack: number | null
-    par_stock_pack: number | null
-  }[]
-  return rows.map((r) => ({
-    submatId: r.submat_id,
-    itemName: r.item_name,
-    categoryCode: r.category_code,
-    spec: r.spec,
-    managePartId: r.manage_part_id,
-    packsPerBox: r.packs_per_box,
-    minStockPack: r.min_stock_pack,
-    parStockPack: r.par_stock_pack,
-  }))
+const SUBMAT_STOCK_MASTER_SELECT =
+  "submat_id,item_name,category_code,spec,manage_part_id,parts(code),packs_per_box,min_stock_pack,purchase_lot_pack"
+
+type SubmatStockMasterRow = {
+  submat_id: string
+  item_name: string
+  category_code: string | null
+  spec: string | null
+  manage_part_id: string | null
+  parts: { code: string } | null
+  packs_per_box: number | null
+  min_stock_pack: number | null
+  purchase_lot_pack: number | null
 }
 
-/** 단일 부자재의 현재고(SUM qty)·반품대기(SUM -qty WHERE txn_type=RETURN_HOLD). */
-export async function getSubmatStockFor(
-  storeId: string,
-  submatId: string,
-): Promise<{ stock: number; hold: number }> {
-  const res = await fetch(
-    `${SUPABASE_URL}/rest/v1/tb_submat_stock_txn?select=qty,txn_type` +
-      `&store_id=eq.${encodeURIComponent(storeId)}&submat_id=eq.${encodeURIComponent(submatId)}`,
-    { headers: authHeaders(), cache: "no-store" },
-  )
-  if (!res.ok) return { stock: 0, hold: 0 }
-  const rows = (await res.json()) as { qty: number; txn_type: string }[]
-  let stock = 0
-  let hold = 0
-  for (const r of rows) {
-    stock += r.qty
-    if (r.txn_type === "RETURN_HOLD") hold += -r.qty
-  }
-  return { stock, hold }
-}
-
-/** 단일 부자재 마스터(재고관리용 발췌 컬럼). */
-export async function getSubmatStockMaster(submatId: string): Promise<SubmatStockMaster | null> {
-  const res = await fetch(
-    `${SUPABASE_URL}/rest/v1/tb_submat_mst` +
-      `?select=submat_id,item_name,category_code,spec,manage_part_id,packs_per_box,min_stock_pack,par_stock_pack` +
-      `&submat_id=eq.${encodeURIComponent(submatId)}`,
-    { headers: authHeaders(), cache: "no-store" },
-  )
-  if (!res.ok) return null
-  const rows = (await res.json()) as {
-    submat_id: string
-    item_name: string
-    category_code: string | null
-    spec: string | null
-    manage_part_id: string | null
-    packs_per_box: number | null
-    min_stock_pack: number | null
-    par_stock_pack: number | null
-  }[]
-  const r = rows[0]
-  if (!r) return null
+function mapSubmatStockMaster(r: SubmatStockMasterRow): SubmatStockMaster {
   return {
     submatId: r.submat_id,
     itemName: r.item_name,
     categoryCode: r.category_code,
     spec: r.spec,
     managePartId: r.manage_part_id,
+    managePartCode: r.parts?.code ?? null,
     packsPerBox: r.packs_per_box,
     minStockPack: r.min_stock_pack,
-    parStockPack: r.par_stock_pack,
+    purchaseLotPack: r.purchase_lot_pack,
   }
 }
 
-/** submat_id별 현재고(SUM qty)·반품대기(SUM -qty WHERE txn_type=RETURN_HOLD) — 지점 단위 합산. */
-export async function getSubmatStockTotals(
-  storeId: string,
-): Promise<{ stockBySubmat: Record<string, number>; holdBySubmat: Record<string, number> }> {
+/** 활성 포장부자재 마스터 목록(재고관리용 발췌 컬럼만). */
+export async function getSubmatStockMasters(): Promise<SubmatStockMaster[]> {
   const res = await fetch(
-    `${SUPABASE_URL}/rest/v1/tb_submat_stock_txn?select=submat_id,qty,txn_type&store_id=eq.${encodeURIComponent(storeId)}`,
+    `${SUPABASE_URL}/rest/v1/tb_submat_mst?select=${SUBMAT_STOCK_MASTER_SELECT}&is_active=eq.true&order=item_name.asc`,
+    { headers: authHeaders(), cache: "no-store" },
+  )
+  if (!res.ok) return []
+  const rows = (await res.json()) as SubmatStockMasterRow[]
+  return rows.map(mapSubmatStockMaster)
+}
+
+/** 단일 부자재의 현재고(SUM qty). 부자재는 반품대기(RETURN_HOLD)를 두지 않는다. */
+export async function getSubmatStockFor(storeId: string, submatId: string): Promise<number> {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/tb_submat_stock_txn?select=qty` +
+      `&store_id=eq.${encodeURIComponent(storeId)}&submat_id=eq.${encodeURIComponent(submatId)}`,
+    { headers: authHeaders(), cache: "no-store" },
+  )
+  if (!res.ok) return 0
+  const rows = (await res.json()) as { qty: number }[]
+  return rows.reduce((sum, r) => sum + r.qty, 0)
+}
+
+/** 단일 부자재 마스터(재고관리용 발췌 컬럼). */
+export async function getSubmatStockMaster(submatId: string): Promise<SubmatStockMaster | null> {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/tb_submat_mst?select=${SUBMAT_STOCK_MASTER_SELECT}&submat_id=eq.${encodeURIComponent(submatId)}`,
+    { headers: authHeaders(), cache: "no-store" },
+  )
+  if (!res.ok) return null
+  const rows = (await res.json()) as SubmatStockMasterRow[]
+  const r = rows[0]
+  return r ? mapSubmatStockMaster(r) : null
+}
+
+/** submat_id별 현재고(SUM qty) — 지점 단위 합산. 부자재는 반품대기(RETURN_HOLD)를 두지 않는다. */
+export async function getSubmatStockTotals(storeId: string): Promise<{ stockBySubmat: Record<string, number> }> {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/tb_submat_stock_txn?select=submat_id,qty&store_id=eq.${encodeURIComponent(storeId)}`,
     { headers: authHeaders(), cache: "no-store" },
   )
   const stockBySubmat: Record<string, number> = {}
-  const holdBySubmat: Record<string, number> = {}
-  if (!res.ok) return { stockBySubmat, holdBySubmat }
-  const rows = (await res.json()) as { submat_id: string; qty: number; txn_type: string }[]
+  if (!res.ok) return { stockBySubmat }
+  const rows = (await res.json()) as { submat_id: string; qty: number }[]
   for (const r of rows) {
     stockBySubmat[r.submat_id] = (stockBySubmat[r.submat_id] ?? 0) + r.qty
-    if (r.txn_type === "RETURN_HOLD") {
-      holdBySubmat[r.submat_id] = (holdBySubmat[r.submat_id] ?? 0) + -r.qty
-    }
   }
-  return { stockBySubmat, holdBySubmat }
+  return { stockBySubmat }
 }
 
 export type SubmatStockTxn = {
@@ -984,12 +960,12 @@ export type RawStockMaster = {
   countSize: number | null
   countUnit: string | null
   minStock: number | null
-  parStock: number | null
+  purchaseLot: number | null
   photoUrls: string | null
 }
 
 const RAW_STOCK_MASTER_SELECT =
-  "raw_code,raw_name,category_code,storage,manage_part_id,count_size,count_unit,min_stock,par_stock,photo_urls"
+  "raw_code,raw_name,category_code,storage,manage_part_id,count_size,count_unit,min_stock,purchase_lot,photo_urls"
 
 type RawStockMasterRow = {
   raw_code: string
@@ -1000,7 +976,7 @@ type RawStockMasterRow = {
   count_size: number | null
   count_unit: string | null
   min_stock: number | null
-  par_stock: number | null
+  purchase_lot: number | null
   photo_urls: string | null
 }
 
@@ -1014,7 +990,7 @@ function mapRawStockMaster(r: RawStockMasterRow): RawStockMaster {
     countSize: r.count_size,
     countUnit: r.count_unit,
     minStock: r.min_stock,
-    parStock: r.par_stock,
+    purchaseLot: r.purchase_lot,
     photoUrls: r.photo_urls,
   }
 }
@@ -1377,6 +1353,96 @@ export async function getRecentSkuRecipes(limit = 3): Promise<RecentSkuRecipe[]>
         unit: r.unit,
         memo: r.memo,
       })),
+  }))
+}
+
+// ── 판매 외 소진 (tb_sku_nonsale_log / tb_sku_mst) ──
+
+export type SkuNonsaleItem = {
+  skuId: string
+  skuCode: string
+  skuName: string
+  categoryCode: string | null
+  hasRecipe: boolean
+}
+
+/** 활성 판매품 목록(판매 외 소진 화면용) + 판매 레시피(tb_sku_recipe) 존재 여부. */
+export async function getSkuNonsaleItems(): Promise<SkuNonsaleItem[]> {
+  const [skuRes, recipeRes] = await Promise.all([
+    fetch(`${SUPABASE_URL}/rest/v1/tb_sku_mst?select=id,sku_code,sku_name,category_code&is_active=eq.true&order=sku_name.asc`, {
+      headers: authHeaders(),
+      cache: "no-store",
+    }),
+    fetch(`${SUPABASE_URL}/rest/v1/tb_sku_recipe?select=sku_id`, { headers: authHeaders(), cache: "no-store" }),
+  ])
+  if (!skuRes.ok) return []
+  const rows = (await skuRes.json()) as { id: string; sku_code: string; sku_name: string; category_code: string | null }[]
+  const recipeSkuIds = recipeRes.ok
+    ? new Set(((await recipeRes.json()) as { sku_id: string }[]).map((r) => r.sku_id))
+    : new Set<string>()
+  return rows.map((r) => ({
+    skuId: r.id,
+    skuCode: r.sku_code,
+    skuName: r.sku_name,
+    categoryCode: r.category_code,
+    hasRecipe: recipeSkuIds.has(r.id),
+  }))
+}
+
+export type NonsaleLogRow = {
+  logId: string
+  skuId: string
+  skuName: string
+  qty: number
+  reasonCode: string
+  reasonMemo: string | null
+  createdAt: string
+  voided: boolean
+}
+
+/** 오늘(KST) [store_id, created_by] 본인이 남긴 원 기록(취소 행 제외) — "오늘 내 기록" 탭용. */
+export async function getMyTodayNonsaleLogs(storeId: string, staffId: string): Promise<NonsaleLogRow[]> {
+  const from = kstDateToIso(todayKst())
+  const to = kstDateToIso(addDaysKst(todayKst(), 1))
+
+  const [logsRes, cancelsRes] = await Promise.all([
+    fetch(
+      `${SUPABASE_URL}/rest/v1/tb_sku_nonsale_log` +
+        `?select=log_id,sku_id,qty,reason_code,reason_memo,created_at,tb_sku_mst(sku_name)` +
+        `&store_id=eq.${encodeURIComponent(storeId)}&created_by=eq.${encodeURIComponent(staffId)}` +
+        `&cancel_of=is.null&created_at=gte.${encodeURIComponent(from)}&created_at=lt.${encodeURIComponent(to)}` +
+        `&order=created_at.desc`,
+      { headers: authHeaders(), cache: "no-store" },
+    ),
+    fetch(
+      `${SUPABASE_URL}/rest/v1/tb_sku_nonsale_log?select=cancel_of&cancel_of=not.is.null` +
+        `&created_by=eq.${encodeURIComponent(staffId)}`,
+      { headers: authHeaders(), cache: "no-store" },
+    ),
+  ])
+  if (!logsRes.ok) return []
+  const rows = (await logsRes.json()) as {
+    log_id: string
+    sku_id: string
+    qty: number
+    reason_code: string
+    reason_memo: string | null
+    created_at: string
+    tb_sku_mst: { sku_name: string } | null
+  }[]
+  const voidedIds = cancelsRes.ok
+    ? new Set(((await cancelsRes.json()) as { cancel_of: string }[]).map((r) => r.cancel_of))
+    : new Set<string>()
+
+  return rows.map((r) => ({
+    logId: r.log_id,
+    skuId: r.sku_id,
+    skuName: r.tb_sku_mst?.sku_name ?? "(알 수 없음)",
+    qty: r.qty,
+    reasonCode: r.reason_code,
+    reasonMemo: r.reason_memo,
+    createdAt: r.created_at,
+    voided: voidedIds.has(r.log_id),
   }))
 }
 

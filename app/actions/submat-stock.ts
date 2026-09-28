@@ -66,8 +66,10 @@ export async function receiveSubmatStock(
 /**
  * 재고 실사 확정 — 각 영역에서 입력한 값을 합산한 총재고와 시스템 재고(SUM(qty))의 차이만큼
  * ADJ(reason_type=재고 실사) 트랜잭션 1건을 남긴다. 차이가 0이면 트랜잭션을 남기지 않는다.
+ * auditBatchId — 실사 화면 방문(세션) 전체에서 발급한 회차 id(클라이언트가 세션당 1개 생성해
+ * 품목마다 같은 값을 넘긴다). 여러 품목의 ADJ 행을 "같은 실사에서 나온 것"으로 묶는 용도.
  */
-export async function submitCycleCount(submatId: string, countedTotal: number): Promise<Result> {
+export async function submitCycleCount(submatId: string, countedTotal: number, auditBatchId?: string): Promise<Result> {
   const auth = await requireStaff()
   if ("error" in auth) return { error: auth.error }
   if (countedTotal < 0) return { error: "0 이상의 값을 입력해주세요." }
@@ -91,6 +93,7 @@ export async function submitCycleCount(submatId: string, countedTotal: number): 
     txn_type: "ADJ",
     qty: diff,
     reason_type: "재고 실사",
+    audit_batch_id: auditBatchId ?? null,
     created_by: auth.id,
   })
   if (error) return { error: `실사 저장에 실패했습니다. ${error.message}` }

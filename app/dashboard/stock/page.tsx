@@ -50,7 +50,6 @@ export default async function StockListPage() {
       packsPerBox: m.packsPerBox,
       minStockPack: m.minStockPack,
       stock,
-      hold: totals.holdBySubmat[m.submatId] ?? 0,
       status: statusOf(stock, m.minStockPack),
       areaIds: areaIdsBySubmat[m.submatId] ?? [],
     }

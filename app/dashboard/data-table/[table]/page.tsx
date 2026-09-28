@@ -14,6 +14,7 @@ import {
   getColumnPrefs,
   getCategoryOptions,
   getSubmatCategoryOptions,
+  getPartOptionsWithCode,
   type SubmatZoneLink,
 } from "@/lib/supabase/db"
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -47,6 +48,7 @@ import {
   SOP_CATEGORY_OPTIONS,
   SOP_STATUS_OPTIONS,
   SOP_TARGET_TYPE_OPTIONS,
+  PART_CODES_BY_STORE_SCOPE,
   type SelectOption,
 } from "@/lib/table-config"
 
@@ -373,9 +375,19 @@ export default async function TablePage({
     categoryFilterOptions = columnOptions["category_code"]
   }
   // tb_submat_mst: tb_category_mst와는 독립된 전용 카테고리 테이블을 쓴다
+  let submatPartCodeById: Record<string, string> = {}
   if (tableName === "tb_submat_mst") {
     columnOptions["category_code"] = await getSubmatCategoryOptions().catch(() => [] as SelectOption[])
     categoryFilterOptions = columnOptions["category_code"]
+
+    // manage_part_id는 2026-09-28d 마이그레이션으로 varchar('KP'/'SP') → parts(id) FK로 바뀌었다.
+    // 부자재는 매장 소속(SP/KP)만 담당 가능 — 본사 파트(MGMT/FIN)는 선택지에서 제외한다.
+    const partOpts = await getPartOptionsWithCode().catch(() => [] as { value: string; label: string; code: string }[])
+    const storePartCodes = PART_CODES_BY_STORE_SCOPE.store
+    columnOptions["manage_part_id"] = partOpts
+      .filter((p) => storePartCodes.includes(p.code))
+      .map(({ value, label }) => ({ value, label }))
+    submatPartCodeById = Object.fromEntries(partOpts.map((p) => [p.value, p.code]))
   }
   if (STORAGE_TABLES.has(tableName)) {
     columnOptions["storage"] = STORAGE_OPTIONS
@@ -447,7 +459,7 @@ export default async function TablePage({
                   submatId={submatId}
                   initialZoneIds={linksBySubmat[submatId] ?? []}
                   zoneOptions={submatZoneOptions}
-                  managePartId={String(row["manage_part_id"] ?? "")}
+                  managePartId={submatPartCodeById[String(row["manage_part_id"] ?? "")] ?? ""}
                 />
               ),
             ]

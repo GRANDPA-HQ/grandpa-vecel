@@ -21,6 +21,9 @@ type ItemState = { inputs: Inputs; confirmed: boolean }
 
 export function CycleCount({ areas, items }: { areas: StorageAreaInfo[]; items: CycleCountItem[] }) {
   const router = useRouter()
+  // 이 실사 방문(세션) 전체를 하나로 묶는 회차 id — 여러 영역·여러 품목을 거쳐도 마운트 시
+  // 한 번만 발급해 재사용한다(A-3, 2026-09-27 확정). 페이지를 새로고침하면 새 회차가 시작된다.
+  const [auditBatchId] = useState(() => crypto.randomUUID())
   const [curAreaId, setCurAreaId] = useState<string | null>(areas[0]?.id ?? null)
   const [openId, setOpenId] = useState<string | null>(null)
   const [state, setState] = useState<Record<string, ItemState>>(() =>
@@ -56,7 +59,7 @@ export function CycleCount({ areas, items }: { areas: StorageAreaInfo[]; items: 
 
     setError(null)
     startTransition(async () => {
-      const result = await submitCycleCount(item.submatId, total)
+      const result = await submitCycleCount(item.submatId, total, auditBatchId)
       if (result.error) {
         setError(result.error)
         return

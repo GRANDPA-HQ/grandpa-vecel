@@ -113,6 +113,7 @@ export function DashboardSidebar({
         { label: "보관영역 매핑", href: "/dashboard/stock/mapping" },
       ],
     },
+    { kind: "leaf", label: "판매 외 소진", href: "/dashboard/sku-nonsale", icon: Archive, visible: true, exact: true },
 
     { kind: "leaf", label: "SOP(방법서) 관리", href: `${DATA_TABLE_HREF}/tb_sop_mst`, icon: BookOpen, visible: true, exact: true },
 
