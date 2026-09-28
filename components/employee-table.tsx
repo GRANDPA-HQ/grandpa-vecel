@@ -317,45 +317,54 @@ function EmployeeRow({
           </td>
         ))}
         <td className="px-3 py-2">
+          {/* 세 자리(PIN·비밀번호·삭제)를 항상 고정 폭으로 예약해둔다 — 행마다 조건부로 버튼이
+              빠지면(hasPin 없음·본인 행이라 삭제 없음) flex가 나머지를 당겨 붙여 행마다 버튼
+              위치가 들쭉날쭉해지던 문제를 막는다. 해당 없는 자리는 빈 슬롯으로 남는다. */}
           <div className="flex w-full items-center justify-end gap-1">
-            {hasPin !== undefined && (
+            <div className="flex h-6 w-6 items-center justify-center">
+              {hasPin !== undefined && (
+                <button
+                  onClick={handleIssuePin}
+                  disabled={isPending}
+                  title={hasPin ? "PIN 재발급 (출퇴근 키오스크용)" : "PIN 발급 (출퇴근 키오스크용)"}
+                  className={cn(
+                    "rounded p-1 transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+                    hasPin
+                      ? "text-muted-foreground hover:bg-accent hover:text-foreground"
+                      : "text-amber-600 hover:bg-amber-50 hover:text-amber-700",
+                  )}
+                >
+                  <Fingerprint className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+            <div className="flex h-6 w-6 items-center justify-center">
               <button
-                onClick={handleIssuePin}
+                onClick={handleResetPassword}
                 disabled={isPending}
-                title={hasPin ? "PIN 재발급 (출퇴근 키오스크용)" : "PIN 발급 (출퇴근 키오스크용)"}
+                title="비밀번호 재설정 (새 비밀번호를 본인 이메일로 발송)"
                 className={cn(
                   "rounded p-1 transition-colors disabled:cursor-not-allowed disabled:opacity-50",
-                  hasPin
-                    ? "text-muted-foreground hover:bg-accent hover:text-foreground"
-                    : "text-amber-600 hover:bg-amber-50 hover:text-amber-700",
+                  resetDone
+                    ? "text-emerald-600"
+                    : "text-muted-foreground hover:bg-accent hover:text-foreground",
                 )}
               >
-                <Fingerprint className="h-4 w-4" />
+                {resetDone ? <Check className="h-4 w-4" /> : <KeyRound className="h-4 w-4" />}
               </button>
-            )}
-            <button
-              onClick={handleResetPassword}
-              disabled={isPending}
-              title="비밀번호 재설정 (새 비밀번호를 본인 이메일로 발송)"
-              className={cn(
-                "rounded p-1 transition-colors disabled:cursor-not-allowed disabled:opacity-50",
-                resetDone
-                  ? "text-emerald-600"
-                  : "text-muted-foreground hover:bg-accent hover:text-foreground",
+            </div>
+            <div className="flex h-6 w-6 items-center justify-center">
+              {!isSelf && (
+                <button
+                  onClick={handleDelete}
+                  disabled={isPending}
+                  title="직원 삭제"
+                  className="rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
               )}
-            >
-              {resetDone ? <Check className="h-4 w-4" /> : <KeyRound className="h-4 w-4" />}
-            </button>
-            {!isSelf && (
-              <button
-                onClick={handleDelete}
-                disabled={isPending}
-                title="직원 삭제"
-                className="rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
-            )}
+            </div>
           </div>
         </td>
       </tr>
