@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react"
 import Link from "next/link"
-import { PackageSearch, MapPin, Undo2 } from "lucide-react"
+import { PackageSearch, MapPin } from "lucide-react"
 import {
   categoryEmoji,
   formatPacks,
@@ -22,7 +22,6 @@ export type StockCardData = {
   packsPerBox: number | null
   minStockPack: number | null
   stock: number
-  hold: number
   status: StockStatus
   areaIds: string[]
 }
@@ -187,7 +186,7 @@ export function StockList({
       <p className="px-1 pb-2 text-[11px] leading-relaxed text-muted-foreground">
         현재고 = 트랜잭션 합산(SUM) · 단위 팩 · submat_id 기준 총재고
         <br />
-        보관영역 = 위치 태그(다대다) · 영역별 수량은 관리하지 않음(실사 시 카운트) · 경고선 = 최소재고의 125% 이내
+        보관영역 = 위치 태그(다대다) · 영역별 수량은 관리하지 않음(실사 시 카운트) · 경고선 = 발주기준의 125% 이내
       </p>
     </div>
   )
@@ -405,18 +404,11 @@ function StockCard({
         {item.minStockPack !== null && (
           <div className="text-[10.5px] font-semibold text-muted-foreground">┃ 발주기준 {item.minStockPack}팩</div>
         )}
-        {(item.hold > 0 || locationLabel) && (
+        {locationLabel && (
           <div className="flex flex-wrap gap-1.5 pt-0.5">
-            {item.hold > 0 && (
-              <span className="inline-flex items-center gap-1 rounded-md bg-violet-100 px-2 py-0.5 text-[11px] font-bold text-violet-700">
-                <Undo2 className="h-3 w-3" /> 반품대기 {item.hold}팩
-              </span>
-            )}
-            {locationLabel && (
-              <span className="inline-flex items-center gap-1 rounded-md bg-sky-100 px-2 py-0.5 text-[11px] font-bold text-sky-700">
-                <MapPin className="h-3 w-3" /> {locationLabel}
-              </span>
-            )}
+            <span className="inline-flex items-center gap-1 rounded-md bg-sky-100 px-2 py-0.5 text-[11px] font-bold text-sky-700">
+              <MapPin className="h-3 w-3" /> {locationLabel}
+            </span>
           </div>
         )}
       </div>

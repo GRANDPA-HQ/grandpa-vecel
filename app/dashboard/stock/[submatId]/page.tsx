@@ -31,7 +31,7 @@ export default async function StockDetailPage({
   const master = await getSubmatStockMaster(decoded)
   if (!master) notFound()
 
-  const [{ stock, hold }, categories, activeAreas, areaIds, txns] = await Promise.all([
+  const [stock, categories, activeAreas, areaIds, txns] = await Promise.all([
     getSubmatStockFor(employee.storeId, decoded),
     getSubmatCategoriesFull(),
     getActiveStorageAreas(employee.storeId),
@@ -48,7 +48,6 @@ export default async function StockDetailPage({
       master={master}
       categoryName={category?.name ?? master.categoryCode ?? "-"}
       stock={stock}
-      hold={hold}
       mappedAreaNames={mappedAreaNames}
       recentTxns={txns}
     />

@@ -14,7 +14,7 @@ export const COLUMN_LABELS: Record<string, string> = {
   tracking_level: "관리 수준",
   count_size: "규격(개당 g)",
   count_unit: "규격 라벨",
-  par_stock: "목표 재고",
+  purchase_lot: "회당 구매량",
   // 구매 단위(purchase_unit) 하나(예: 1EA, 1박스) 안에 실제로 들어있는 양 — 제품 포장에
   // 적힌 "내용량" 표기와 같은 개념. 예: 구매 단위 EA + 내용량 907 + 내용량 단위 g → 1EA에 907g
   pack_qty: "내용량",
@@ -56,7 +56,7 @@ export const COLUMN_LABELS: Record<string, string> = {
   price: "가격",
   cost: "원가",
   stock: "재고",
-  min_stock: "최소 재고",
+  min_stock: "발주기준",
   status: "상태",
   note: "비고",
   description: "설명",
@@ -98,8 +98,8 @@ export const COLUMN_LABELS: Record<string, string> = {
   base_unit: "재고 단위",
   qty_per_pack: "팩당 수량(EA)",
   packs_per_box: "박스당 팩 수",
-  min_stock_pack: "최소 재고(팩)",
-  par_stock_pack: "적정 재고(팩)",
+  min_stock_pack: "발주기준(팩)",
+  purchase_lot_pack: "회당 구매량(팩)",
   remark: "비고",
   spec: "규격",
   // 매출 주문 (tb_sales_order / tb_sales_order_item)

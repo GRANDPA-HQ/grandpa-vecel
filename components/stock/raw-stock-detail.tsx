@@ -13,6 +13,7 @@ import {
   WASTE_REASON_OPTIONS,
   RETURN_REASON_OPTIONS,
   reasonMemoRequired,
+  reasonCodeLabel,
   type WasteReasonCode,
   type ReturnReasonCode,
 } from "@/lib/raw-stock"
@@ -165,7 +166,7 @@ function DetailScreen({
                   <div className="text-sm font-bold">{t.createdByName}</div>
                   <div className="text-xs text-muted-foreground">
                     {new Date(t.createdAt).toLocaleString("ko-KR")}
-                    {t.reasonCode ? ` · ${t.reasonCode}` : ""}
+                    {t.reasonCode ? ` · ${reasonCodeLabel(t.reasonCode)}` : ""}
                   </div>
                 </div>
                 <span className={cn("shrink-0 text-sm font-extrabold", t.qty >= 0 ? "text-emerald-700" : "text-red-600")}>
