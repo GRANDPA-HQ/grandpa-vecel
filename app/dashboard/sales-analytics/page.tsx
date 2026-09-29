@@ -27,6 +27,8 @@ import { cn } from "@/lib/utils"
 const PLATFORM_LABEL: Record<string, string> = {
   coupang_eats: "쿠팡이츠",
   baemin: "배민",
+  yogiyo: "요기요",
+  zero_pay: "제로페이",
   coupang_pos: "홀(POS)",
 }
 
@@ -114,7 +116,7 @@ export default async function SalesAnalyticsPage({
       <div className="flex flex-col gap-1">
         <h1 className="text-2xl font-semibold tracking-tight">매출 분석</h1>
         <p className="text-sm text-muted-foreground">
-          홀(POS) · 쿠팡이츠 · 배민 판매 데이터를 기준으로 기간별 매출을 확인합니다
+          홀(POS) · 쿠팡이츠 · 배민 · 요기요 · 제로페이 판매 데이터를 기준으로 기간별 매출을 확인합니다
         </p>
       </div>
       <div className="flex gap-1.5">
