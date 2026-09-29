@@ -7,7 +7,7 @@ import { useDraggableModal } from "@/components/use-draggable-modal"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { insertRow, fetchNextSkuCode, fetchNextRawCode, fetchNextProdCode } from "@/app/actions/table-edit"
+import { insertRow, fetchNextSkuCode, fetchNextRawCode, fetchNextProdCode, fetchNextSubmatCode } from "@/app/actions/table-edit"
 import { COLUMN_LABELS } from "@/lib/column-labels"
 import { isPriceColumn } from "@/lib/table-config"
 import { saveDraft, loadDraft, clearDraft } from "@/lib/local-draft"
@@ -17,6 +17,7 @@ const AUTO_CODE_CONFIG: Record<string, { column: string; fetchCode: (categoryCod
   tb_sku_mst:  { column: "sku_code",  fetchCode: fetchNextSkuCode },
   tb_raw_mst:  { column: "raw_code",  fetchCode: fetchNextRawCode },
   tb_prod_mst: { column: "prod_code", fetchCode: fetchNextProdCode },
+  tb_submat_mst: { column: "submat_id", fetchCode: fetchNextSubmatCode },
 }
 
 export type ColumnDef = {

@@ -13,6 +13,7 @@ import {
 } from "@/lib/supabase/db"
 import { recordAuditLog } from "@/lib/audit-log"
 import { TABLE_PK } from "@/lib/table-config"
+import { createAdminClient } from "@/lib/supabase/admin"
 
 export async function fetchNextSkuCode(categoryCode: string): Promise<string> {
   try {
@@ -35,6 +36,35 @@ export async function fetchNextProdCode(categoryCode: string): Promise<string> {
     return await getNextProdCode(categoryCode)
   } catch {
     return `PROD-${categoryCode.trim().toUpperCase()}-001`
+  }
+}
+
+// 포장 부자재 ID는 접두사 없이 "카테고리-번호" 형식 (예: BOWL-008, PACK_AUX-013).
+// 같은 카테고리의 기존 ID 중 가장 큰 번호 + 1을 돌려준다. 카테고리명에 '_'가 있어
+// LIKE 와일드카드로 다른 카테고리가 섞일 수 있으므로 접두사를 한 번 더 정확히 비교한다.
+export async function fetchNextSubmatCode(categoryCode: string): Promise<string> {
+  const category = categoryCode.trim().toUpperCase()
+  const fallback = `${category}-001`
+  if (!category) return fallback
+  try {
+    const admin = createAdminClient()
+    const { data, error } = await admin
+      .from("tb_submat_mst")
+      .select("submat_id")
+      .like("submat_id", `${category}-%`)
+    if (error) return fallback
+    let max = 0
+    let width = 3
+    for (const row of data ?? []) {
+      const id = String(row.submat_id ?? "")
+      const m = id.match(/^(.*)-(\d+)$/)
+      if (!m || m[1].toUpperCase() !== category) continue
+      max = Math.max(max, Number.parseInt(m[2], 10))
+      width = Math.max(width, m[2].length)
+    }
+    return `${category}-${String(max + 1).padStart(width, "0")}`
+  } catch {
+    return fallback
   }
 }
 
