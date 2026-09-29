@@ -1201,7 +1201,7 @@ export type SalesOrderRecord = {
 }
 
 /**
- * Fetch 홀(POS)/쿠팡이츠/배민 매출 주문 (tb_sales_order) — [startIso, endIsoExclusive) 구간.
+ * Fetch 홀(POS)/쿠팡이츠/배민/요기요/제로페이 매출 주문 (tb_sales_order) — [startIso, endIsoExclusive) 구간.
  * 테이블이 아직 생성되지 않은 경우(마이그레이션 미실행) null을 반환해 페이지에서 안내 문구를 보여줄 수 있게 한다.
  */
 export async function getSalesOrdersInRange(

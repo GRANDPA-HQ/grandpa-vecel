@@ -5,6 +5,8 @@ import { SkuPlatformMappingForm, type MappingRow } from "@/components/sku-platfo
 const PLATFORM_LABEL: Record<string, string> = {
   coupang_eats: "쿠팡이츠",
   baemin: "배민",
+  yogiyo: "요기요",
+  zero_pay: "제로페이",
   coupang_pos: "홀(POS)",
 }
 
