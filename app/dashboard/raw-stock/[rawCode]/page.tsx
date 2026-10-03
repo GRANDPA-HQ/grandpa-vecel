@@ -18,7 +18,8 @@ export default async function RawStockDetailPage({ params }: { params: Promise<{
     )
   }
 
-  const actorId = await getRawStockActor()
+  // 매니저(시니어) 이상은 본인 확인 PIN 없이 통과
+  const actorId = employee.isSenior ? employee.id : await getRawStockActor()
   if (!actorId) {
     const result = await getWorkingStaffForRawStock()
     if ("error" in result) {

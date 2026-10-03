@@ -23,32 +23,40 @@ export default async function ProductionRecordPage() {
     return <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">{staffResult.error}</div>
   }
 
-  const actorId = await getProdLogActor()
-  if (!actorId) {
-    return (
-      <RawStockAuthGate
-        targetLabel="생산 기록"
-        targetPartCode="KP"
-        staff={staffResult.staff}
-        onVerify={verifyProdLogPin}
-      />
-    )
-  }
+  let actorName: string
 
-  const actor = staffResult.staff.find((s) => s.id === actorId)
-  // 인증한 직원이 그 사이 퇴근 처리됐으면(근무중 목록에서 빠짐) 다시 인증하게 한다.
-  if (!actor) {
-    return (
-      <RawStockAuthGate
-        targetLabel="생산 기록"
-        targetPartCode="KP"
-        staff={staffResult.staff}
-        onVerify={verifyProdLogPin}
-      />
-    )
+  if (employee.isSenior) {
+    // 매니저(시니어) 이상은 본인 확인 PIN 없이 통과
+    actorName = employee.name
+  } else {
+    const actorId = await getProdLogActor()
+    if (!actorId) {
+      return (
+        <RawStockAuthGate
+          targetLabel="생산 기록"
+          targetPartCode="KP"
+          staff={staffResult.staff}
+          onVerify={verifyProdLogPin}
+        />
+      )
+    }
+
+    const actor = staffResult.staff.find((s) => s.id === actorId)
+    // 인증한 직원이 그 사이 퇴근 처리됐으면(근무중 목록에서 빠짐) 다시 인증하게 한다.
+    if (!actor) {
+      return (
+        <RawStockAuthGate
+          targetLabel="생산 기록"
+          targetPartCode="KP"
+          staff={staffResult.staff}
+          onVerify={verifyProdLogPin}
+        />
+      )
+    }
+    actorName = actor.name
   }
 
   const [items, categories] = await Promise.all([getProdLogItems(), getRawCategoriesFull()])
 
-  return <ProductionRecord staffName={actor.name} onDuty={staffResult.staff} items={items} categories={categories} />
+  return <ProductionRecord staffName={actorName} onDuty={staffResult.staff} items={items} categories={categories} />
 }
