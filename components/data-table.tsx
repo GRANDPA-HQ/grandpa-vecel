@@ -17,12 +17,19 @@ import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { updateRow, deleteRow, deleteRows } from "@/app/actions/table-edit"
 import { loadMoreRows } from "@/app/actions/table-rows"
+import { uploadItemPhoto, removeItemPhoto } from "@/app/actions/item-photos"
 import { COLUMN_LABELS } from "@/lib/column-labels"
 import { isPriceColumn, type RowCursor } from "@/lib/table-config"
 import { withBasePath } from "@/lib/base-path"
 import { ColumnSettingsMenu } from "@/components/column-settings-menu"
 import { SearchableSelect } from "@/components/searchable-select"
 import { IMAGE_EXTS, parseImageCode } from "@/lib/image-code"
+import {
+  PHOTO_DOMAIN_BY_TABLE,
+  IMAGE_EXTS as PHOTO_EXTS,
+  itemPhotoPath,
+  publicItemPhotoUrl,
+} from "@/lib/photo-storage"
 
 // description은 select 옵션에 hover 툴팁으로 표시 (예: 카테고리 코드 옆 설명)
 type SelectOption = { value: string; label: string; description?: string }
@@ -118,29 +125,113 @@ const PHOTO_CODE_COLUMN: Record<string, string> = {
   tb_submat_mst: "submat_id",
 }
 
+// 원재료/부자재 사진 — Supabase Storage 공개 버킷에서 품목 코드(raw_code/submat_id)를 파일명
+// 삼아 직접 조회하고, 같은 셀에서 바로 올리고 교체할 수 있다(드라이브 경유 없음).
 function PhotoCell({ row, tableName }: { row: Record<string, unknown>; tableName: string }) {
   const codeColumn = PHOTO_CODE_COLUMN[tableName] ?? "raw_code"
   const code = String(row[codeColumn] ?? "")
+  const domain = PHOTO_DOMAIN_BY_TABLE[tableName]
   const [extIdx, setExtIdx] = useState(0)
   const [failed, setFailed] = useState(false)
+  const [version, setVersion] = useState(0)
+  const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const src = !failed ? deriveImageSrc(code, extIdx) : null
+  if (!domain || !code) return <span className="text-muted-foreground">-</span>
 
-  if (!src) return <span className="text-muted-foreground">-</span>
+  const base = !failed ? publicItemPhotoUrl(itemPhotoPath(domain, code, PHOTO_EXTS[extIdx])) : null
+  const src = base ? `${base}?v=${version}` : null
+
+  async function handleFile(file: File) {
+    setUploading(true)
+    setError(null)
+    const formData = new FormData()
+    formData.append("file", file)
+    const result = await uploadItemPhoto(tableName, code, formData)
+    setUploading(false)
+    if (result.error) {
+      setError(result.error)
+      return
+    }
+    setExtIdx(0)
+    setFailed(false)
+    setVersion((v) => v + 1)
+  }
+
+  async function handleRemove() {
+    if (!window.confirm("사진을 삭제하시겠습니까?")) return
+    setUploading(true)
+    setError(null)
+    const result = await removeItemPhoto(tableName, code)
+    setUploading(false)
+    if (result.error) {
+      setError(result.error)
+      return
+    }
+    setFailed(true)
+    setVersion((v) => v + 1)
+  }
 
   return (
-    <Image
-      src={src}
-      alt={code}
-      width={100}
-      height={100}
-      className="rounded object-contain"
-      onError={() => {
-        if (extIdx + 1 < IMAGE_EXTS.length) setExtIdx(extIdx + 1)
-        else setFailed(true)
-      }}
-      unoptimized
-    />
+    <div className="flex flex-col items-center gap-1">
+      {src ? (
+        <Image
+          src={src}
+          alt={code}
+          width={100}
+          height={100}
+          className="rounded object-contain"
+          onError={() => {
+            if (extIdx + 1 < PHOTO_EXTS.length) setExtIdx(extIdx + 1)
+            else setFailed(true)
+          }}
+          unoptimized
+        />
+      ) : (
+        <span className="flex h-[100px] w-[100px] items-center justify-center rounded border border-dashed border-border text-[10px] text-muted-foreground">
+          사진 없음
+        </span>
+      )}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/gif,image/webp"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0]
+          e.target.value = ""
+          if (file) handleFile(file)
+        }}
+      />
+      <div className="flex gap-1">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            fileInputRef.current?.click()
+          }}
+          disabled={uploading}
+          className="rounded border border-input bg-background px-1.5 py-0.5 text-[10px] font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {uploading ? "처리 중..." : src ? "사진 변경" : "사진 업로드"}
+        </button>
+        {src && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              handleRemove()
+            }}
+            disabled={uploading}
+            className="rounded border border-destructive/30 bg-destructive/5 px-1.5 py-0.5 text-[10px] font-medium text-destructive hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            삭제
+          </button>
+        )}
+      </div>
+      {error && <span className="max-w-[100px] text-center text-[10px] text-destructive">{error}</span>}
+    </div>
   )
 }
 
