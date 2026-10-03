@@ -18,7 +18,8 @@ export default async function RawStockAuditPage() {
   }
 
   // 실사는 설계서상 별도 PIN이 필요하다 — 입고/폐기 세션(raw_stock_actor)이 있어도 다시 인증한다.
-  const actorId = await getRawStockAuditActor()
+  // 단, 매니저(시니어) 이상은 본인 확인 PIN 없이 통과
+  const actorId = employee.isSenior ? employee.id : await getRawStockAuditActor()
   if (!actorId) {
     const result = await getWorkingStaffForRawStock()
     if ("error" in result) {

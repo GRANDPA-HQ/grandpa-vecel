@@ -23,37 +23,48 @@ export default async function SkuNonsalePage() {
     return <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">{staffResult.error}</div>
   }
 
-  const actorId = await getNonsaleActor()
-  if (!actorId) {
-    return (
-      <RawStockAuthGate
-        targetLabel="판매 외 소진"
-        targetPartCode="SP"
-        staff={staffResult.staff}
-        onVerify={verifyNonsaleLogPin}
-      />
-    )
-  }
+  let actorId: string
+  let actorName: string
 
-  const actor = staffResult.staff.find((s) => s.id === actorId)
-  // 인증한 직원이 그 사이 퇴근 처리됐으면(근무중 목록에서 빠짐) 다시 인증하게 한다.
-  if (!actor) {
-    return (
-      <RawStockAuthGate
-        targetLabel="판매 외 소진"
-        targetPartCode="SP"
-        staff={staffResult.staff}
-        onVerify={verifyNonsaleLogPin}
-      />
-    )
+  if (employee.isSenior) {
+    // 매니저(시니어) 이상은 본인 확인 PIN 없이 통과
+    actorId = employee.id
+    actorName = employee.name
+  } else {
+    const sessionActorId = await getNonsaleActor()
+    if (!sessionActorId) {
+      return (
+        <RawStockAuthGate
+          targetLabel="판매 외 소진"
+          targetPartCode="SP"
+          staff={staffResult.staff}
+          onVerify={verifyNonsaleLogPin}
+        />
+      )
+    }
+
+    const actor = staffResult.staff.find((s) => s.id === sessionActorId)
+    // 인증한 직원이 그 사이 퇴근 처리됐으면(근무중 목록에서 빠짐) 다시 인증하게 한다.
+    if (!actor) {
+      return (
+        <RawStockAuthGate
+          targetLabel="판매 외 소진"
+          targetPartCode="SP"
+          staff={staffResult.staff}
+          onVerify={verifyNonsaleLogPin}
+        />
+      )
+    }
+    actorId = actor.id
+    actorName = actor.name
   }
 
   const [items, categoriesRaw, myLogs] = await Promise.all([
     getSkuNonsaleItems(),
     getSkuCategories(),
-    getMyTodayNonsaleLogs(employee.storeId, actor.id),
+    getMyTodayNonsaleLogs(employee.storeId, actorId),
   ])
   const categories = categoriesRaw.map((c) => ({ code: c.category_code, name: c.category_name_kr, emoji: c.emoji ?? "▤" }))
 
-  return <NonsaleLog staffName={actor.name} storeName={employee.storeName} items={items} categories={categories} myLogs={myLogs} />
+  return <NonsaleLog staffName={actorName} storeName={employee.storeName} items={items} categories={categories} myLogs={myLogs} />
 }

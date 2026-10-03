@@ -15,6 +15,7 @@ async function requireNonsaleActor(): Promise<Actor | { error: string }> {
   const employee = await getCurrentEmployee()
   if (!employee) return { error: "로그인이 필요합니다." }
   if (!employee.storeId) return { error: "소속 매장이 없어 판매 외 소진을 사용할 수 없습니다." }
+  if (employee.isSenior) return { staffId: employee.id, storeId: employee.storeId }
   const staffId = await getNonsaleActor()
   if (!staffId) return { error: "세션이 만료되었습니다. 다시 본인 확인을 해주세요." }
   await setNonsaleActor(staffId) // 슬라이딩 만료(10분 무입력 자동 종료)

@@ -14,6 +14,8 @@ async function requireStockActor(): Promise<Actor | { error: string }> {
   const employee = await getCurrentEmployee()
   if (!employee) return { error: "로그인이 필요합니다." }
   if (!employee.storeId) return { error: "소속 매장이 없어 재고를 관리할 수 없습니다." }
+  // 매니저(시니어) 이상은 본인 확인 PIN 없이 바로 본인 계정으로 행위자 처리
+  if (employee.isSenior) return { staffId: employee.id, storeId: employee.storeId }
   const staffId = await getRawStockActor()
   if (!staffId) return { error: "세션이 만료되었습니다. 다시 본인 확인을 해주세요." }
   // 슬라이딩 만료 — 액션 성공 시마다 10분 재연장(설계서 "10분 무입력 시 자동 종료")
@@ -25,6 +27,7 @@ async function requireAuditActor(): Promise<Actor | { error: string }> {
   const employee = await getCurrentEmployee()
   if (!employee) return { error: "로그인이 필요합니다." }
   if (!employee.storeId) return { error: "소속 매장이 없어 재고를 관리할 수 없습니다." }
+  if (employee.isSenior) return { staffId: employee.id, storeId: employee.storeId }
   const staffId = await getRawStockAuditActor()
   if (!staffId) return { error: "실사 세션이 만료되었습니다. 다시 본인 확인을 해주세요." }
   await setRawStockAuditActor(staffId)
