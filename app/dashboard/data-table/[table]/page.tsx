@@ -52,7 +52,7 @@ import {
   type SelectOption,
 } from "@/lib/table-config"
 
-const INSERTABLE_TABLES = new Set(["tb_prod_mst", "tb_raw_mst", "tb_sku_mst", "tb_sku_recipe", "tb_prod_recipe", "tb_zone_mst", "tb_store_mst"])
+const INSERTABLE_TABLES = new Set(["tb_prod_mst", "tb_raw_mst", "tb_sku_mst", "tb_sku_recipe", "tb_prod_recipe", "tb_zone_mst", "tb_store_mst", "tb_submat_mst"])
 
 // 체크박스 선택 일괄 삭제를 지원하는 테이블
 const BULK_DELETE_TABLES = new Set(["tb_raw_mst", "tb_prod_mst", "tb_sku_mst"])
